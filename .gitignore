@@ -1,0 +1,22 @@
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+
+# Env files — never commit real secrets, only .env.*.example is versioned
+.env
+.env.*.local
+.env.local
+
+# Editor / OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Next.js
+apps/web/.next/
+apps/web/out/
