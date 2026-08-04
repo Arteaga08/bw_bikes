@@ -3,7 +3,14 @@ import { buildApp } from "./app.js";
 import { connectDb, disconnectDb } from "./config/db.js";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
-import { startReservationReaper, stopReservationReaper } from "./jobs/index.js";
+import {
+  startOrderAuthorizationSweeper,
+  startPaymentReconciliation,
+  startReservationReaper,
+  stopOrderAuthorizationSweeper,
+  stopPaymentReconciliation,
+  stopReservationReaper,
+} from "./jobs/index.js";
 
 async function main(): Promise<void> {
   await connectDb();
@@ -11,6 +18,8 @@ async function main(): Promise<void> {
   // Background jobs live here and not in `buildApp()`: the app must stay free
   // of side effects so tests can build it without leaving timers running.
   startReservationReaper();
+  startOrderAuthorizationSweeper();
+  startPaymentReconciliation();
 
   const app = buildApp();
   const server: Server = app.listen(env.port, () => {
@@ -20,6 +29,8 @@ async function main(): Promise<void> {
   const shutdown = (signal: string) => {
     logger.info({ signal }, "Shutting down gracefully");
     stopReservationReaper();
+    stopOrderAuthorizationSweeper();
+    stopPaymentReconciliation();
 
     server.close(async (err) => {
       if (err) {

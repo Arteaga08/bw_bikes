@@ -9,8 +9,8 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M1 — Scaffolding seguro del monorepo | 1 | ✅ Hecho | `feat/m01-scaffolding` (mergeado, tag `m01`) | Ver detalle abajo |
 | M2 — Auth y usuarios | 1 | ✅ Hecho | `feat/m02-auth` (mergeado, tag `m02`) | Ver detalle abajo |
 | M3 — Catálogo | 1 | ✅ Hecho | `feat/m03-catalogo` (mergeado) | Ver detalle abajo |
-| M4 — Inventario y reservas | 1 | ✅ Hecho (pendiente de merge) | `feat/m04-inventario` | Ver detalle abajo |
-| M5 — Carrito, órdenes y pagos | 1 | ⏳ Pendiente | — | Módulo crítico |
+| M4 — Inventario y reservas | 1 | ✅ Hecho | `feat/m04-inventario` (mergeado) | Ver detalle abajo |
+| M5 — Carrito, órdenes y pagos | 1 | ✅ Hecho (pendiente de merge) | `feat/m05-ordenes-pagos` | Módulo crítico. Ver detalle abajo |
 | M6 — Envíos, estatus y solicitudes | 1 | ⏳ Pendiente | — | Depende de decisión abierta #1 (costo de envío) |
 | M7 — Settings, analítica y adapters | 1 | ⏳ Pendiente | — | |
 | M8 — Shell del dashboard | 2 | ⏳ Pendiente | — | |
@@ -405,3 +405,146 @@ secretos que inyecta el hosting mandan sobre cualquier archivo que viaje dentro 
 sale del archivo), `MONGODB_URI` inyectada pisando al archivo, y `NODE_ENV=production` seleccionando
 `.env.production.local`. Efecto colateral bueno: los tests ya no pueden heredar por accidente un
 `.env` suelto del disco, porque `NODE_ENV=test` busca un `.env.test.local` que no existe.
+
+---
+
+## M5 — Carrito, órdenes y pagos ⚠️ módulo crítico
+
+**Entregado:**
+- `packages/shared`: `CaptureMethod`, `PaymentState` (vocabulario propio del dominio, no el de
+  Stripe), `PaymentProviderName`, `OrderLineSnapshot`, `OrderTotals`, `PaymentSummary`,
+  `OrderStatusHistoryEntry`, `PublicOrder`, `AdminOrder`, `CheckoutResult`, y `types/cart.ts` nuevo
+  (`CartLineInput`, `PublicCart`, `PublicCartLine`). Once `AuditAction` nuevas de órdenes y pagos.
+- `apps/api/src/models/`: `Cart` (una por cliente, índice único por `userId`, TTL de 90 días),
+  `Order` + `schemas/order-line.schema.ts` (snapshot inmutable por línea), `PaymentEvent` (dedupe de
+  webhooks por índice único en `eventId`, con TTL de retención de 60 días).
+- `apps/api/src/services/`:
+  - `order-state.ts` — la máquina de estados como **dato**: tabla de transiciones, `canTransition`,
+    `assertTransition`, `isTerminal`. Pura, sin I/O.
+  - `order-pricing.ts` — `resolveCartLines` (relee el catálogo), `buildLineSnapshots`,
+    `calculateTotals` (IVA incluido) y `resolveCaptureMethod` (la regla del carrito mixto).
+  - `cart.service.ts` — el carrito no aparta stock y no guarda precios.
+  - `order.service.ts` — la saga de checkout, `applyTransition`, las acciones de admin y los
+    aplicadores de resultado de pago que comparten webhook y reconciliación.
+  - `order-maintenance.service.ts` — los dos barridos de fondo.
+  - `payment-webhook.service.ts` — firma → dedupe → despacho, en ese orden.
+  - `payments/` — `payment-provider.interface.ts`, `stripe.provider.ts` (el **único** archivo que
+    importa el SDK) e `index.ts` (factory + guarda de "no configurado").
+- `apps/api/src/jobs/`: `order-authorization.job.ts` y `payment-reconciliation.job.ts`, con el patrón
+  exacto del reaper de M4 (intervalo `unref`, guarda anti-solapamiento, arrancados en `server.ts`
+  después de `connectDb()` y detenidos primero en `shutdown()`).
+- Rutas: `/cart` y `/orders` con `protect`; `POST /orders` con `checkoutRateLimiter` dedicado
+  (10/15min); `/admin/orders` con `protect` + `restrictTo` y sin rate limit (§7);
+  `POST /api/v1/webhooks/stripe` **montado antes de `express.json`** con `express.raw`.
+- Variables de entorno nuevas: `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` (obligatorias en
+  producción, opcionales fuera, con `isStripeConfigured` propio), más siete umbrales opcionales con
+  default explícito y nota de migración a `Settings` (M7).
+- `inventory.service.ts`: **una sola** ampliación al contrato de M4 — `extendHold`.
+
+**Las cinco decisiones de diseño que sostienen el milestone:**
+
+1. **El TTL de checkout (15 min) y la ventana de autorización (7 días) son dos relojes distintos.**
+   Un carrito mixto —bici `on_request` + casco `in_stock`— aparta unidades del casco. Si esa reserva
+   venciera a los 15 minutos, el reaper devolvería el casco mientras el admin todavía confirma la
+   bici con el proveedor, y la captura tendría éxito sobre stock inexistente. Por eso el webhook de
+   autorización llama a `inventoryService.extendHold(ref, expiresAt)`, un `updateMany` sobre
+   `expiresAt` de las reservas `held`. Es **aditivo**: no toca contadores ni
+   `reserve/release/commit`.
+2. **La creación de la orden es una saga, no una transacción.** Crear el PaymentIntent es una
+   llamada de red, y una transacción de Mongo abierta esperando a un tercero mantiene locks durante
+   la caída de otro. Los pasos corren en orden con compensación explícita: sin stock → la orden pasa
+   a `cancelled` y se propaga el 409; falla el proveedor → `release()` + `cancelled`. Una caída del
+   proceso a mitad no necesita compensación: la reserva vence a los 15 minutos y el job de
+   reconciliación cierra la orden huérfana. `withOptionalTransaction` sí se reutiliza —movido tal
+   cual de `inventory.service.ts` a `utils/with-transaction.ts`— para las escrituras que sí son
+   puramente de base de datos.
+3. **El dedupe del webhook es un índice único, y ocurre antes del despacho.** `PaymentEvent.create`
+   con `eventId` único: un `findOne`-luego-insert sería un read-then-write y dos reentregas
+   simultáneas leerían "no visto" las dos. Dejar que la base rechace el segundo insert es lo que de
+   verdad las serializa. Los handlers son idempotentes igual, porque toda transición se valida contra
+   el estado actual — dos guardas independientes, que es lo que corresponde en el único lugar donde
+   equivocarse significa cobrar dos veces.
+4. **Solo `in_stock` se cobra al instante.** Cualquier línea `on_request` **o `preorder`** fuerza
+   `capture_method: "manual"` en toda la orden. No se parte la compra en dos pagos: duplicaría el
+   checkout, duplicaría la superficie de reembolso y dejaría al cliente con media compra cuando una
+   mitad falla.
+5. **El precio del catálogo ya incluye IVA.** `taxCents` es un desglose de `totalCents`
+   (`round(total × 16/116)`), nunca una suma encima. Cobrar `subtotal + 16%` facturaría a cada
+   cliente un 16% por encima del precio que vio en la ficha.
+
+**Correcciones a milestones previos (detectadas al construir M5, no eran features nuevas):**
+- **El índice único `{ userId, idempotencyKey }` no puede ser `sparse`.** En Mongo un índice
+  compuesto sparse incluye el documento si **cualquiera** de sus campos existe, y `userId` siempre
+  existe: la versión sparse indexaba toda orden sin key como `{ userId, null }`, así que un cliente
+  que hiciera una segunda compra sin idempotency key chocaba con su propia orden anterior.
+  Se usa `partialFilterExpression: { idempotencyKey: { $type: "string" } }`, que es lo que "único por
+  cliente, cuando está presente" significa de verdad. Mismo tratamiento para `payment.intentId`.
+  Detectado por un test que fallaba con 500, no por revisión.
+- El helper de tests de Stripe devolvía un `intentId` fijo, lo que chocaba con el índice único de
+  `payment.intentId` en cuanto un test creaba dos órdenes. Ahora genera uno por llamada y **respeta
+  la idempotency key** como hace Stripe de verdad: sin eso, el camino de replay del checkout habría
+  parecido funcionar mientras acuñaba un segundo cargo.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm typecheck   (incluye tests)       → limpio (shared + api)
+pnpm lint                              → limpio
+pnpm build                             → limpio
+pnpm test                              → 25 archivos, 255/255 tests pasan (Mongo real en memoria,
+                                         replica set de un nodo)
+pnpm audit --prod                      → sin vulnerabilidades conocidas
+node dist/server.js + SIGTERM          → arranca los tres jobs, los detiene y sale con código 0
+```
+
+**Los 7 escenarios end-to-end, contra Stripe en modo test con `stripe listen`** (36 aserciones, todas
+verdes; PaymentIntents reales confirmados con `pm_card_visa`, webhooks reales firmados llegando por
+el túnel del CLI):
+
+| # | Escenario | Evidencia observada |
+|---|---|---|
+| 1 | Sobreventa | Dos checkouts simultáneos por la última unidad → 201 y 409; `onHand=1, reserved=1`, nunca negativo |
+| 2 | Bajo pedido feliz | PaymentIntent en `requires_capture` con `amount_received=0`; el webhook la mueve a `awaiting_supplier_confirmation`; el admin confirma → `paid` y `amount_received=25000000` |
+| 3 | Bajo pedido rechazado | PaymentIntent `canceled`, cero cargo, reserva `released`, `reserved=0` |
+| 4 | Expiración | Con el reloj de autorización atrasado, el cron avisa (`adminAlertedAt`), cancela en Stripe y deja la orden en `authorization_expired` con motivo; stock devuelto |
+| 5 | Webhook duplicado | `stripe events resend` del mismo `event.id` (verificado en el log del túnel: dos entregas, dos 200) → un solo `PaymentEvent`, una sola entrada `paid` en el historial |
+| 6 | Carrito mixto | Una sola orden, dos líneas, `capture_method: manual` en Stripe, monto igual al calculado por el servidor, y **solo** la línea `in_stock` con reserva |
+| 7 | Anti-IDOR | La orden ajena responde 404 con cuerpo byte a byte idéntico al de una orden inexistente |
+
+**Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
+- **El carrito no se vacía al crear la orden, sino cuando el pago aterriza** (autorización o
+  captura). Perderlo en el instante en que se crea la orden castigaría a todo cliente cuya tarjeta
+  luego se rechaza.
+- **Un checkout vivo por cliente**: un nuevo intento cancela el `pending_payment` anterior y libera
+  sus unidades de inmediato, en vez de esperar los 15 minutos. Si no, un cliente indeciso apartaría
+  la misma bici tres veces y bloquearía a compradores reales.
+- **`confirmSupplierStock` aplica `paid` con la respuesta síncrona de la captura**, no esperando al
+  webhook. La regla "solo el webhook decide pagado" existe para que un **navegador** no declare un
+  pago exitoso; una captura es una llamada servidor-a-servidor autenticada cuya respuesta viene del
+  proveedor. El webhook llega después y encuentra la orden ya `paid`, así que no hace nada — dos
+  caminos, un resultado, sin doble commit. Verificado en test y en el escenario 2.
+- **`charge.dispute.created` no cambia el estatus.** Una disputa es un reclamo, no un desenlace; se
+  sella `disputedAt` y se audita. Si se pierde, el reembolso resultante sí mueve el estatus.
+- **`delivered` no es terminal**, porque un reembolso todavía puede seguirle. `cancelled`,
+  `authorization_expired` y `refunded` sí lo son.
+- **Una orden nunca capturada termina en `cancelled` o `authorization_expired`, jamás en
+  `refunded`** — no hay dinero que devolver, solo un hold que soltar. Y a la inversa: una orden ya
+  cobrada nunca retrocede a `cancelled`.
+- **Card only en Stripe** (`payment_method_types: ["card"]`): la captura manual es una función de
+  las redes de tarjeta; OXXO y transferencia no pueden retener fondos para capturar después.
+  Consecuencia ya aceptada por el cliente (las bicis bajo pedido no ofrecen MSI).
+- **El `clientSecret` no se persiste nunca.** En un reintento idempotente se recupera pidiéndole al
+  proveedor que cree el pago otra vez con la misma key, que por definición devuelve el original.
+- **Sin stub de pagos.** Toda otra integración degrada a algo inofensivo (el mailer loguea, las
+  subidas dan 503); un pago falso no puede serlo, porque una orden marcada como pagada por una
+  pasarela ficticia es indistinguible de una venta real hasta que alguien busca el dinero.
+- **El webhook responde 200 a todo lo que logró verificar**, incluidos eventos ignorados y handlers
+  que fallaron: un no-2xx hace que el proveedor reintente, y un handler con fallo determinista
+  fallaría para siempre. Solo una firma inválida se rechaza, y esa se rechaza duro.
+- **Los totales del carrito solo suman líneas comprables.** Mostrar un total que el cliente no puede
+  pagar sería mentir; la línea bloqueada se sigue listando, con su motivo, pero no cuenta.
+
+**Fuera de este milestone:** dirección y costo de envío (M6, decisión abierta #1) — `shippingCents`
+existe y vale 0 para que M6 no migre órdenes; migración de los umbrales a `Settings` (M7); correos
+reales al cliente (M15 — hasta entonces la auditoría es el registro durable); la cola de confirmación
+en el panel (M9) y el checkout visual (M13); cupones, MSI y facturación CFDI (decisión abierta #3).

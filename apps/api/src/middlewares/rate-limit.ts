@@ -99,6 +99,34 @@ export const authActionRateLimiter = createRateLimiter({
 });
 
 /**
+ * Checkout (`POST /orders`). Strict, because this is the anti card-testing
+ * control the e-commerce standard asks for: an endpoint that creates a payment
+ * intent per call is exactly what a stolen-card script wants, and each call
+ * also holds real inventory. Ten attempts per quarter hour is far more than
+ * any genuine buyer needs and far less than a script does.
+ */
+export const checkoutRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: "Demasiados intentos de compra. Espera unos minutos e intenta de nuevo.",
+});
+
+/**
+ * The payment webhook. It is mounted before the global backstop (raw body must
+ * precede `express.json`), so without this it would have no limiter at all.
+ *
+ * Deliberately generous: throttling the payment gateway is paid for in lost
+ * events, and its retries are finite. The purpose here is only to stop an
+ * unauthenticated flood from reaching signature verification, not to police a
+ * legitimate provider.
+ */
+export const webhookRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 300,
+  message: "Demasiadas solicitudes.",
+});
+
+/**
  * Global backstop mounted once in the middleware chain (app.ts), after
  * verifyOrigin and before the routers. Generous on purpose — it's a safety
  * net against abusive traffic in general, not the primary control for any

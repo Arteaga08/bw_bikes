@@ -31,6 +31,13 @@ export interface AuthUser {
  * inventory, including one action recorded with `actorType: "system"`
  * (`inventory.reservation_expired`, written by the expiry job, which has no
  * human actor).
+ *
+ * M5 adds orders and payments — the module where an audit gap is most
+ * expensive, because every entry answers "why was this customer charged, or
+ * not charged?". Several are written by jobs and by the payment webhook, which
+ * likewise have no human actor: `order.authorization_expiring`,
+ * `order.authorization_expired`, `order.reconciled`, and the provider-driven
+ * `order.paid` / `order.refunded` / `order.disputed`.
  */
 export type AuditAction =
   | "admin.login"
@@ -47,4 +54,15 @@ export type AuditAction =
   | "catalog.spec_groups_updated"
   | "inventory.item_created"
   | "inventory.stock_adjusted"
-  | "inventory.reservation_expired";
+  | "inventory.reservation_expired"
+  | "order.created"
+  | "order.authorized"
+  | "order.paid"
+  | "order.supplier_confirmed"
+  | "order.supplier_rejected"
+  | "order.cancelled"
+  | "order.authorization_expiring"
+  | "order.authorization_expired"
+  | "order.refunded"
+  | "order.disputed"
+  | "order.reconciled";

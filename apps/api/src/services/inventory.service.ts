@@ -5,8 +5,7 @@ import type {
   ReservationReferenceType,
 } from "@bw-bikes/shared";
 import type { ClientSession, Model } from "mongoose";
-import mongoose, { Types } from "mongoose";
-import { supportsTransactions } from "../config/db.js";
+import { Types } from "mongoose";
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 import type { IInventoryItem, IStockReservation } from "../models/index.js";
@@ -18,7 +17,7 @@ import {
   MAX_RESERVATION_QTY,
   StockReservation,
 } from "../models/index.js";
-import { AppError, buildMeta, escapeRegex, parseListQuery } from "../utils/index.js";
+import { AppError, buildMeta, escapeRegex, parseListQuery, withOptionalTransaction } from "../utils/index.js";
 import { recordAuditLog } from "./audit-log.service.js";
 import type { ActorContext } from "./product.service.js";
 
@@ -168,41 +167,6 @@ async function decrementReserved(
       { sku: hold.sku, qty: hold.qty, context },
       "Inventory invariant broken: reserved counter lower than the reservation it backs",
     );
-  }
-}
-
-/**
- * Runs `work` inside a Mongo transaction when the deployment offers one, and
- * plainly when it doesn't (a standalone `mongod` in local development).
- *
- * Every operation in this file writes to two collections — the reservation
- * document and the inventory counter — and those two writes have to land or
- * fail together. A transaction is the only thing that actually guarantees
- * that; the compensating logic on the fallback path narrows the window but
- * cannot close it, because a process that dies mid-way never runs its own
- * compensation.
- *
- * `withTransaction` retries the callback on transient errors (a write conflict
- * between two buyers racing for the same row is one), so `work` must be safe
- * to run more than once — which it is: every step is either an atomic guarded
- * update or a document creation that the aborted attempt rolled back.
- */
-async function withOptionalTransaction<T>(work: (session?: ClientSession) => Promise<T>): Promise<T> {
-  if (!(await supportsTransactions())) {
-    return work();
-  }
-
-  const session = await mongoose.startSession();
-  try {
-    let result: T | undefined;
-    await session.withTransaction(async () => {
-      // Reassigned on every attempt: a retried transaction must not keep the
-      // partial result of the attempt that was rolled back.
-      result = await work(session);
-    });
-    return result as T;
-  } finally {
-    await session.endSession();
   }
 }
 
@@ -481,6 +445,41 @@ async function commit(ref: ReservationRef): Promise<number> {
 }
 
 /**
+ * Pushes back the deadline of everything a reference still holds, and returns
+ * how many holds moved.
+ *
+ * This exists for exactly one situation, and it is the mixed cart that defines
+ * this shop: a bike sold `on_request` together with an in-stock helmet. The
+ * order authorizes the card and waits — possibly for days — while the owner
+ * confirms the bike with the supplier. The helmet, meanwhile, *is* holding
+ * physical units on a checkout-length deadline. Without this, the reaper would
+ * hand the helmet back mid-confirmation and the capture would succeed for
+ * stock that no longer exists.
+ *
+ * Only `held` reservations are touched, so a hold that already committed or
+ * was released stays terminal — extending a concluded reservation would
+ * resurrect it. Shortening is allowed too (the parameter is a new absolute
+ * deadline, not an increment): the caller decides, and both directions are
+ * legitimate.
+ *
+ * Deliberately a plain `updateMany` and not a claim-then-write: moving a
+ * deadline is not a stock movement. It touches no counter, so there is nothing
+ * for a racing caller to double-apply.
+ */
+async function extendHold(ref: ReservationRef, expiresAt: Date): Promise<number> {
+  const result = await StockReservation.updateMany(
+    {
+      referenceType: ref.referenceType,
+      referenceId: toObjectId(ref.referenceId, "referencia"),
+      status: "held",
+    },
+    { $set: { expiresAt } },
+  ).exec();
+
+  return result.modifiedCount;
+}
+
+/**
  * Releases holds whose deadline passed and that the normal flow never cleaned
  * up — a crashed checkout, a webhook that never arrived, a browser closed
  * mid-payment. Exported rather than inlined in the job so tests can drive it
@@ -684,6 +683,7 @@ export const inventoryService = {
   reserve,
   release,
   commit,
+  extendHold,
   releaseExpiredReservations,
   getAvailability,
   listItems,
