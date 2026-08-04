@@ -7,8 +7,8 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | Milestone | Fase | Estado | Rama | Notas |
 |---|---|---|---|---|
 | M1 — Scaffolding seguro del monorepo | 1 | ✅ Hecho | `feat/m01-scaffolding` (mergeado, tag `m01`) | Ver detalle abajo |
-| M2 — Auth y usuarios | 1 | ✅ Hecho (pendiente de merge) | `feat/m02-auth` | Ver detalle abajo |
-| M3 — Catálogo | 1 | ⏳ Pendiente | — | |
+| M2 — Auth y usuarios | 1 | ✅ Hecho | `feat/m02-auth` (mergeado, tag `m02`) | Ver detalle abajo |
+| M3 — Catálogo | 1 | ✅ Hecho (pendiente de merge) | `feat/m03-catalogo` | Ver detalle abajo |
 | M4 — Inventario y reservas | 1 | ⏳ Pendiente | — | |
 | M5 — Carrito, órdenes y pagos | 1 | ⏳ Pendiente | — | Módulo crítico |
 | M6 — Envíos, estatus y solicitudes | 1 | ⏳ Pendiente | — | Depende de decisión abierta #1 (costo de envío) |
@@ -158,3 +158,110 @@ rechazado, que revoca sesiones existentes y permite login con la contraseña nue
 
 **Fuera de este milestone:** mailer real (stub hasta M7/M15); QR de 2FA (el endpoint devuelve el URI
 `otpauth://`, el dashboard lo renderiza en M8); cualquier ruta de negocio no-auth.
+
+---
+
+## M3 — Catálogo
+
+**Entregado:**
+- `packages/shared`: `BrakeType`, `SpecGroup`/`SpecField`, `ProductImage`, `ProductVariant`, DTOs
+  públicos (`PublicCategory`, `PublicCategoryTreeNode`, `PublicBike`, `PublicAccessory`), `CURRENCY`
+  y `PriceCents` (enteros en centavos), nuevas `AuditAction` de catálogo, y `buildImageUrl` +
+  `RESPONSIVE_IMAGE_WIDTHS` — única fuente de verdad para armar URLs derivadas de Cloudinary,
+  consumida por la API y por el storefront de M12.
+- `apps/api/src/utils/`:
+  - **`list-query.ts`** — el utilitario transversal del milestone: `parseListQuery` (page/limit/skip/
+    sort/search con whitelist de orden por caller y tope duro de 100), `buildMeta` (`total`/`page`/
+    `pages`/`limit`, con `pages: 1` en colección vacía) y `escapeRegex` (anti-ReDoS). Los filtros de
+    negocio quedan explícitos en cada service a propósito — un parser genérico terminaría
+    reenviando el query object del cliente a Mongo.
+  - `slugify.ts` (pliega acentos y `ñ` vía NFD), `magic-bytes.ts` (firmas de JPEG/PNG/WebP/AVIF),
+    `express-query.ts` (ver correcciones a M1/M2 abajo).
+- `apps/api/src/models/`: sub-esquemas embebidos compartidos (`spec-group`, `product-image`,
+  `product-variant`, todos con topes que impiden crecer un documento sin límite); `BikeCategory` y
+  `AccessoryCategory` como **dos colecciones independientes** generadas por un mismo motor de
+  esquema; `Bike` y `Accessory` como **dos entidades separadas** (la bici tiene `brakeType`,
+  `shortDescription` y `relatedAccessories`; el accesorio no).
+- Campos de primera clase para filtros exactamente los que nombra la spec — categoría, marca,
+  precio, tipo de freno, más talla y color a nivel variante. `specGroups[]` es solo de exhibición y
+  nunca se filtra, que es la consecuencia que el cliente aceptó al pedir ficha libre.
+- `apps/api/src/services/`: `category.service` (factory instanciado por árbol: jerarquía de dos
+  niveles validada contra el documento padre, slug único, borrado real solo si la categoría está
+  vacía), `product.service` (factory: listado paginado, archivado lógico, ficha técnica, galería),
+  `bike.service` / `accessory.service` con sus campos y DTOs propios, y `storage/` (cadena
+  multer → magic bytes → coherencia de tipo declarado → strip EXIF → Cloudinary).
+- Rutas: `/api/v1/catalog/*` públicas y de solo lectura (`publicReadRateLimiter`, solo activo/no
+  archivado, DTO recortado) y `/api/v1/admin/*` con `protect` + `restrictTo("admin","superadmin")`
+  montado sobre el router completo y sin rate limit (§7: la barrera es auth + rol).
+- Auditoría en cada escritura de catálogo, sobre el `recordAuditLog` best-effort de M2.
+
+**Correcciones a M1/M2 (detectadas al construir M3, no eran features nuevas):**
+- **`mongoSanitize`, `sanitizeInput` y `validate` eran no-ops sobre `req.query`.** En Express 5
+  `req.query` es un *getter* que re-parsea la URL en cada acceso, así que mutarlo en el lugar no
+  persiste: borrar una clave y volver a leerla la devolvía intacta. El test de M1 solo assertaba un
+  200, por eso nunca lo detectó. `utils/express-query.ts` (`materializeQuery`, llamado al tope de
+  `mongoSanitize`) reemplaza el getter por una propiedad de datos real y con eso los tres middlewares
+  se comportan como su código dice. Es load-bearing para los filtros de M3: sin él la coerción de Joi
+  (`minPrice=1200000` → número) se perdía y el filtro de rango de precio nunca se aplicaba.
+- `routeParam()` para leer `:id`/`:slug`: Express 5 tipa `req.params` como `string | string[]`.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm typecheck   (incluye tests)       → limpio (shared + api)
+pnpm lint                              → limpio
+pnpm build                             → limpio
+pnpm test                              → 14 archivos, 87/87 tests pasan (Mongo real en memoria)
+pnpm audit --prod                      → sin vulnerabilidades conocidas
+```
+Los cuatro criterios de cierre, con su prueba:
+1. **CRUD de ambos árboles y ambos productos vía API** — `catalog-categories.test.ts` (9),
+   `catalog-bikes.test.ts` (10) y `catalog-accessories.test.ts` (5) recorren create/read/update/
+   delete-archive contra las rutas reales con sesión de admin real (login + 2FA con `otplib`).
+2. **`.png` renombrado a `.jpg` es rechazado** — `catalog-uploads.test.ts`: 400 y el spy del SDK de
+   Cloudinary sin llamadas. Un test hermano sube el mismo PNG con su nombre correcto y da 201, para
+   probar que el rechazo fue por la contradicción y no por ser PNG.
+3. **Listado paginado devuelve `meta` correcto** — `list-query.test.ts`: 25 bicis, `?page=2&limit=10`
+   → `{total:25, page:2, pages:3, limit:10}`, página 3 con 5 documentos, `limit=5000` topado en 100.
+4. **Ficha técnica: agregar, renombrar, reordenar, borrar** — `catalog-spec-groups.test.ts` hace las
+   cuatro operaciones sobre grupos y campos, releyendo por API después de cada una.
+
+**Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
+- **Ficha técnica con un solo `PUT /spec-groups`** que reemplaza el arreglo completo, en vez de
+  endpoints sub-recurso por grupo y por campo. Una sola escritura atómica cubre las cuatro
+  operaciones y es como va a guardar el editor de M10. La regla de "endpoints por sección" del
+  estándar aplica a `Settings` (singleton con editores concurrentes independientes), no a una ficha
+  que se edita como unidad.
+- **Rechazo por contradicción de tipo, no solo por firma.** Detectar el formato por magic bytes
+  aceptaría un PNG llamado `foto.jpg` (PNG es un formato válido). El criterio del milestone pide
+  rechazarlo, así que además de la firma se exige que la extensión y el `Content-Type` declarados
+  coincidan con los bytes reales.
+- **Compresión en entrega, no en subida.** La API sube el original normalizado (EXIF removido, tope
+  de 2400px) y la compresión ocurre al servir vía `f_auto`/`q_auto` de Cloudinary. Por eso se
+  persiste el `publicId` y no una URL fija: el `srcset` de M12 pide varios anchos del mismo original.
+- **Unicidad de SKU por colección, no global.** `InventoryItem` de M4 se indexa por
+  `{itemType, itemId, sku}`, así que un SKU de bici igual a uno de accesorio no es ambiguo; un
+  chequeo cruzado entre colecciones sería racy sin aportar nada.
+- **Borrado**: productos con archivado lógico (`isActive:false` + `archivedAt`, reversible con
+  `/restore`); categorías con borrado real solo si no tienen hijos ni productos, si no 409 con los
+  conteos.
+- **Precio en el producto con override opcional por variante** (talla XL o color de edición especial),
+  todo en centavos enteros.
+- **Cloudinary: obligatorio en producción, opcional en desarrollo.** `CLOUDINARY_CLOUD_NAME`/
+  `API_KEY`/`API_SECRET` abortan el arranque en producción (verificado: `node dist/server.js` con
+  `NODE_ENV=production` y sin ellas imprime el fatal y sale). Fuera de producción la API arranca con
+  una advertencia y **solo** las rutas de galería responden 503 con mensaje explícito — no existe un
+  stub que finja una subida exitosa. Esto es lo que permite construir el resto de la fase 1 sin
+  depender de una cuenta de Cloudinary; las credenciales reales se cargan al cerrar el backend.
+  Los tests inyectan valores fixture y espían el SDK, así que nunca tocan la red.
+
+**Pendiente para el cierre de la fase 1 (M7):** cargar las credenciales reales de todos los
+servicios externos (`CLOUDINARY_*`, `STRIPE_*`, y lo que sumen M5–M7) en `.env.development.local` y
+en el secret manager del hosting, y correr una pasada de pruebas manuales end-to-end contra ellos.
+Hasta entonces cada integración arranca en modo "no configurada": la API levanta y solo la ruta que
+depende de ese servicio responde con un error explícito.
+
+**Fuera de este milestone:** inventario y `fulfillmentMode` efectivo (el campo existe por variante,
+pero nadie reserva contra stock hasta M4); precios por tier/canal; búsqueda full-text (por ahora
+regex escapada sobre nombre, marca y SKU); cualquier UI — el CRUD de catálogo en admin es M10 y el
+storefront M12.

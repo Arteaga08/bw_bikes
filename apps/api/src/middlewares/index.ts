@@ -5,5 +5,6 @@ export * from "./protect.js";
 export * from "./rate-limit.js";
 export * from "./restrict-to.js";
 export * from "./sanitize-input.js";
+export * from "./upload-images.js";
 export * from "./validate.js";
 export * from "./verify-origin.js";

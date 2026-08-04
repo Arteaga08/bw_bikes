@@ -1,1 +1,7 @@
 export * from "./auth.validator.js";
+export * from "./category.validator.js";
+export * from "./common.validator.js";
+export * from "./gallery.validator.js";
+export * from "./list-query.validator.js";
+export * from "./product.validator.js";
+export * from "./spec-group.validator.js";

@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { materializeQuery } from "../utils/express-query.js";
 
 const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
@@ -12,7 +13,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * pollution vector (`__proto__`, `constructor`, `prototype`).
  *
  * Mutates the object in place rather than reassigning it — required because
- * in Express 5 `req.query` is a read-only getter, so `req.query = ...` throws.
+ * in Express 5 `req.query` is a getter, so `req.query = ...` throws. See
+ * `materializeQuery` for why the getter also has to be replaced first.
  */
 function sanitizeInPlace(target: unknown): void {
   if (!isPlainObject(target) && !Array.isArray(target)) return;
@@ -32,6 +34,11 @@ function sanitizeInPlace(target: unknown): void {
 }
 
 export function mongoSanitize(req: Request, _res: Response, next: NextFunction): void {
+  // First middleware in the chain that touches req.query, so it's where the
+  // getter gets swapped for a real object — otherwise this sanitization, and
+  // every later one, would be silently discarded.
+  materializeQuery(req);
+
   sanitizeInPlace(req.body);
   sanitizeInPlace(req.params);
   sanitizeInPlace(req.query);
