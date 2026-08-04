@@ -6,7 +6,7 @@ import { corsMiddleware } from "./config/cors.js";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { errorHandler, globalRateLimiter, mongoSanitize, notFound, sanitizeInput, verifyOrigin } from "./middlewares/index.js";
-import { v1Router } from "./routes/index.js";
+import { v1Router, webhookRouter } from "./routes/index.js";
 
 /**
  * Builds the Express app without opening a port or connecting to the
@@ -15,12 +15,27 @@ import { v1Router } from "./routes/index.js";
  *
  * Middleware order is exact and load-bearing, per
  * BACKEND_SECURITY_GUIDELINES.md §13:
- *   helmet -> cors(whitelist+credentials) -> express.json({limit:'10kb'}) ->
- *   cookieParser -> mongoSanitize -> sanitizeInput -> verifyOrigin ->
- *   rateLimit(global backstop) -> routers -> notFound -> errorHandler
+ *   helmet -> cors(whitelist+credentials) -> [payment webhooks, raw body] ->
+ *   express.json({limit:'10kb'}) -> cookieParser -> mongoSanitize ->
+ *   sanitizeInput -> verifyOrigin -> rateLimit(global backstop) -> routers ->
+ *   notFound -> errorHandler
  *
- * Payment webhooks (added in M5) must mount their raw-body route BEFORE
- * express.json() — there is none yet at this milestone.
+ * ## Why the webhook is mounted where it is (M5)
+ *
+ * A payment webhook is authenticated by an HMAC over the **exact bytes** the
+ * gateway sent. `express.json()` would replace those bytes with a parsed
+ * object, and `sanitizeInput` would rewrite the strings inside it — either one
+ * makes every signature fail. So the webhook router is mounted before both,
+ * with `express.raw`, and consequently sits outside the rest of the chain:
+ *
+ * - No `cookieParser`, `mongoSanitize` or `sanitizeInput`. Correct: the
+ *   payload is verified cryptographically and never used to build a query.
+ * - No `verifyOrigin`. It would pass anyway (that middleware lets through
+ *   requests with neither Origin nor Referer, which is what a server-to-server
+ *   call is), but the point is that CSRF is meaningless here — there is no
+ *   ambient credential to ride on.
+ * - No `globalRateLimiter`, so the route carries its own `webhookRateLimiter`.
+ * - `errorHandler` still applies: it is registered last, after every router.
  */
 export function buildApp(): Express {
   const app = express();
@@ -38,6 +53,9 @@ export function buildApp(): Express {
   app.use(helmet());
   app.use(corsMiddleware);
   app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === "/api/v1/health" } }));
+
+  // Raw body, and therefore before the JSON parser. See the header comment.
+  app.use("/api/v1/webhooks", webhookRouter);
 
   app.use(express.json({ limit: "10kb" }));
   app.use(cookieParser());

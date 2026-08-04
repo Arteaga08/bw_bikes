@@ -1,8 +1,11 @@
 import type { FulfillmentMode, ItemType, UserRole } from "@bw-bikes/shared";
 import { Types } from "mongoose";
 import {
+  Accessory,
+  AccessoryCategory,
   Bike,
   BikeCategory,
+  type IAccessory,
   type IBike,
   type ICategory,
   type IInventoryItem,
@@ -103,7 +106,15 @@ export function createInventoryItemDoc(
  * endpoint validates against.
  */
 export async function seedBikeWithVariant(
-  overrides: { sku?: string; fulfillmentMode?: FulfillmentMode } = {},
+  overrides: {
+    sku?: string;
+    fulfillmentMode?: FulfillmentMode;
+    price?: number;
+    variantPrice?: number;
+    variantActive?: boolean;
+    isActive?: boolean;
+    withGallery?: boolean;
+  } = {},
 ): Promise<{ bike: IBike; itemId: string; sku: string }> {
   const category = await createBikeCategoryDoc();
   const sku = overrides.sku ?? "BK-STOCK-M";
@@ -116,12 +127,72 @@ export async function seedBikeWithVariant(
     category: category._id,
     shortDescription: "Bici de prueba",
     description: "Descripción de prueba",
-    price: 19_999_900,
+    price: overrides.price ?? 19_999_900,
     brakeType: "hydraulic_disc",
+    isActive: overrides.isActive ?? true,
+    ...(overrides.isActive === false ? { archivedAt: new Date() } : {}),
     variants: [
-      { sku, size: "M", fulfillmentMode: overrides.fulfillmentMode ?? "in_stock", isActive: true },
+      {
+        sku,
+        size: "M",
+        fulfillmentMode: overrides.fulfillmentMode ?? "in_stock",
+        isActive: overrides.variantActive ?? true,
+        ...(overrides.variantPrice !== undefined ? { price: overrides.variantPrice } : {}),
+      },
     ],
+    ...(overrides.withGallery
+      ? {
+          // Out of order on purpose: the snapshot must pick image `order: 0`,
+          // not simply the first element of the array.
+          gallery: [
+            { publicId: `bw/second-${suffix}`, url: "https://example.test/2.jpg", width: 1200, height: 800, order: 1 },
+            { publicId: `bw/primary-${suffix}`, url: "https://example.test/1.jpg", width: 1200, height: 800, order: 0 },
+          ],
+        }
+      : {}),
   });
 
   return { bike, itemId: String(bike._id), sku };
+}
+
+/**
+ * The accessory-side twin of `seedBikeWithVariant`. Needed because the mixed
+ * cart — the rule that defines this milestone — requires one line from each
+ * catalog, and the two are genuinely separate collections.
+ */
+export async function seedAccessoryWithVariant(
+  overrides: {
+    sku?: string;
+    fulfillmentMode?: FulfillmentMode;
+    price?: number;
+    variantPrice?: number;
+    variantActive?: boolean;
+    isActive?: boolean;
+  } = {},
+): Promise<{ accessory: IAccessory; itemId: string; sku: string }> {
+  const suffix = Math.random().toString(16).slice(2, 8);
+  const category = await AccessoryCategory.create({ name: "Cascos", slug: `cascos-${suffix}`, isActive: true });
+  const sku = overrides.sku ?? "AC-STOCK-U";
+
+  const accessory = await Accessory.create({
+    name: `Casco de prueba ${suffix}`,
+    slug: `casco-prueba-${suffix}`,
+    brand: "Giro",
+    category: category._id,
+    description: "Descripción de prueba",
+    price: overrides.price ?? 4_500_00,
+    isActive: overrides.isActive ?? true,
+    ...(overrides.isActive === false ? { archivedAt: new Date() } : {}),
+    variants: [
+      {
+        sku,
+        size: "U",
+        fulfillmentMode: overrides.fulfillmentMode ?? "in_stock",
+        isActive: overrides.variantActive ?? true,
+        ...(overrides.variantPrice !== undefined ? { price: overrides.variantPrice } : {}),
+      },
+    ],
+  });
+
+  return { accessory, itemId: String(accessory._id), sku };
 }

@@ -6,9 +6,8 @@ import { config as loadDotenv } from "dotenv";
  * Fail-fast environment loader. Validates every variable this milestone
  * actually depends on and aborts with a clear message if one is missing or
  * malformed — never falls back to a silent default for anything security
- * sensitive. Variables needed only by later milestones (Stripe, Resend,
- * Telegram...) are added here when the feature that needs them lands, not
- * before.
+ * sensitive. Variables needed only by later milestones (Resend, Telegram...)
+ * are added here when the feature that needs them lands, not before.
  *
  * ## Which file is read
  *
@@ -64,11 +63,27 @@ const REQUIRED_VARS = [
  * "not configured" error (see services/storage/storage.service.ts). They never
  * pretend to succeed — there is no stub that fakes an upload.
  */
-const PRODUCTION_REQUIRED_VARS = [
+const CLOUDINARY_REQUIRED_VARS = [
   "CLOUDINARY_CLOUD_NAME",
   "CLOUDINARY_API_KEY",
   "CLOUDINARY_API_SECRET",
 ] as const;
+
+/**
+ * Same policy as Cloudinary, for the same reason (M5): the whole API must not
+ * be unbootable locally because a Stripe account is not wired up yet. Without
+ * these, checkout and the payment webhook answer with an explicit "payments
+ * are not configured" error — there is deliberately **no** stub provider that
+ * fakes a successful charge. A fake payment is worse than no payment.
+ *
+ * Kept as its own array rather than appended to the Cloudinary one: that array
+ * doubles as the source of the `isCloudinaryConfigured` flag, so merging them
+ * would make "Stripe is missing" read as "images are missing".
+ */
+const STRIPE_REQUIRED_VARS = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as const;
+
+/** Every variable that must be present to boot in production. */
+const PRODUCTION_REQUIRED_VARS = [...CLOUDINARY_REQUIRED_VARS, ...STRIPE_REQUIRED_VARS] as const;
 
 type NodeEnv = "development" | "production" | "test";
 
@@ -158,6 +173,61 @@ const DEFAULT_REAPER_INTERVAL_MS = 60_000;
 /** How long a finished reservation is kept for forensics before Mongo's TTL drops it. */
 const DEFAULT_RESERVATION_RETENTION_DAYS = 30;
 
+/**
+ * How long an order may sit in `pending_payment` holding stock while the
+ * customer completes the payment form. Shorter than the generic reservation
+ * TTL on purpose: a checkout in progress is a live user, not an abandoned
+ * cart, and holding a bike for half an hour per attempt is how a catalog looks
+ * sold out without a single sale.
+ *
+ * This is only the *payment* window. Once a manual-capture order is
+ * authorized, its holds are extended to cover the supplier-confirmation window
+ * (see `extendHold` in inventory.service.ts) — otherwise the in-stock helmet
+ * of a mixed cart would be released while the admin is still confirming the
+ * made-to-order bike.
+ */
+const DEFAULT_ORDER_PAYMENT_TTL_MINUTES = 15;
+
+/**
+ * Stripe drops an uncaptured authorization after about 7 days. These two
+ * thresholds keep the shop ahead of that deadline: warn the admin on day 5,
+ * and on day 6.5 cancel the authorization ourselves.
+ *
+ * Cancelling deliberately rather than letting it lapse is what makes the
+ * outcome deterministic — we release the stock and notify the customer at a
+ * moment we chose, instead of discovering after the fact that a hold silently
+ * evaporated.
+ */
+const DEFAULT_ORDER_AUTH_ALERT_HOURS = 120;
+const DEFAULT_ORDER_AUTH_CANCEL_HOURS = 156;
+
+/** How often the authorization sweep runs. Minutes-level is plenty for a day-scale deadline. */
+const DEFAULT_ORDER_AUTH_SWEEP_INTERVAL_MS = 300_000;
+
+/**
+ * Backstop for payments whose webhook never arrived (provider outage, our own
+ * downtime, a dropped delivery). The job asks the provider what really
+ * happened instead of leaving the order orphaned.
+ */
+const DEFAULT_PAYMENT_RECONCILIATION_INTERVAL_MS = 600_000;
+
+/** Grace period before an unresolved `pending_payment` order is worth reconciling. */
+const DEFAULT_PAYMENT_RECONCILIATION_AFTER_MINUTES = 20;
+
+/**
+ * Webhook signature timestamp tolerance, in seconds. Short window so a
+ * captured event cannot be replayed at leisure; 5 minutes is Stripe's own
+ * default and absorbs ordinary clock skew.
+ */
+const DEFAULT_STRIPE_WEBHOOK_TOLERANCE_SECONDS = 300;
+
+/**
+ * IVA in basis points, used **only** to break the tax out of a total that
+ * already contains it (Mexican B2C prices are quoted IVA-included). It never
+ * adds to what is charged: `tax = round(total × bps / (10000 + bps))`.
+ */
+const DEFAULT_TAX_RATE_BPS = 1600;
+
 function buildEnv() {
   assertPresent();
 
@@ -172,7 +242,10 @@ function buildEnv() {
   const cloudinaryCloudName = process.env["CLOUDINARY_CLOUD_NAME"] ?? "";
   const cloudinaryApiKey = process.env["CLOUDINARY_API_KEY"] ?? "";
   const cloudinaryApiSecret = process.env["CLOUDINARY_API_SECRET"] ?? "";
-  const isCloudinaryConfigured = PRODUCTION_REQUIRED_VARS.every(isSet);
+  const isCloudinaryConfigured = CLOUDINARY_REQUIRED_VARS.every(isSet);
+  const stripeSecretKey = process.env["STRIPE_SECRET_KEY"] ?? "";
+  const stripeWebhookSecret = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
+  const isStripeConfigured = STRIPE_REQUIRED_VARS.every(isSet);
   const stockReservationTtlMinutes = parsePositiveInt(
     "STOCK_RESERVATION_TTL_MINUTES",
     DEFAULT_RESERVATION_TTL_MINUTES,
@@ -185,6 +258,37 @@ function buildEnv() {
     "RESERVATION_RETENTION_DAYS",
     DEFAULT_RESERVATION_RETENTION_DAYS,
   );
+  const orderPaymentTtlMinutes = parsePositiveInt(
+    "ORDER_PAYMENT_TTL_MINUTES",
+    DEFAULT_ORDER_PAYMENT_TTL_MINUTES,
+  );
+  const orderAuthAlertHours = parsePositiveInt("ORDER_AUTH_ALERT_HOURS", DEFAULT_ORDER_AUTH_ALERT_HOURS);
+  const orderAuthCancelHours = parsePositiveInt("ORDER_AUTH_CANCEL_HOURS", DEFAULT_ORDER_AUTH_CANCEL_HOURS);
+  const orderAuthSweepIntervalMs = parsePositiveInt(
+    "ORDER_AUTH_SWEEP_INTERVAL_MS",
+    DEFAULT_ORDER_AUTH_SWEEP_INTERVAL_MS,
+  );
+  const paymentReconciliationIntervalMs = parsePositiveInt(
+    "PAYMENT_RECONCILIATION_INTERVAL_MS",
+    DEFAULT_PAYMENT_RECONCILIATION_INTERVAL_MS,
+  );
+  const paymentReconciliationAfterMinutes = parsePositiveInt(
+    "PAYMENT_RECONCILIATION_AFTER_MINUTES",
+    DEFAULT_PAYMENT_RECONCILIATION_AFTER_MINUTES,
+  );
+  const stripeWebhookToleranceSeconds = parsePositiveInt(
+    "STRIPE_WEBHOOK_TOLERANCE_SECONDS",
+    DEFAULT_STRIPE_WEBHOOK_TOLERANCE_SECONDS,
+  );
+  const taxRateBps = parsePositiveInt("TAX_RATE_BPS", DEFAULT_TAX_RATE_BPS);
+
+  // Warning the admin *after* the authorization was already cancelled would
+  // make the alert useless, so the ordering is enforced rather than assumed.
+  if (orderAuthAlertHours >= orderAuthCancelHours) {
+    fail(
+      `ORDER_AUTH_ALERT_HOURS (${orderAuthAlertHours}) must be lower than ORDER_AUTH_CANCEL_HOURS (${orderAuthCancelHours})`,
+    );
+  }
 
   assertMinLength("JWT_SECRET", jwtSecret, MIN_SECRET_LENGTH);
   assertMinLength("ENCRYPTION_KEY", encryptionKey, MIN_SECRET_LENGTH);
@@ -198,12 +302,22 @@ function buildEnv() {
     if (missingInProduction.length > 0) {
       fail(`missing production-required environment variable(s): ${missingInProduction.join(", ")}`);
     }
-  } else if (!isCloudinaryConfigured) {
-    // Loud, but not fatal: everything except image upload works without it.
-    console.warn(
-      "[env] Cloudinary is not configured — gallery uploads will be rejected with a clear error. " +
-        `Set ${PRODUCTION_REQUIRED_VARS.join(", ")} in .env.${nodeEnv}.local to enable them.`,
-    );
+  } else {
+    // Loud, but not fatal: everything except the feature behind each
+    // integration works without it.
+    if (!isCloudinaryConfigured) {
+      console.warn(
+        "[env] Cloudinary is not configured — gallery uploads will be rejected with a clear error. " +
+          `Set ${CLOUDINARY_REQUIRED_VARS.join(", ")} in .env.${nodeEnv}.local to enable them.`,
+      );
+    }
+
+    if (!isStripeConfigured) {
+      console.warn(
+        "[env] Stripe is not configured — checkout and the payment webhook will be rejected with a clear error. " +
+          `Set ${STRIPE_REQUIRED_VARS.join(", ")} in .env.${nodeEnv}.local to enable them.`,
+      );
+    }
   }
 
   return Object.freeze({
@@ -219,6 +333,17 @@ function buildEnv() {
     cloudinaryApiKey,
     cloudinaryApiSecret,
     isCloudinaryConfigured,
+    stripeSecretKey,
+    stripeWebhookSecret,
+    isStripeConfigured,
+    stripeWebhookToleranceSeconds,
+    orderPaymentTtlMinutes,
+    orderAuthAlertHours,
+    orderAuthCancelHours,
+    orderAuthSweepIntervalMs,
+    paymentReconciliationIntervalMs,
+    paymentReconciliationAfterMinutes,
+    taxRateBps,
     stockReservationTtlMinutes,
     reservationReaperIntervalMs,
     reservationRetentionDays,

@@ -31,6 +31,7 @@
     "pino-http": "^10.3.0",
     "pino-pretty": "^11.2.2",
     "sharp": "^0.35.3",
+    "stripe": "^22.4.0",
     "xss": "^1.0.15"
   },
   "devDependencies": {

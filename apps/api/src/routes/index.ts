@@ -1,9 +1,13 @@
 import { Router } from "express";
 import { adminCatalogRouter } from "./admin-catalog.route.js";
 import { adminInventoryRouter } from "./admin-inventory.route.js";
+import { adminOrderRouter } from "./admin-order.route.js";
 import { authRouter } from "./auth.route.js";
+import { cartRouter } from "./cart.route.js";
 import { catalogRouter } from "./catalog.route.js";
 import { healthRouter } from "./health.route.js";
+import { orderRouter } from "./order.route.js";
+import { webhookRouter } from "./webhook.route.js";
 
 /**
  * Versioned API router (`/api/v1`). Domain routers (auth, catalog, orders...)
@@ -19,7 +23,10 @@ const v1Router = Router();
 v1Router.use("/health", healthRouter);
 v1Router.use("/auth", authRouter);
 v1Router.use("/catalog", catalogRouter);
+v1Router.use("/cart", cartRouter);
+v1Router.use("/orders", orderRouter);
 v1Router.use("/admin", adminCatalogRouter);
 v1Router.use("/admin", adminInventoryRouter);
+v1Router.use("/admin", adminOrderRouter);
 
-export { v1Router };
+export { v1Router, webhookRouter };

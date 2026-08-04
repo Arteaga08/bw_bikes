@@ -35,6 +35,24 @@ export default defineConfig({
       // explicitly; nothing else in the suite is affected.
       RESERVATION_REAPER_INTERVAL_MS: "50",
       RESERVATION_RETENTION_DAYS: "30",
+      // Inert Stripe fixtures. The secret key never reaches the network:
+      // tests/helpers/stripe.ts replaces the provider's SDK calls with spies.
+      // The webhook secret, by contrast, is used **for real** — the suite signs
+      // its own payloads with `stripe.webhooks.generateTestHeaderString` so the
+      // signature-verification path is exercised exactly as in production
+      // rather than stubbed away.
+      STRIPE_SECRET_KEY: "sk_test_fixture000000000000000000000000",
+      STRIPE_WEBHOOK_SECRET: "whsec_test_fixture0000000000000000000000",
+      STRIPE_WEBHOOK_TOLERANCE_SECONDS: "300",
+      ORDER_PAYMENT_TTL_MINUTES: "15",
+      ORDER_AUTH_ALERT_HOURS: "120",
+      ORDER_AUTH_CANCEL_HOURS: "156",
+      // Same reasoning as the reaper above: short enough for a test to observe
+      // a real tick, and the jobs only run when a test starts them explicitly.
+      ORDER_AUTH_SWEEP_INTERVAL_MS: "50",
+      PAYMENT_RECONCILIATION_INTERVAL_MS: "50",
+      PAYMENT_RECONCILIATION_AFTER_MINUTES: "20",
+      TAX_RATE_BPS: "1600",
     },
   },
 });
