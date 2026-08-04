@@ -1,13 +1,42 @@
-import "dotenv/config";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { config as loadDotenv } from "dotenv";
 
 /**
  * Fail-fast environment loader. Validates every variable this milestone
  * actually depends on and aborts with a clear message if one is missing or
  * malformed — never falls back to a silent default for anything security
- * sensitive. Variables needed only by later milestones (Stripe, Cloudinary,
- * Resend, Telegram...) are added here when the feature that needs them lands,
- * not before.
+ * sensitive. Variables needed only by later milestones (Stripe, Resend,
+ * Telegram...) are added here when the feature that needs them lands, not
+ * before.
+ *
+ * ## Which file is read
+ *
+ * `.env.<NODE_ENV>.local` first, then `.env` as a shared base. dotenv never
+ * overwrites a variable that is already set, so the precedence is:
+ *
+ *   real process environment  >  .env.<NODE_ENV>.local  >  .env
+ *
+ * That ordering is what matters in production: the host's secret manager
+ * (Render/Railway/Atlas) injects real variables into the process, and they
+ * must win over any file that happens to be sitting in the image.
+ *
+ * `NODE_ENV` itself has to come from the actual environment — it selects which
+ * file to read, so it can't be defined inside the file being selected. Unset
+ * means development, which is the only environment where guessing is safe.
+ *
+ * Paths resolve from the package root rather than `process.cwd()`, so the API
+ * finds its own env file no matter which directory it was launched from.
  */
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+function loadEnvFiles(): void {
+  const nodeEnv = process.env["NODE_ENV"] ?? "development";
+  loadDotenv({ path: resolve(PACKAGE_ROOT, `.env.${nodeEnv}.local`) });
+  loadDotenv({ path: resolve(PACKAGE_ROOT, ".env") });
+}
+
+loadEnvFiles();
 
 const REQUIRED_VARS = [
   "NODE_ENV",

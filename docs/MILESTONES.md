@@ -390,3 +390,18 @@ suma de reservas vivas) y el umbral de stock bajo con alertas siguen siendo de M
 
 **Fuera de este milestone:** carrito, órdenes, Stripe y quién llama a `commit` (M5); ruta pública de
 disponibilidad (M12) y UI de inventario (M11); migración de los umbrales a `Settings` (M7).
+
+**Corrección a M1 (detectada después del merge de M4, al crear los archivos de entorno reales):**
+`config/env.ts` hacía `import "dotenv/config"`, que carga **únicamente** `.env` desde el directorio
+de trabajo. Ningún `.env.development.local` se leía jamás, pese a que los dos `.env.*.example`
+instruían "copia esto a `.env.development.local`" — seguir esa instrucción al pie de la letra dejaba
+la API abortando por variables faltantes. Ahora el cargador resuelve, desde la raíz del paquete y no
+desde `process.cwd()`, primero `.env.<NODE_ENV>.local` y después `.env` como base compartida. Como
+`dotenv` nunca pisa una variable ya definida, la precedencia queda
+`entorno real del proceso > .env.<NODE_ENV>.local > .env`, que es lo que importa en producción: los
+secretos que inyecta el hosting mandan sobre cualquier archivo que viaje dentro de la imagen.
+`NODE_ENV` tiene que venir del entorno real porque es quien elige el archivo; sin definir asume
+`development`. Verificado con el build de producción: arranque sin inyectar una sola variable (todo
+sale del archivo), `MONGODB_URI` inyectada pisando al archivo, y `NODE_ENV=production` seleccionando
+`.env.production.local`. Efecto colateral bueno: los tests ya no pueden heredar por accidente un
+`.env` suelto del disco, porque `NODE_ENV=test` busca un `.env.test.local` que no existe.
