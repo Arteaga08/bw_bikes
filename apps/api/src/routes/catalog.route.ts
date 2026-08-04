@@ -1,0 +1,55 @@
+import { Router } from "express";
+import { getPublicAccessoryBySlug, listPublicAccessories } from "../controllers/accessory.controller.js";
+import { getPublicBikeBySlug, listPublicBikes } from "../controllers/bike.controller.js";
+import { createCategoryController } from "../controllers/category.controller.js";
+import { publicReadRateLimiter, validate } from "../middlewares/index.js";
+import { accessoryCategoryService } from "../services/accessory-category.service.js";
+import { bikeCategoryService } from "../services/bike-category.service.js";
+import {
+  categoryListQuerySchema,
+  publicProductListQuerySchema,
+  slugParamSchema,
+} from "../validators/index.js";
+
+/**
+ * Public, read-only catalog. Everything here serves only active, non-archived
+ * documents and the trimmed public DTOs — the storefront (M12) is the
+ * consumer.
+ *
+ * Rate limited with `publicReadRateLimiter` (500/15min): these are anonymous
+ * endpoints exposing the full catalog, so the control is anti-scraping, not
+ * anti-brute-force (BACKEND_SECURITY_GUIDELINES.md §7).
+ */
+const router = Router();
+
+router.use(publicReadRateLimiter);
+
+const bikeCategories = createCategoryController(bikeCategoryService, { plural: "Categorías de bicicletas" });
+const accessoryCategories = createCategoryController(accessoryCategoryService, {
+  plural: "Categorías de accesorios",
+});
+
+// Two independent trees, two independent sets of endpoints.
+router.get("/bike-categories", validate(categoryListQuerySchema, "query"), bikeCategories.listPublic);
+router.get("/bike-categories/tree", bikeCategories.treePublic);
+router.get("/bike-categories/:slug", validate(slugParamSchema, "params"), bikeCategories.getBySlugPublic);
+
+router.get(
+  "/accessory-categories",
+  validate(categoryListQuerySchema, "query"),
+  accessoryCategories.listPublic,
+);
+router.get("/accessory-categories/tree", accessoryCategories.treePublic);
+router.get(
+  "/accessory-categories/:slug",
+  validate(slugParamSchema, "params"),
+  accessoryCategories.getBySlugPublic,
+);
+
+router.get("/bikes", validate(publicProductListQuerySchema, "query"), listPublicBikes);
+router.get("/bikes/:slug", validate(slugParamSchema, "params"), getPublicBikeBySlug);
+
+router.get("/accessories", validate(publicProductListQuerySchema, "query"), listPublicAccessories);
+router.get("/accessories/:slug", validate(slugParamSchema, "params"), getPublicAccessoryBySlug);
+
+export { router as catalogRouter };

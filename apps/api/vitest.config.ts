@@ -21,6 +21,13 @@ export default defineConfig({
       CLIENT_URL: "http://localhost:3000",
       JWT_ACCESS_EXPIRES_IN: "15m",
       JWT_REFRESH_EXPIRES_IN: "30d",
+      // Inert Cloudinary fixtures: env.ts requires them, and config/cloudinary.ts
+      // hands them to the SDK, but no test ever lets a request reach the network
+      // — tests/helpers/cloudinary.ts stubs the uploader, and the magic-bytes
+      // rejection path short-circuits before the SDK is even called.
+      CLOUDINARY_CLOUD_NAME: "test-cloud",
+      CLOUDINARY_API_KEY: "000000000000000",
+      CLOUDINARY_API_SECRET: "test-cloudinary-api-secret-fixture",
     },
   },
 });
