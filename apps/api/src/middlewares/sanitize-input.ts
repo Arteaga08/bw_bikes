@@ -3,7 +3,20 @@ import { filterXSS } from "xss";
 
 // Fields that carry a secret/credential value: never XSS-escape these, or the
 // secret itself gets altered and legitimate logins/tokens start failing.
-const CREDENTIAL_FIELDS = new Set(["password", "passwordConfirm", "token", "currentPassword", "newPassword"]);
+// Auth (M2) adds the TOTP code and the opaque verification/reset/refresh
+// tokens exchanged over these routes.
+const CREDENTIAL_FIELDS = new Set([
+  "password",
+  "passwordConfirm",
+  "token",
+  "currentPassword",
+  "newPassword",
+  "totpCode",
+  "verificationToken",
+  "resetToken",
+  "refreshToken",
+  "secret",
+]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

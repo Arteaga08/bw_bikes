@@ -16,6 +16,8 @@ const REQUIRED_VARS = [
   "JWT_SECRET",
   "ENCRYPTION_KEY",
   "CLIENT_URL",
+  "JWT_ACCESS_EXPIRES_IN",
+  "JWT_REFRESH_EXPIRES_IN",
 ] as const;
 
 type NodeEnv = "development" | "production" | "test";
@@ -57,6 +59,20 @@ function parsePort(raw: string): number {
   return port;
 }
 
+// Short duration format understood by jsonwebtoken's `expiresIn` (the `ms`
+// package grammar): an integer followed by a single unit — seconds,
+// minutes, hours, or days. Kept intentionally narrow (no "2 days" / "1y")
+// so a typo fails fast at boot instead of silently minting a token with an
+// unintended lifetime.
+const EXPIRES_IN_PATTERN = /^\d+[smhd]$/;
+
+function parseExpiresIn(name: string, raw: string): string {
+  if (!EXPIRES_IN_PATTERN.test(raw)) {
+    fail(`${name} must match <integer><s|m|h|d> (e.g. "15m", "7d") (got "${raw}")`);
+  }
+  return raw;
+}
+
 function buildEnv() {
   assertPresent();
 
@@ -66,6 +82,8 @@ function buildEnv() {
   const encryptionKey = process.env["ENCRYPTION_KEY"]!;
   const clientUrl = process.env["CLIENT_URL"]!;
   const mongoUri = process.env["MONGODB_URI"]!;
+  const jwtAccessExpiresIn = parseExpiresIn("JWT_ACCESS_EXPIRES_IN", process.env["JWT_ACCESS_EXPIRES_IN"]!);
+  const jwtRefreshExpiresIn = parseExpiresIn("JWT_REFRESH_EXPIRES_IN", process.env["JWT_REFRESH_EXPIRES_IN"]!);
 
   assertMinLength("JWT_SECRET", jwtSecret, MIN_SECRET_LENGTH);
   assertMinLength("ENCRYPTION_KEY", encryptionKey, MIN_SECRET_LENGTH);
@@ -83,6 +101,8 @@ function buildEnv() {
     jwtSecret,
     encryptionKey,
     clientUrl,
+    jwtAccessExpiresIn,
+    jwtRefreshExpiresIn,
     isProduction: nodeEnv === "production",
     isTest: nodeEnv === "test",
   });

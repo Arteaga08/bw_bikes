@@ -3,6 +3,7 @@ import express, { type Express } from "express";
 import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import { corsMiddleware } from "./config/cors.js";
+import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { errorHandler, globalRateLimiter, mongoSanitize, notFound, sanitizeInput, verifyOrigin } from "./middlewares/index.js";
 import { v1Router } from "./routes/index.js";
@@ -23,6 +24,15 @@ import { v1Router } from "./routes/index.js";
  */
 export function buildApp(): Express {
   const app = express();
+
+  // Behind a reverse proxy (Render/Railway) every request otherwise arrives
+  // from the proxy's own IP, so a per-IP limiter (e.g. login 5/15min) would
+  // throttle all users globally instead of individually. Only trusted in
+  // production, where that proxy is real; trusting it in dev/test would let
+  // a spoofed X-Forwarded-For header bypass rate limiting.
+  if (env.isProduction) {
+    app.set("trust proxy", 1);
+  }
 
   app.disable("x-powered-by");
   app.use(helmet());

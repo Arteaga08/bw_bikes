@@ -3,6 +3,7 @@ dist/
 build/
 coverage/
 .turbo/
+*.tsbuildinfo
 
 # Env files — never commit real secrets, only .env.*.example is versioned
 .env
