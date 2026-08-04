@@ -8,10 +8,9 @@ import {
   MAX_RELATED_ACCESSORIES,
   MAX_SHORT_DESCRIPTION_LENGTH,
   MAX_SIZE_LENGTH,
-  MAX_SKU_LENGTH,
   MAX_VARIANTS,
 } from "../models/index.js";
-import { objectId, priceCents, slug } from "./common.validator.js";
+import { objectId, priceCents, sku, slug } from "./common.validator.js";
 import { specGroupSchemaJoi } from "./spec-group.validator.js";
 
 const FULFILLMENT_MODES: FulfillmentMode[] = ["in_stock", "on_request", "preorder"];
@@ -42,23 +41,8 @@ const shortDescription = Joi.string().trim().min(1).max(MAX_SHORT_DESCRIPTION_LE
   "any.required": "La descripción corta es obligatoria.",
 });
 
-/**
- * SKU is uppercased here so `bk-tarmac-m` and `BK-TARMAC-M` can't coexist as
- * two variants that the warehouse would read as the same code.
- */
 const variant = Joi.object({
-  sku: Joi.string()
-    .trim()
-    .uppercase()
-    .max(MAX_SKU_LENGTH)
-    .pattern(/^[A-Z0-9][A-Z0-9-]*$/)
-    .required()
-    .messages({
-      "string.empty": "El SKU es obligatorio.",
-      "string.max": `El SKU no puede exceder ${MAX_SKU_LENGTH} caracteres.`,
-      "string.pattern.base": "El SKU solo admite letras, números y guiones.",
-      "any.required": "El SKU es obligatorio.",
-    }),
+  sku: sku.required(),
   size: Joi.string().trim().max(MAX_SIZE_LENGTH).allow("").optional(),
   color: Joi.string().trim().max(MAX_COLOR_LENGTH).allow("").optional(),
   // Optional override of the product price — absent means "use the product's".
@@ -67,6 +51,13 @@ const variant = Joi.object({
     .valid(...FULFILLMENT_MODES)
     .default("in_stock")
     .messages({ "any.only": "El modo de disponibilidad no es válido." }),
+  // Only meaningful for `preorder`; harmless elsewhere, so it isn't tied to
+  // `fulfillmentMode` with a conditional — a cross-field rule here would have
+  // to resolve against a sibling that itself carries a default.
+  preorderReleaseDate: Joi.date().iso().optional().messages({
+    "date.base": "La fecha estimada de preventa no es válida.",
+    "date.format": "La fecha estimada de preventa debe estar en formato ISO.",
+  }),
   isActive: Joi.boolean().default(true),
 });
 

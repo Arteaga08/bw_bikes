@@ -8,8 +8,8 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 |---|---|---|---|---|
 | M1 — Scaffolding seguro del monorepo | 1 | ✅ Hecho | `feat/m01-scaffolding` (mergeado, tag `m01`) | Ver detalle abajo |
 | M2 — Auth y usuarios | 1 | ✅ Hecho | `feat/m02-auth` (mergeado, tag `m02`) | Ver detalle abajo |
-| M3 — Catálogo | 1 | ✅ Hecho (pendiente de merge) | `feat/m03-catalogo` | Ver detalle abajo |
-| M4 — Inventario y reservas | 1 | ⏳ Pendiente | — | |
+| M3 — Catálogo | 1 | ✅ Hecho | `feat/m03-catalogo` (mergeado) | Ver detalle abajo |
+| M4 — Inventario y reservas | 1 | ✅ Hecho (pendiente de merge) | `feat/m04-inventario` | Ver detalle abajo |
 | M5 — Carrito, órdenes y pagos | 1 | ⏳ Pendiente | — | Módulo crítico |
 | M6 — Envíos, estatus y solicitudes | 1 | ⏳ Pendiente | — | Depende de decisión abierta #1 (costo de envío) |
 | M7 — Settings, analítica y adapters | 1 | ⏳ Pendiente | — | |
@@ -265,3 +265,128 @@ depende de ese servicio responde con un error explícito.
 pero nadie reserva contra stock hasta M4); precios por tier/canal; búsqueda full-text (por ahora
 regex escapada sobre nombre, marca y SKU); cualquier UI — el CRUD de catálogo en admin es M10 y el
 storefront M12.
+
+---
+
+## M4 — Inventario y reservas
+
+**Entregado:**
+- `packages/shared`: `ReservationStatus`, `ReservationReferenceType`, `InventoryAvailability`,
+  `ProductVariant.preorderReleaseDate` y tres `AuditAction` nuevas de inventario (una de ellas la
+  escribe el job con `actorType: "system"`, sin actor humano).
+- `apps/api/src/models/`:
+  - **`InventoryItem`** en colección aparte, keyed por `{itemType, itemId, sku}` (índice único) más
+    índice en `sku` para la búsqueda del listado. Dos contadores, nunca uno: `onHand` (físico) y
+    `reserved` (apartado); **disponible = onHand − reserved**, siempre derivado, nunca almacenado.
+  - **`StockReservation`** con `status` (`held`/`committed`/`released`), `expiresAt`, `purgeAt`,
+    índices `{status, expiresAt}` (query del job) y `{referenceType, referenceId}` (release/commit
+    por orden).
+  - `productVariantSchema` suma `preorderReleaseDate`.
+- `apps/api/src/services/inventory.service.ts`: `reserve` / `release` / `commit` /
+  `releaseExpiredReservations` / `getAvailability` (el contrato que consume M5), más la superficie
+  admin `listItems` / `createItem` / `adjustStock`.
+- `apps/api/src/jobs/reservation-reaper.job.ts`: barrido periódico sobre `setInterval(...).unref()`,
+  arrancado en `server.ts` después de `connectDb()` y detenido en `shutdown()` antes de
+  `disconnectDb()`. **Nunca desde `buildApp()`** — un timer ahí dejaría handles abiertos en supertest.
+- Rutas `/api/v1/admin/inventory` con `protect` + `restrictTo("admin","superadmin")` sobre el router
+  completo y sin rate limit (§7). Auditoría en alta y en cada ajuste.
+- Variables de entorno `STOCK_RESERVATION_TTL_MINUTES` (30), `RESERVATION_REAPER_INTERVAL_MS`
+  (60000) y `RESERVATION_RETENTION_DAYS` (30), opcionales con default explícito; un valor malformado
+  sigue abortando el arranque.
+
+**Las cuatro decisiones de diseño que sostienen el milestone:**
+
+1. **La condición y el incremento viven en la misma operación de Mongo.** El `$expr` está en el
+   *filtro* del `findOneAndUpdate`, no en lógica de aplicación:
+   ```ts
+   { itemType, itemId, sku, $expr: { $gte: [{ $subtract: ["$onHand", "$reserved"] }, qty] } }
+   ```
+   Verificado por mutación: al sustituir esa operación por un read-then-write equivalente, el test de
+   5 requests simultáneos por 5 unidades pasa a vender 10 y 2 de 2 tests de concurrencia fallan.
+2. **El mutex es el documento de reserva, no el contador.** Toda transición terminal reclama primero
+   `findOneAndUpdate({_id, status:"held"})` y solo quien reclamó toca `reserved`. De ahí sale la
+   idempotencia de `release`/`commit`, que el job y el flujo normal puedan competir por la misma
+   reserva, y que la API corra en más de una instancia sin lock distribuido.
+3. **El índice TTL va sobre `purgeAt`, no sobre `expiresAt`.** Un TTL sobre `expiresAt` borraría la
+   reserva vencida sin devolver las unidades y dejaría `reserved` inflado para siempre — el borrado
+   se lleva el único registro de cuánto devolver. `purgeAt` solo se escribe al llegar a estado
+   terminal, así que una reserva `held` nunca desaparece sola: si el job se cae, el stock queda
+   apartado de más (conservador y visible), no perdido.
+4. **Las dos escrituras van dentro de una transacción de Mongo.** Toda operación de este módulo
+   escribe en dos colecciones — el documento de reserva y el contador de inventario — y las dos
+   tienen que aterrizar o fallar juntas. `withOptionalTransaction` usa `session.withTransaction`
+   cuando el despliegue lo soporta (cualquier replica set, o sea todo despliegue gestionado) y cae a
+   escrituras compensatorias en un `mongod` standalone. `connectDb()` sondea la topología al arrancar
+   y avisa fuerte si encuentra un standalone, en vez de descubrirlo en el primer checkout.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm typecheck   (incluye tests)       → limpio (shared + api)
+pnpm lint                              → limpio
+pnpm build                             → limpio
+pnpm test                              → 17 archivos, 136/136 tests pasan (Mongo real en memoria,
+                                          replica set de un nodo para cubrir el camino transaccional)
+pnpm audit --prod                      → sin vulnerabilidades conocidas
+node dist/server.js + SIGTERM          → arranca, loguea el reaper y la topología detectada, lo
+                                          detiene y sale con código 0 (probado contra standalone y
+                                          contra replica set)
+```
+Los dos criterios de cierre, con su prueba (`inventory-reservations.test.ts`, 19 tests;
+`inventory-expiration.test.ts`, 10; `inventory-admin.test.ts`, 20):
+1. **Dos requests simultáneos por la última unidad** — `Promise.allSettled` de dos `reserve()`:
+   exactamente uno resuelve, el otro recibe 409, `reserved` queda en 1 y `available` en 0. Un test
+   hermano lanza cinco reservas de 2 unidades sobre un stock de 5 y solo ganan dos. **El inventario
+   nunca queda negativo**: cada caso de concurrencia reasserta `onHand >= 0`, `reserved >= 0` y
+   `onHand >= reserved` sobre toda la colección.
+2. **Una reserva vencida se libera sola** — con el reaper corriendo de verdad (intervalo de 50 ms
+   bajo test), una reserva backdateada vuelve a `reserved: 0` sin que nadie la toque; queda
+   `released`, con `purgeAt` sellado y su entrada de auditoría `actorType: "system"`. Una reserva
+   vigente y una ya committeada no se tocan, y el barrido compitiendo con un `release` manual
+   descuenta exactamente una vez.
+
+**Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
+- **Sin ruta HTTP de reserva.** El checkout es de M5; exponer un endpoint que aparta stock sin orden
+  detrás sería superficie que M5 tendría que rediseñar. El test de concurrencia dispara dos
+  `reserve()` en paralelo, que es exactamente en lo que colapsan dos requests simultáneos porque el
+  controller solo delega en el servicio.
+- **Alta manual de filas de inventario** (`POST /admin/inventory`), no auto-provisión desde el
+  catálogo — el catálogo de M3 no se toca. La fila sí valida que el triplete resuelva a una variante
+  real; `reserved` no se acepta nunca en el payload (es consecuencia de una reserva, no un dato que
+  el admin dicte).
+- **Ajuste de stock con `onHand` o `delta`, mutuamente excluyentes.** `onHand` sobrescribe (recuento
+  físico, donde sobrescribir es la intención); `delta` suma, para que dos admins recibiendo el mismo
+  embarque no se pisen (lost update). Ambos guardados por `$expr` para que el ajuste no pueda dejar
+  el físico por debajo de lo ya reservado.
+- **Transacción con compensación como fallback, no compensación a secas.** `reserve`, `release` y
+  `commit` corren dentro de `session.withTransaction` cuando la topología lo permite; contra un
+  `mongod` standalone caen a compensar (las líneas ya apartadas se revierten en orden inverso,
+  borrando el documento de reserva vía claim atómico, no marcándolo `released` — la reserva se está
+  deshaciendo, no concluyendo). La compensación cubre un fallo de negocio, que es el caso que de
+  verdad ocurre, pero **no** una caída del proceso, porque un proceso muerto no ejecuta su propia
+  compensación. Por eso producción no debe correr standalone y el arranque lo grita.
+  Los tests corren sobre `MongoMemoryReplSet` de un nodo precisamente para ejercitar el camino
+  transaccional, que es el que corre en producción; contra un standalone habrían probado el fallback
+  creyendo que probaban el camino real.
+- **`setInterval` y no `node-cron`/BullMQ.** Un job, periodo fijo, sin semántica de calendario ni
+  cola que coordinar. Cierra la decisión abierta #2 de la spec a favor de "cron + TTL de Mongo" para
+  la fase 1, sin dependencia ni infraestructura nueva.
+- **Solo las líneas `in_stock` generan `StockReservation`.** `on_request` y `preorder` no tienen
+  unidades que apartar; una "reserva de stock" que no reserva stock sería un registro mentiroso. Su
+  estado lo lleva la orden en M5 (`awaiting_supplier_confirmation`).
+- **`preorderReleaseDate` en la variante**, no en inventario: es dato de merchandising que el
+  storefront pinta en la ficha, y un preorder por definición no tiene fila de inventario que pudiera
+  cargarlo.
+- El schema de `sku` se movió a `common.validator.ts` y ahora lo comparten catálogo e inventario —
+  las dos capas tienen que coincidir en la forma exacta o se podría dar de alta stock para un código
+  que ninguna variante puede igualar.
+
+**Requisito de despliegue:** Mongo debe correr como **replica set** (Atlas lo es por definición; un
+`mongod` suelto no). Sin él no hay transacciones y el módulo cae al camino compensatorio, que deja
+una ventana: si el proceso muere entre el `$inc` de `reserved` y la creación del documento de
+reserva, quedan unidades apartadas sin registro que las respalde. `connectDb()` sondea la topología
+al arrancar y lo advierte en los logs. La reconciliación automática (comparar `reserved` contra la
+suma de reservas vivas) y el umbral de stock bajo con alertas siguen siendo de M11.
+
+**Fuera de este milestone:** carrito, órdenes, Stripe y quién llama a `commit` (M5); ruta pública de
+disponibilidad (M12) y UI de inventario (M11); migración de los umbrales a `Settings` (M7).

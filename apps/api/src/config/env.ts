@@ -99,6 +99,36 @@ function parseExpiresIn(name: string, raw: string): string {
   return raw;
 }
 
+/**
+ * Operational knobs with a documented default: unset means "use the default",
+ * a malformed value still fails fast. They're tuning parameters, not secrets —
+ * a silent fallback here can't weaken anything, unlike a missing JWT secret.
+ *
+ * These move to the `Settings` singleton in M7, which is where
+ * ECOMMERCE_ARCHITECTURE_GUIDELINES.md wants business thresholds so the owner
+ * can change them without a redeploy. Until that collection exists, env is the
+ * honest place for them.
+ */
+function parsePositiveInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    fail(`${name} must be a positive integer (got "${raw}")`);
+  }
+  return parsed;
+}
+
+/** How long a checkout may hold stock before the expiry job takes it back. */
+const DEFAULT_RESERVATION_TTL_MINUTES = 30;
+
+/** How often that job sweeps. Well under the TTL, so an expiry is acted on promptly. */
+const DEFAULT_REAPER_INTERVAL_MS = 60_000;
+
+/** How long a finished reservation is kept for forensics before Mongo's TTL drops it. */
+const DEFAULT_RESERVATION_RETENTION_DAYS = 30;
+
 function buildEnv() {
   assertPresent();
 
@@ -114,6 +144,18 @@ function buildEnv() {
   const cloudinaryApiKey = process.env["CLOUDINARY_API_KEY"] ?? "";
   const cloudinaryApiSecret = process.env["CLOUDINARY_API_SECRET"] ?? "";
   const isCloudinaryConfigured = PRODUCTION_REQUIRED_VARS.every(isSet);
+  const stockReservationTtlMinutes = parsePositiveInt(
+    "STOCK_RESERVATION_TTL_MINUTES",
+    DEFAULT_RESERVATION_TTL_MINUTES,
+  );
+  const reservationReaperIntervalMs = parsePositiveInt(
+    "RESERVATION_REAPER_INTERVAL_MS",
+    DEFAULT_REAPER_INTERVAL_MS,
+  );
+  const reservationRetentionDays = parsePositiveInt(
+    "RESERVATION_RETENTION_DAYS",
+    DEFAULT_RESERVATION_RETENTION_DAYS,
+  );
 
   assertMinLength("JWT_SECRET", jwtSecret, MIN_SECRET_LENGTH);
   assertMinLength("ENCRYPTION_KEY", encryptionKey, MIN_SECRET_LENGTH);
@@ -148,6 +190,9 @@ function buildEnv() {
     cloudinaryApiKey,
     cloudinaryApiSecret,
     isCloudinaryConfigured,
+    stockReservationTtlMinutes,
+    reservationReaperIntervalMs,
+    reservationRetentionDays,
     isProduction: nodeEnv === "production",
     isTest: nodeEnv === "test",
   });

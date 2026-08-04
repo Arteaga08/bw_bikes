@@ -27,7 +27,10 @@ export interface AuthUser {
  * Actions recorded in the append-only audit trail (see
  * BACKEND_SECURITY_GUIDELINES.md §10). M2 covered privileged-account events;
  * M3 adds catalog writes — every mutation an admin performs on a category or
- * a product leaves a trace of who did what to which document.
+ * a product leaves a trace of who did what to which document. M4 adds
+ * inventory, including one action recorded with `actorType: "system"`
+ * (`inventory.reservation_expired`, written by the expiry job, which has no
+ * human actor).
  */
 export type AuditAction =
   | "admin.login"
@@ -41,4 +44,7 @@ export type AuditAction =
   | "catalog.product_archived"
   | "catalog.product_restored"
   | "catalog.gallery_updated"
-  | "catalog.spec_groups_updated";
+  | "catalog.spec_groups_updated"
+  | "inventory.item_created"
+  | "inventory.stock_adjusted"
+  | "inventory.reservation_expired";

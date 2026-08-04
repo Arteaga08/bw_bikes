@@ -10,7 +10,8 @@ import { objectId, priceCents } from "./common.validator.js";
  * them.
  */
 
-const pagination = {
+/** Exported so every list endpoint — catalog or not — spreads the same four params. */
+export const pagination = {
   page: Joi.number().integer().min(1).optional().messages({
     "number.base": 'El parámetro "page" debe ser un número.',
     "number.min": 'El parámetro "page" debe ser mayor a cero.',

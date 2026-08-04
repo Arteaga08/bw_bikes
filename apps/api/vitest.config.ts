@@ -28,6 +28,13 @@ export default defineConfig({
       CLOUDINARY_CLOUD_NAME: "test-cloud",
       CLOUDINARY_API_KEY: "000000000000000",
       CLOUDINARY_API_SECRET: "test-cloudinary-api-secret-fixture",
+      STOCK_RESERVATION_TTL_MINUTES: "30",
+      // Deliberately tiny so the reaper's own test can observe a real tick in
+      // milliseconds instead of faking timers — faking them would also stub the
+      // ones the Mongo driver uses. The job only runs when a test starts it
+      // explicitly; nothing else in the suite is affected.
+      RESERVATION_REAPER_INTERVAL_MS: "50",
+      RESERVATION_RETENTION_DAYS: "30",
     },
   },
 });

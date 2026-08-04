@@ -5,6 +5,7 @@ export * from "./auth.service.js";
 export * from "./bike-category.service.js";
 export * from "./bike.service.js";
 export * from "./category.service.js";
+export * from "./inventory.service.js";
 export * from "./mailer/index.js";
 export * from "./product.service.js";
 export * from "./storage/index.js";

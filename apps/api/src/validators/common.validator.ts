@@ -1,5 +1,5 @@
 import Joi from "joi";
-import { MAX_PRICE_CENTS } from "../models/index.js";
+import { MAX_PRICE_CENTS, MAX_SKU_LENGTH } from "../models/index.js";
 
 /**
  * Field-level schemas shared by every catalog validator, so all of them agree
@@ -41,6 +41,25 @@ export const priceCents = Joi.number().integer().min(0).max(MAX_PRICE_CENTS).mes
   "number.max": "El precio excede el máximo permitido.",
   "any.required": "El precio es obligatorio.",
 });
+
+/**
+ * A variant's stock-keeping unit. Uppercased so `bk-tarmac-m` and
+ * `BK-TARMAC-M` can't coexist as two codes the warehouse would read as one.
+ * Shared between the catalog validators (which declare the SKU) and the
+ * inventory ones (which stock it) — both sides have to agree on the exact
+ * shape, or a row could be created for a code no variant can ever match.
+ */
+export const sku = Joi.string()
+  .trim()
+  .uppercase()
+  .max(MAX_SKU_LENGTH)
+  .pattern(/^[A-Z0-9][A-Z0-9-]*$/)
+  .messages({
+    "string.empty": "El SKU es obligatorio.",
+    "string.max": `El SKU no puede exceder ${MAX_SKU_LENGTH} caracteres.`,
+    "string.pattern.base": "El SKU solo admite letras, números y guiones.",
+    "any.required": "El SKU es obligatorio.",
+  });
 
 /** `:id` path param, reused by every admin detail/update/delete route. */
 export const idParamSchema = Joi.object({ id: objectId.required() });
