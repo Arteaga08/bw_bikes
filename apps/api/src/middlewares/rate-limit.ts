@@ -1,4 +1,4 @@
-import rateLimit, { type Options } from "express-rate-limit";
+import rateLimit, { MemoryStore, type Options } from "express-rate-limit";
 import { env } from "../config/env.js";
 
 interface RateLimitConfig {
@@ -7,20 +7,30 @@ interface RateLimitConfig {
   message: string;
 }
 
+// Every MemoryStore handed out by createRateLimiter, so tests can wipe all
+// of them between cases without recreating the app (and therefore the
+// limiters themselves) per test.
+const stores: MemoryStore[] = [];
+
 /**
  * Factory for per-action rate limiters — a dedicated, strict limiter per
  * sensitive action rather than one generic limiter for everything. No-op
- * outside production so it never blocks local dev or tests. Admin routes are
- * never wrapped with this: their barrier is auth + role, not throttling.
+ * only in `development`, so it never blocks local dev, but stays active in
+ * `test` (M2's login-lockout tests assert on it) and, of course,
+ * `production`. Admin routes are never wrapped with this: their barrier is
+ * auth + role, not throttling.
  *
- * `MemoryStore` (the default) is explicit here so tests can spin up a fresh
- * app without cross-test state; swap for a Redis store if the API ever runs
- * more than one instance.
+ * `MemoryStore` is explicit (not the implicit default) so each limiter's
+ * store can be tracked and reset between tests via `resetRateLimiters()`;
+ * swap for a Redis store if the API ever runs more than one instance.
  */
 export function createRateLimiter(config: RateLimitConfig) {
-  if (!env.isProduction) {
+  if (env.nodeEnv === "development") {
     return (_req: unknown, _res: unknown, next: () => void) => next();
   }
+
+  const store = new MemoryStore();
+  stores.push(store);
 
   const options: Partial<Options> = {
     windowMs: config.windowMs,
@@ -28,9 +38,21 @@ export function createRateLimiter(config: RateLimitConfig) {
     standardHeaders: true,
     legacyHeaders: false,
     message: { status: "fail", message: config.message },
+    store,
   };
 
   return rateLimit(options);
+}
+
+/**
+ * Test-only helper: clears every limiter's hit counters. Called from
+ * tests/setup.ts in `afterEach` so one test's 429s don't bleed into the
+ * next — without this, `test` env limiters (active per the rule above)
+ * would make every test after the first login-lockout case start already
+ * throttled.
+ */
+export function resetRateLimiters(): void {
+  for (const store of stores) void store.resetAll();
 }
 
 // Pre-built limiters for the actions already known at this milestone.
@@ -42,9 +64,37 @@ export const loginRateLimiter = createRateLimiter({
   message: "Demasiados intentos de inicio de sesión. Intenta de nuevo más tarde.",
 });
 
+/**
+ * Separate bucket from `loginRateLimiter`, deliberately — a legitimate
+ * admin's first login already spends 1 request on `/login` before it even
+ * reaches a TOTP code check (`/2fa/verify`, `/2fa/enroll/complete`,
+ * `/2fa/disable`). Sharing one 5-request budget across the whole flow
+ * would let normal first-time enrollment lock a real admin out of their
+ * own account; each guessable secret (password, TOTP code) gets its own
+ * 5/15min ceiling instead.
+ */
+export const twoFactorRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: "Demasiados intentos. Intenta de nuevo más tarde.",
+});
+
 export const publicReadRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 500,
+  message: "Demasiadas solicitudes. Intenta de nuevo más tarde.",
+});
+
+/**
+ * For anonymous, enumeration-sensitive endpoints that trigger an email
+ * side effect (register, resend-verification, forgot/reset-password) —
+ * the "recurso público con side-effects (email)" row of
+ * BACKEND_SECURITY_GUIDELINES.md §7's table (~10/15min), distinct from
+ * `publicReadRateLimiter`'s much higher read-only ceiling.
+ */
+export const authActionRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   message: "Demasiadas solicitudes. Intenta de nuevo más tarde.",
 });
 

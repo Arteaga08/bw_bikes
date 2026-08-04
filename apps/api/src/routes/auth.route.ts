@@ -1,0 +1,82 @@
+import { Router } from "express";
+import {
+  completeTwoFactorEnrollmentHandler,
+  disableTwoFactorHandler,
+  forgotPasswordHandler,
+  login,
+  logoutAllHandler,
+  logoutHandler,
+  me,
+  refresh,
+  register,
+  resendVerification,
+  resetPasswordHandler,
+  startTwoFactorEnrollmentHandler,
+  verifyEmailHandler,
+  verifyTwoFactorHandler,
+} from "../controllers/auth.controller.js";
+import {
+  authActionRateLimiter,
+  loginRateLimiter,
+  protect,
+  restrictTo,
+  twoFactorRateLimiter,
+  validate,
+} from "../middlewares/index.js";
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  registerSchema,
+  resendVerificationSchema,
+  resetPasswordSchema,
+  twoFactorCodeSchema,
+  verifyEmailSchema,
+} from "../validators/index.js";
+
+const router = Router();
+
+router.post("/register", authActionRateLimiter, validate(registerSchema), register);
+router.post("/verify-email", validate(verifyEmailSchema), verifyEmailHandler);
+router.post("/resend-verification", authActionRateLimiter, validate(resendVerificationSchema), resendVerification);
+
+router.post("/login", loginRateLimiter, validate(loginSchema), login);
+
+// enroll/start doesn't check a secret (it just mints a fresh one behind an
+// already-issued challenge cookie), so it's not brute-forceable and needs
+// no limiter. Everything below it DOES check a 6-digit TOTP code — only
+// 10^6 possibilities per 30s window — so it needs the same brute-force
+// guard as password login. On its own bucket (`twoFactorRateLimiter`), not
+// `loginRateLimiter`: a legitimate first-time enrollment already spends a
+// request on /login before it ever reaches a code check, so sharing one
+// budget across the whole flow would lock a real admin out of their own
+// account. BACKEND_SECURITY_GUIDELINES.md §7's "no throttle admin routes"
+// targets ordinary admin work; a second-factor code guess is the
+// credential check itself, not routine work — hence /2fa/disable is
+// limited too, despite sitting behind `protect`.
+router.post("/2fa/enroll/start", startTwoFactorEnrollmentHandler);
+router.post(
+  "/2fa/enroll/complete",
+  twoFactorRateLimiter,
+  validate(twoFactorCodeSchema),
+  completeTwoFactorEnrollmentHandler,
+);
+router.post("/2fa/verify", twoFactorRateLimiter, validate(twoFactorCodeSchema), verifyTwoFactorHandler);
+router.post(
+  "/2fa/disable",
+  protect,
+  restrictTo("admin", "superadmin"),
+  twoFactorRateLimiter,
+  validate(twoFactorCodeSchema),
+  disableTwoFactorHandler,
+);
+
+router.post("/refresh", refresh);
+router.post("/logout", logoutHandler);
+router.post("/logout-all", protect, logoutAllHandler);
+
+router.post("/forgot-password", authActionRateLimiter, validate(forgotPasswordSchema), forgotPasswordHandler);
+router.post("/reset-password", authActionRateLimiter, validate(resetPasswordSchema), resetPasswordHandler);
+
+router.get("/me", protect, me);
+
+export { router as authRouter };

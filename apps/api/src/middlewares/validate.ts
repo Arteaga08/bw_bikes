@@ -23,7 +23,19 @@ export function validate(schema: ObjectSchema, target: ValidationTarget = "body"
       return;
     }
 
-    Object.assign(req[target], value);
+    // Reconcile in place: drop any key stripUnknown discarded from `value`
+    // before merging the validated output back in. A plain Object.assign
+    // only adds/overwrites keys — it never removes ones that Joi rejected,
+    // so an unknown field (e.g. `role` on a register payload) would still
+    // reach the controller. Mutating in place (not reassigning req[target])
+    // is required because req.query is a read-only getter in Express 5.
+    const current = req[target] as Record<string, unknown>;
+    for (const key of Object.keys(current)) {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) {
+        delete current[key];
+      }
+    }
+    Object.assign(current, value);
     next();
   };
 }
