@@ -79,6 +79,13 @@ export interface ProductVariant {
   color?: string;
   price?: PriceCents;
   fulfillmentMode: FulfillmentMode;
+  /**
+   * Estimated availability date, meaningful only when `fulfillmentMode` is
+   * `preorder`. Merchandising copy the storefront renders on the PDP, not an
+   * inventory fact — a preorder holds no stock, so it has no inventory row to
+   * carry the date.
+   */
+  preorderReleaseDate?: string;
   isActive: boolean;
 }
 

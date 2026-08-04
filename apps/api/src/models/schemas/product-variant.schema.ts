@@ -37,6 +37,10 @@ export const productVariantSchema = new Schema(
       required: true,
       default: "in_stock",
     },
+    // Only meaningful for `preorder`. Merchandising copy for the PDP, not an
+    // inventory fact — a preorder holds no stock, so it has no inventory row
+    // that could carry the date.
+    preorderReleaseDate: { type: Date },
     isActive: { type: Boolean, default: true },
   },
   { _id: false },

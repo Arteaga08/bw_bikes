@@ -3,9 +3,14 @@ import { buildApp } from "./app.js";
 import { connectDb, disconnectDb } from "./config/db.js";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
+import { startReservationReaper, stopReservationReaper } from "./jobs/index.js";
 
 async function main(): Promise<void> {
   await connectDb();
+
+  // Background jobs live here and not in `buildApp()`: the app must stay free
+  // of side effects so tests can build it without leaving timers running.
+  startReservationReaper();
 
   const app = buildApp();
   const server: Server = app.listen(env.port, () => {
@@ -14,6 +19,8 @@ async function main(): Promise<void> {
 
   const shutdown = (signal: string) => {
     logger.info({ signal }, "Shutting down gracefully");
+    stopReservationReaper();
+
     server.close(async (err) => {
       if (err) {
         logger.error({ err }, "Error while closing HTTP server");
