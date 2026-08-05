@@ -5,6 +5,7 @@ import { buildApp } from "../src/app.js";
 import { Order } from "../src/models/index.js";
 import { createAdminSession, createCustomerSession } from "./helpers/admin-session.js";
 import { createInventoryItemDoc, seedBikeWithVariant } from "./helpers/factories.js";
+import { setShippingAddress } from "./helpers/shipping.js";
 import { stubStripe } from "./helpers/stripe.js";
 
 const CART = "/api/v1/cart";
@@ -23,6 +24,8 @@ describe("order security", () => {
     app = buildApp();
     alice = await createCustomerSession(app, "alice@example.com");
     bob = await createCustomerSession(app, "bob@example.com");
+    await setShippingAddress(app, alice);
+    await setShippingAddress(app, bob);
     stubStripe();
     bike = await seedBikeWithVariant({ sku: "BK-SEC-M", price: 19_999_900 });
     await createInventoryItemDoc({ itemId: new Types.ObjectId(bike.itemId), sku: bike.sku, onHand: 10 });

@@ -99,6 +99,17 @@ export const authActionRateLimiter = createRateLimiter({
 });
 
 /**
+ * Ambassador/sponsorship application submissions (M6). Same profile as
+ * `authActionRateLimiter` — an authenticated endpoint with a real side effect
+ * (a document an admin has to review) that a script could otherwise flood.
+ */
+export const applicationRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: "Demasiadas solicitudes. Intenta de nuevo más tarde.",
+});
+
+/**
  * Checkout (`POST /orders`). Strict, because this is the anti card-testing
  * control the e-commerce standard asks for: an endpoint that creates a payment
  * intent per call is exactly what a stolen-card script wants, and each call

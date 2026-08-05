@@ -1,7 +1,9 @@
 import { Router } from "express";
+import { adminApplicationRouter } from "./admin-application.route.js";
 import { adminCatalogRouter } from "./admin-catalog.route.js";
 import { adminInventoryRouter } from "./admin-inventory.route.js";
 import { adminOrderRouter } from "./admin-order.route.js";
+import { applicationRouter } from "./application.route.js";
 import { authRouter } from "./auth.route.js";
 import { cartRouter } from "./cart.route.js";
 import { catalogRouter } from "./catalog.route.js";
@@ -25,8 +27,10 @@ v1Router.use("/auth", authRouter);
 v1Router.use("/catalog", catalogRouter);
 v1Router.use("/cart", cartRouter);
 v1Router.use("/orders", orderRouter);
+v1Router.use("/applications", applicationRouter);
 v1Router.use("/admin", adminCatalogRouter);
 v1Router.use("/admin", adminInventoryRouter);
 v1Router.use("/admin", adminOrderRouter);
+v1Router.use("/admin", adminApplicationRouter);
 
 export { v1Router, webhookRouter };

@@ -1,4 +1,5 @@
 import type { CURRENCY, FulfillmentMode, ItemType, PriceCents } from "./catalog.js";
+import type { ShipmentSummary, ShippingAddress } from "./shipping.js";
 
 /**
  * Explicit, single lifecycle enum for an Order. Every transition is verified
@@ -103,7 +104,12 @@ export interface OrderTotals {
   subtotalCents: PriceCents;
   /** Informational: the IVA already contained in the amounts above. */
   taxCents: PriceCents;
-  /** Always 0 until M6 closes the shipping-cost decision. The field exists now so no order needs migrating. */
+  /**
+   * Free once the order's subtotal reaches `FREE_SHIPPING_THRESHOLD_CENTS`,
+   * a flat `SHIPPING_ACCESSORY_FLAT_CENTS` otherwise (see `shipping.service.ts`).
+   * A bike alone already clears the threshold — there is no separate rule for
+   * bikes, the arithmetic just always lands on free for them.
+   */
   shippingCents: PriceCents;
   totalCents: PriceCents;
   currency: typeof CURRENCY;
@@ -132,6 +138,15 @@ export interface OrderStatusHistoryEntry {
   reason?: string;
 }
 
+/**
+ * The same entry, with the acting admin's id. Only ever served on the admin
+ * route — a customer has no business knowing which employee touched their
+ * order, but the admin panel needs to say *who* moved it.
+ */
+export interface AdminOrderStatusHistoryEntry extends OrderStatusHistoryEntry {
+  actorId?: string;
+}
+
 /** The shape the storefront receives for an order it owns. */
 export interface PublicOrder {
   id: string;
@@ -140,6 +155,9 @@ export interface PublicOrder {
   lines: OrderLineSnapshot[];
   totals: OrderTotals;
   payment: PaymentSummary;
+  shippingAddress: ShippingAddress;
+  /** Present only once the order has shipped. */
+  shipment?: ShipmentSummary;
   statusHistory: OrderStatusHistoryEntry[];
   createdAt: string;
   updatedAt: string;
@@ -150,12 +168,13 @@ export interface PublicOrder {
  * identifier, so an operator can cross-reference the payment in the Stripe
  * dashboard. Never served on a customer route.
  */
-export interface AdminOrder extends PublicOrder {
+export interface AdminOrder extends Omit<PublicOrder, "statusHistory"> {
   customer: { id: string; email: string; firstName: string; lastName: string } | null;
   paymentIntentId?: string;
   disputedAt?: string;
   adminAlertedAt?: string;
   cancelReason?: string;
+  statusHistory: AdminOrderStatusHistoryEntry[];
 }
 
 /**

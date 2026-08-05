@@ -38,6 +38,10 @@ export interface AuthUser {
  * likewise have no human actor: `order.authorization_expiring`,
  * `order.authorization_expired`, `order.reconciled`, and the provider-driven
  * `order.paid` / `order.refunded` / `order.disputed`.
+ *
+ * M6 adds fulfillment (shipping address corrections, shipment/tracking
+ * capture, the bulk status update — one entry per order, never one for the
+ * whole batch) and the ambassador/sponsorship application flow.
  */
 export type AuditAction =
   | "admin.login"
@@ -65,4 +69,11 @@ export type AuditAction =
   | "order.authorization_expired"
   | "order.refunded"
   | "order.disputed"
-  | "order.reconciled";
+  | "order.reconciled"
+  | "order.shipping_address_updated"
+  | "order.shipped"
+  | "order.shipment_updated"
+  | "order.bulk_status_updated"
+  | "application.submitted"
+  | "application.approved"
+  | "application.rejected";

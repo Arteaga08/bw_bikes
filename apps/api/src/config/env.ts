@@ -228,6 +228,23 @@ const DEFAULT_STRIPE_WEBHOOK_TOLERANCE_SECONDS = 300;
  */
 const DEFAULT_TAX_RATE_BPS = 1600;
 
+/**
+ * Shipping (M6, closes open decision #1): a bike's own price already clears
+ * the free-shipping threshold, so there is no separate "bikes ship free"
+ * rule — the arithmetic in `shipping.service.ts` just always lands on free
+ * for them. Accessory-only orders under the threshold pay the flat fee.
+ * Both move to the `Settings` singleton in M7.
+ */
+const DEFAULT_SHIPPING_ACCESSORY_FLAT_CENTS = 25_000;
+const DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS = 200_000;
+
+/**
+ * How long a rejected ambassador/sponsorship applicant must wait before
+ * reapplying. An approved applicant never reapplies at all; a pending one is
+ * blocked by the partial unique index, not this value.
+ */
+const DEFAULT_APPLICATION_COOLDOWN_DAYS = 90;
+
 function buildEnv() {
   assertPresent();
 
@@ -281,6 +298,18 @@ function buildEnv() {
     DEFAULT_STRIPE_WEBHOOK_TOLERANCE_SECONDS,
   );
   const taxRateBps = parsePositiveInt("TAX_RATE_BPS", DEFAULT_TAX_RATE_BPS);
+  const shippingAccessoryFlatCents = parsePositiveInt(
+    "SHIPPING_ACCESSORY_FLAT_CENTS",
+    DEFAULT_SHIPPING_ACCESSORY_FLAT_CENTS,
+  );
+  const freeShippingThresholdCents = parsePositiveInt(
+    "FREE_SHIPPING_THRESHOLD_CENTS",
+    DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS,
+  );
+  const applicationCooldownDays = parsePositiveInt(
+    "APPLICATION_COOLDOWN_DAYS",
+    DEFAULT_APPLICATION_COOLDOWN_DAYS,
+  );
 
   // Warning the admin *after* the authorization was already cancelled would
   // make the alert useless, so the ordering is enforced rather than assumed.
@@ -344,6 +373,9 @@ function buildEnv() {
     paymentReconciliationIntervalMs,
     paymentReconciliationAfterMinutes,
     taxRateBps,
+    shippingAccessoryFlatCents,
+    freeShippingThresholdCents,
+    applicationCooldownDays,
     stockReservationTtlMinutes,
     reservationReaperIntervalMs,
     reservationRetentionDays,

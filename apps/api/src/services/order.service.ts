@@ -1,10 +1,13 @@
 import { randomInt } from "node:crypto";
 import type {
   AdminOrder,
+  AdminOrderStatusHistoryEntry,
+  Carrier,
   CheckoutResult,
   OrderLineSnapshot,
   OrderStatus,
   PublicOrder,
+  ShippingAddress,
 } from "@bw-bikes/shared";
 import { Types } from "mongoose";
 import { env } from "../config/env.js";
@@ -16,10 +19,11 @@ import { recordAuditLog } from "./audit-log.service.js";
 import { cartService } from "./cart.service.js";
 import type { ReservationLine } from "./inventory.service.js";
 import { inventoryService } from "./inventory.service.js";
-import { assertTransition, canTransition } from "./order-state.js";
+import { assertTransition, canTransition, isTerminal } from "./order-state.js";
 import { buildLineSnapshots, calculateTotals, resolveCaptureMethod } from "./order-pricing.js";
 import { assertPaymentsConfigured, getPaymentProvider } from "./payments/index.js";
 import type { ActorContext } from "./product.service.js";
+import { shippingService } from "./shipping.service.js";
 
 const MODULE_NAME = "orders";
 
@@ -98,6 +102,18 @@ function toPublicOrder(order: IOrder): PublicOrder {
         ? { authorizationExpiresAt: order.payment.authorizationExpiresAt.toISOString() }
         : {}),
     },
+    shippingAddress: order.shippingAddress,
+    ...(order.shipment
+      ? {
+          shipment: {
+            carrier: order.shipment.carrier,
+            ...(order.shipment.carrierName !== undefined ? { carrierName: order.shipment.carrierName } : {}),
+            trackingNumber: order.shipment.trackingNumber,
+            trackingUrl: order.shipment.trackingUrl,
+            shippedAt: order.shipment.shippedAt.toISOString(),
+          },
+        }
+      : {}),
     statusHistory: order.statusHistory.map((entry) => ({
       status: entry.status,
       at: entry.at.toISOString(),
@@ -116,8 +132,20 @@ function toPublicOrder(order: IOrder): PublicOrder {
  * customer's business either.
  */
 function toAdminOrder(order: IOrder, customer?: Pick<IUser, "_id" | "email" | "firstName" | "lastName"> | null): AdminOrder {
+  // The admin panel needs to say *who* moved the order, so `actorId` rides
+  // along here — `toPublicOrder`'s mapping omits it, correctly, for the
+  // customer's own view of the same history.
+  const statusHistory: AdminOrderStatusHistoryEntry[] = order.statusHistory.map((entry) => ({
+    status: entry.status,
+    at: entry.at.toISOString(),
+    actorType: entry.actorType,
+    ...(entry.actorId !== undefined ? { actorId: String(entry.actorId) } : {}),
+    ...(entry.reason !== undefined ? { reason: entry.reason } : {}),
+  }));
+
   return {
     ...toPublicOrder(order),
+    statusHistory,
     customer: customer
       ? {
           id: String(customer._id),
@@ -225,9 +253,18 @@ async function createFromCart(userId: string, input: CreateOrderInput, actor: Ac
     if (replay) return replayCheckout(replay);
   }
 
+  // Captured on the cart, ahead of payment — `createOrderSchema` takes no
+  // body, so this is the only source for it. A checkout with nowhere to ship
+  // is refused before a single unit is held or Stripe is ever called.
+  const shippingAddress = await cartService.getShippingAddress(userId);
+  if (!shippingAddress) {
+    throw new AppError("Agrega una dirección de envío antes de continuar.", 400);
+  }
+
   const lines = await cartService.getCheckoutLines(userId);
   const snapshots = await buildLineSnapshots(lines);
-  const totals = calculateTotals(snapshots);
+  const shippingQuote = shippingService.quote(snapshots);
+  const totals = calculateTotals(snapshots, shippingQuote.shippingCents);
   const captureMethod = resolveCaptureMethod(snapshots);
 
   // One live checkout per customer. A second attempt supersedes the first
@@ -235,7 +272,14 @@ async function createFromCart(userId: string, input: CreateOrderInput, actor: Ac
   // hold the same bike three times over and lock out real buyers.
   await cancelStalePendingOrders(userId);
 
-  const order = await createOrderDocument({ userId, snapshots, totals, captureMethod, ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}) });
+  const order = await createOrderDocument({
+    userId,
+    snapshots,
+    totals,
+    captureMethod,
+    shippingAddress,
+    ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
+  });
 
   try {
     await inventoryService.reserve(toReservationLines(snapshots), {
@@ -316,6 +360,7 @@ async function createOrderDocument(params: {
   snapshots: OrderLineSnapshot[];
   totals: ReturnType<typeof calculateTotals>;
   captureMethod: "automatic" | "manual";
+  shippingAddress: ShippingAddress;
   idempotencyKey?: string;
 }): Promise<IOrder> {
   for (let attempt = 0; attempt < ORDER_NUMBER_ATTEMPTS; attempt++) {
@@ -331,6 +376,7 @@ async function createOrderDocument(params: {
         totalCents: params.totals.totalCents,
         currency: params.totals.currency,
         payment: { provider: "stripe", state: "pending", captureMethod: params.captureMethod },
+        shippingAddress: params.shippingAddress,
         ...(params.idempotencyKey !== undefined ? { idempotencyKey: params.idempotencyKey } : {}),
         statusHistory: [{ status: "pending_payment", at: new Date(), actorType: "user" }],
       });
@@ -607,6 +653,225 @@ async function rejectSupplierStock(orderId: string, reason: string, actor: Actor
   return toPublicOrder(await findByIdOrFail(orderId));
 }
 
+/** An order past this point has already told the customer where it went; the address is frozen. */
+const SHIPPING_ADDRESS_FROZEN_STATUSES: OrderStatus[] = ["shipped", "delivered"];
+
+/**
+ * Corrects or captures the destination on an order the customer already
+ * placed. Refused once the package has actually shipped or been delivered
+ * (or the order is otherwise closed) — correcting an address after the fact
+ * would be lying about where a package went, not fixing a typo before it
+ * left.
+ */
+async function updateShippingAddress(
+  orderId: string,
+  address: ShippingAddress,
+  actor: ActorContext,
+): Promise<PublicOrder> {
+  const order = await findByIdOrFail(orderId);
+
+  if (SHIPPING_ADDRESS_FROZEN_STATUSES.includes(order.status) || isTerminal(order.status)) {
+    throw new AppError(
+      `No se puede modificar la dirección de envío de una orden en estatus "${order.status}".`,
+      409,
+    );
+  }
+
+  const before = order.shippingAddress;
+  order.shippingAddress = address;
+  await order.save();
+
+  await recordAuditLog({
+    actorId: actor.actorId,
+    actorType: "user",
+    action: "order.shipping_address_updated",
+    module: MODULE_NAME,
+    targetId: String(order._id),
+    before,
+    after: address,
+    ip: actor.ip,
+  });
+
+  return toPublicOrder(order);
+}
+
+interface RecordShipmentInput {
+  carrier: Carrier;
+  carrierName?: string;
+  trackingNumber: string;
+  /** Built from `carrier` + `trackingNumber` when the client didn't supply one. */
+  trackingUrl?: string;
+}
+
+/** Once shipped, corrections are in place — nobody "reships" a package over a mistyped tracking number. */
+const SHIPMENT_CORRECTABLE_STATUSES: OrderStatus[] = ["shipped", "delivered"];
+
+/**
+ * Captures the courier and guide number for an order, or corrects them
+ * afterward. Which of the two happens is decided by the order's own status,
+ * not by a flag the caller passes:
+ *
+ * - `processing` → captures the shipment **and** drives `processing → shipped`
+ *   in the same `applyTransition` call, so the tracking data and the status
+ *   change land together or not at all, and only one history entry is
+ *   written.
+ * - `shipped` / `delivered` → correction only. `status` is untouched.
+ * - anything else → 409; nobody ships an order that hasn't been confirmed paid.
+ */
+async function recordShipment(orderId: string, input: RecordShipmentInput, actor: ActorContext): Promise<PublicOrder> {
+  const order = await findByIdOrFail(orderId);
+
+  const trackingUrl = input.trackingUrl ?? shippingService.buildTrackingUrl(input.carrier, input.trackingNumber);
+  if (!trackingUrl) {
+    throw new AppError("Indica la URL de rastreo para esta paquetería.", 400);
+  }
+
+  const shipmentFields: Record<string, unknown> = {
+    "shipment.carrier": input.carrier,
+    "shipment.trackingNumber": input.trackingNumber,
+    "shipment.trackingUrl": trackingUrl,
+    ...(input.carrierName !== undefined ? { "shipment.carrierName": input.carrierName } : {}),
+  };
+
+  if (order.status === "processing") {
+    const updated = await applyTransition(
+      order,
+      "shipped",
+      { actorType: "user", actorId: actor.actorId },
+      { ...shipmentFields, "shipment.shippedAt": new Date() },
+    );
+
+    if (!updated) {
+      throw new AppError("La orden ya fue actualizada por otra solicitud. Intenta de nuevo.", 409);
+    }
+
+    await recordAuditLog({
+      actorId: actor.actorId,
+      actorType: "user",
+      action: "order.shipped",
+      module: MODULE_NAME,
+      targetId: String(updated._id),
+      after: { orderNumber: updated.orderNumber, carrier: input.carrier, trackingNumber: input.trackingNumber },
+      ip: actor.ip,
+    });
+
+    return toPublicOrder(updated);
+  }
+
+  if (SHIPMENT_CORRECTABLE_STATUSES.includes(order.status)) {
+    const before = order.shipment;
+    const updated = await Order.findOneAndUpdate({ _id: order._id }, { $set: shipmentFields }, { new: true }).exec();
+    if (!updated) {
+      throw new AppError("La orden no existe.", 404);
+    }
+
+    await recordAuditLog({
+      actorId: actor.actorId,
+      actorType: "user",
+      action: "order.shipment_updated",
+      module: MODULE_NAME,
+      targetId: String(updated._id),
+      before,
+      after: { orderNumber: updated.orderNumber, carrier: input.carrier, trackingNumber: input.trackingNumber },
+      ip: actor.ip,
+    });
+
+    return toPublicOrder(updated);
+  }
+
+  throw new AppError(`No se puede capturar la guía de una orden en estatus "${order.status}".`, 409);
+}
+
+/**
+ * Statuses reachable from the bulk endpoint. `shipped` is excluded because it
+ * requires a per-order tracking number (`recordShipment` is the only door to
+ * it); `cancelled` and `refunded` are excluded because they move money and
+ * stock, which is not a batch operation.
+ */
+const BULK_ALLOWED_STATUSES: OrderStatus[] = ["processing", "delivered"];
+
+interface BulkStatusResultItem {
+  id: string;
+  orderNumber: string;
+  outcome: "updated" | "unchanged" | "rejected";
+  message?: string;
+}
+
+interface BulkStatusResult {
+  results: BulkStatusResultItem[];
+  summary: { updated: number; unchanged: number; rejected: number };
+}
+
+/**
+ * Moves many orders to the same status in one request, over `applyTransition`
+ * — never a `$set`/`updateMany`, which would bypass the state machine
+ * entirely. Each order is independent: one order's 409 does not abort the
+ * rest, and the outcome of every order is reported back rather than thrown,
+ * so the caller can render "38 updated, 2 already there, 1 rejected" instead
+ * of an all-or-nothing failure.
+ */
+async function bulkUpdateStatus(
+  orderIds: string[],
+  status: OrderStatus,
+  reason: string | undefined,
+  actor: ActorContext,
+): Promise<BulkStatusResult> {
+  if (!BULK_ALLOWED_STATUSES.includes(status)) {
+    throw new AppError(`El estatus "${status}" no se puede aplicar de forma masiva.`, 400);
+  }
+
+  const results: BulkStatusResultItem[] = [];
+  const summary = { updated: 0, unchanged: 0, rejected: 0 };
+
+  for (const orderId of orderIds) {
+    let order: IOrder;
+    try {
+      order = await findByIdOrFail(orderId);
+    } catch (error) {
+      const message = error instanceof AppError ? error.message : "La orden no existe.";
+      results.push({ id: orderId, orderNumber: "", outcome: "rejected", message });
+      summary.rejected++;
+      continue;
+    }
+
+    try {
+      const updated = await applyTransition(
+        order,
+        status,
+        { actorType: "user", actorId: actor.actorId, ...(reason !== undefined ? { reason } : {}) },
+      );
+
+      if (!updated) {
+        results.push({ id: orderId, orderNumber: order.orderNumber, outcome: "unchanged" });
+        summary.unchanged++;
+        continue;
+      }
+
+      results.push({ id: orderId, orderNumber: updated.orderNumber, outcome: "updated" });
+      summary.updated++;
+
+      // Per order, not one entry for the whole batch — so the audit viewer
+      // (M11) can filter by `targetId` and find exactly this order's history.
+      await recordAuditLog({
+        actorId: actor.actorId,
+        actorType: "user",
+        action: "order.bulk_status_updated",
+        module: MODULE_NAME,
+        targetId: String(updated._id),
+        before: { status: order.status },
+        after: { status, orderNumber: updated.orderNumber, ...(reason !== undefined ? { reason } : {}) },
+        ip: actor.ip,
+      });
+    } catch (error) {
+      const message = error instanceof AppError ? error.message : "No se pudo actualizar esta orden.";
+      results.push({ id: orderId, orderNumber: order.orderNumber, outcome: "rejected", message });
+      summary.rejected++;
+    }
+  }
+
+  return { results, summary };
+}
+
 // --- Reads ----------------------------------------------------------------
 
 async function findByIdOrFail(orderId: string): Promise<IOrder> {
@@ -717,6 +982,9 @@ export const orderService = {
   createFromCart,
   confirmSupplierStock,
   rejectSupplierStock,
+  updateShippingAddress,
+  recordShipment,
+  bulkUpdateStatus,
   getForUser,
   listForUser,
   getForAdmin,
@@ -732,5 +1000,13 @@ export const orderService = {
   applyTransition,
 };
 
-export type { CreateOrderInput, TransitionActor };
-export { alertThreshold, cancelThreshold, reconciliationThreshold, reservationRef, toAdminOrder, toPublicOrder };
+export type { BulkStatusResult, CreateOrderInput, RecordShipmentInput, TransitionActor };
+export {
+  alertThreshold,
+  BULK_ALLOWED_STATUSES,
+  cancelThreshold,
+  reconciliationThreshold,
+  reservationRef,
+  toAdminOrder,
+  toPublicOrder,
+};

@@ -1,3 +1,4 @@
+export * from "./application.validator.js";
 export * from "./auth.validator.js";
 export * from "./cart.validator.js";
 export * from "./category.validator.js";
@@ -7,4 +8,5 @@ export * from "./inventory.validator.js";
 export * from "./list-query.validator.js";
 export * from "./order.validator.js";
 export * from "./product.validator.js";
+export * from "./shipping.validator.js";
 export * from "./spec-group.validator.js";

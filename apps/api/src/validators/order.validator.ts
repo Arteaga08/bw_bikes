@@ -1,7 +1,9 @@
 import type { OrderStatus } from "@bw-bikes/shared";
 import Joi from "joi";
 import { MAX_CANCEL_REASON_LENGTH } from "../models/index.js";
+import { BULK_ALLOWED_STATUSES } from "../services/order.service.js";
 import { ORDER_STATUSES } from "../services/order-state.js";
+import { objectId } from "./common.validator.js";
 import { pagination } from "./list-query.validator.js";
 
 const status = Joi.string()
@@ -49,4 +51,34 @@ export const rejectSupplierStockSchema = Joi.object({
       "string.max": `El motivo no puede exceder ${MAX_CANCEL_REASON_LENGTH} caracteres.`,
       "any.required": "El motivo del rechazo es obligatorio.",
     }),
+});
+
+const MAX_BULK_ORDER_IDS = 50;
+
+/**
+ * `status` is restricted to `BULK_ALLOWED_STATUSES` — the same list
+ * `bulkUpdateStatus` enforces in the service — not the full `ORDER_STATUSES`.
+ * `shipped` needs a tracking number per order (`recordShipmentSchema` is the
+ * only door to it) and `cancelled`/`refunded` move money, neither of which a
+ * batch endpoint should do.
+ */
+export const bulkOrderStatusSchema = Joi.object({
+  orderIds: Joi.array()
+    .items(objectId.messages({ "string.pattern.base": "Uno de los identificadores no es válido." }))
+    .min(1)
+    .max(MAX_BULK_ORDER_IDS)
+    .required()
+    .messages({
+      "array.min": "Selecciona al menos una orden.",
+      "array.max": `No puedes actualizar más de ${MAX_BULK_ORDER_IDS} órdenes a la vez.`,
+      "any.required": "Selecciona al menos una orden.",
+    }),
+  status: Joi.string()
+    .valid(...(BULK_ALLOWED_STATUSES as readonly OrderStatus[]))
+    .required()
+    .messages({
+      "any.only": "Ese estatus no se puede aplicar de forma masiva.",
+      "any.required": "El estatus es obligatorio.",
+    }),
+  reason: Joi.string().trim().max(MAX_CANCEL_REASON_LENGTH).optional(),
 });

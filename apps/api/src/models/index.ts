@@ -1,4 +1,5 @@
 export * from "./accessory.model.js";
+export * from "./application.model.js";
 export * from "./audit-log.model.js";
 export * from "./bike.model.js";
 export * from "./cart.model.js";
@@ -9,6 +10,8 @@ export * from "./payment-event.model.js";
 export * from "./schemas/order-line.schema.js";
 export * from "./schemas/product-image.schema.js";
 export * from "./schemas/product-variant.schema.js";
+export * from "./schemas/shipment.schema.js";
+export * from "./schemas/shipping-address.schema.js";
 export * from "./schemas/spec-group.schema.js";
 export * from "./session.model.js";
 export * from "./stock-reservation.model.js";

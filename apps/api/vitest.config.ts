@@ -12,6 +12,16 @@ export default defineConfig({
     // fail-fast check passes; buildApp() never calls connectDb() (see M1),
     // so nothing actually dials this address.
     setupFiles: ["./tests/setup.ts"],
+    // Above vitest's 5s default: several suites drive real bcrypt (cost 12,
+    // a deliberate security parameter — see config/auth.ts) through multiple
+    // sequential login attempts, and every test file gets its own
+    // MongoMemoryReplSet. Running the whole suite in parallel (28+ files,
+    // each spinning up a replica set and an HTTP server) contends for CPU
+    // enough that a handful of these occasionally miss a 5s deadline despite
+    // doing nothing wrong — a different test trips it each run, which is the
+    // signature of a scheduling/contention ceiling, not a hung request. Any
+    // genuinely stuck request still fails well before this.
+    testTimeout: 20_000,
     env: {
       NODE_ENV: "test",
       PORT: "4001",
@@ -53,6 +63,12 @@ export default defineConfig({
       PAYMENT_RECONCILIATION_INTERVAL_MS: "50",
       PAYMENT_RECONCILIATION_AFTER_MINUTES: "20",
       TAX_RATE_BPS: "1600",
+      // Round numbers so `subtotal >= threshold` boundary tests stay legible.
+      SHIPPING_ACCESSORY_FLAT_CENTS: "25000",
+      FREE_SHIPPING_THRESHOLD_CENTS: "200000",
+      // Short enough that a cooldown test can backdate `rejectedAt` past it
+      // without inventing an implausible number of days.
+      APPLICATION_COOLDOWN_DAYS: "90",
     },
   },
 });

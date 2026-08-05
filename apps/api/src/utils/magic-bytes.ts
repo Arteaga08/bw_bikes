@@ -12,15 +12,18 @@
 
 export type ImageFormat = "jpeg" | "png" | "webp" | "avif";
 
-interface Signature {
-  format: ImageFormat;
+/** M6 attachments (ambassador/sponsorship applications) additionally accept PDF. */
+export type AttachmentFormat = ImageFormat | "pdf";
+
+interface Signature<TFormat extends string> {
+  format: TFormat;
   /** Byte offset where `bytes` must appear. */
   offset: number;
   /** `null` marks a position whose value is irrelevant (e.g. a length field). */
   bytes: readonly (number | null)[];
 }
 
-const SIGNATURES: readonly Signature[] = [
+const IMAGE_SIGNATURES: readonly Signature<ImageFormat>[] = [
   // SOI marker + the start of the first APPn/DQT segment.
   { format: "jpeg", offset: 0, bytes: [0xff, 0xd8, 0xff] },
   // \x89 P N G \r \n \x1a \n — the full 8-byte PNG signature, including the
@@ -40,7 +43,17 @@ const SIGNATURES: readonly Signature[] = [
   },
 ];
 
-function matches(buffer: Buffer, signature: Signature): boolean {
+// "%PDF-" — the version digit that follows (1.4, 1.7, 2.0...) varies, so it is
+// deliberately not part of the match.
+const PDF_SIGNATURE: Signature<"pdf"> = {
+  format: "pdf",
+  offset: 0,
+  bytes: [0x25, 0x50, 0x44, 0x46, 0x2d],
+};
+
+const ATTACHMENT_SIGNATURES: readonly Signature<AttachmentFormat>[] = [...IMAGE_SIGNATURES, PDF_SIGNATURE];
+
+function matches<TFormat extends string>(buffer: Buffer, signature: Signature<TFormat>): boolean {
   const end = signature.offset + signature.bytes.length;
   if (buffer.length < end) return false;
 
@@ -53,8 +66,16 @@ function matches(buffer: Buffer, signature: Signature): boolean {
  * back to the declared mimetype when this returns nothing.
  */
 export function detectImageFormat(buffer: Buffer): ImageFormat | null {
-  return SIGNATURES.find((signature) => matches(buffer, signature))?.format ?? null;
+  return IMAGE_SIGNATURES.find((signature) => matches(buffer, signature))?.format ?? null;
+}
+
+/** Same idea as `detectImageFormat`, plus PDF — for the application attachment routes (M6). */
+export function detectAttachmentFormat(buffer: Buffer): AttachmentFormat | null {
+  return ATTACHMENT_SIGNATURES.find((signature) => matches(buffer, signature))?.format ?? null;
 }
 
 /** Formats the gallery endpoints accept, for building user-facing messages. */
 export const ACCEPTED_IMAGE_FORMATS: readonly ImageFormat[] = ["jpeg", "png", "webp", "avif"];
+
+/** Formats the application attachment endpoints accept. */
+export const ACCEPTED_ATTACHMENT_FORMATS: readonly AttachmentFormat[] = [...ACCEPTED_IMAGE_FORMATS, "pdf"];

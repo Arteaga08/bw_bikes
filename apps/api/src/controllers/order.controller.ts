@@ -1,4 +1,6 @@
+import type { OrderStatus, ShippingAddress } from "@bw-bikes/shared";
 import type { Request, Response } from "express";
+import type { RecordShipmentInput } from "../services/order.service.js";
 import { orderService } from "../services/order.service.js";
 import { asyncHandler, routeParam, sendResponse } from "../utils/index.js";
 import { requireUserId } from "./cart.controller.js";
@@ -67,4 +69,28 @@ export const rejectSupplierStock = asyncHandler(async (req: Request, res: Respon
     requireActor(req),
   );
   sendResponse(res, 200, "Autorización cancelada y unidades liberadas.", { order });
+});
+
+export const updateOrderShippingAddress = asyncHandler(async (req: Request, res: Response) => {
+  const order = await orderService.updateShippingAddress(
+    routeParam(req, "id"),
+    req.body as ShippingAddress,
+    requireActor(req),
+  );
+  sendResponse(res, 200, "Dirección de envío actualizada.", { order });
+});
+
+export const recordOrderShipment = asyncHandler(async (req: Request, res: Response) => {
+  const order = await orderService.recordShipment(
+    routeParam(req, "id"),
+    req.body as RecordShipmentInput,
+    requireActor(req),
+  );
+  sendResponse(res, 200, "Paquetería capturada.", { order });
+});
+
+export const bulkUpdateOrderStatus = asyncHandler(async (req: Request, res: Response) => {
+  const { orderIds, status, reason } = req.body as { orderIds: string[]; status: OrderStatus; reason?: string };
+  const result = await orderService.bulkUpdateStatus(orderIds, status, reason, requireActor(req));
+  sendResponse(res, 200, "Actualización masiva procesada.", result);
 });
