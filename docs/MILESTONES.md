@@ -12,7 +12,7 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M4 — Inventario y reservas | 1 | ✅ Hecho | `feat/m04-inventario` (mergeado) | Ver detalle abajo |
 | M5 — Carrito, órdenes y pagos | 1 | ✅ Hecho (pendiente de merge) | `feat/m05-ordenes-pagos` | Módulo crítico. Ver detalle abajo |
 | M6 — Envíos, estatus y solicitudes | 1 | ✅ Hecho (pendiente de merge) | `feat/m06-envios-solicitudes` | Cierra la decisión abierta #1. Ver detalle abajo |
-| M7 — Settings, analítica y adapters | 1 | ✅ Hecho (pendiente de merge) | `feat/m07-settings-analitica` | Cierra la fase 1. Ver detalle abajo |
+| M7 — Settings, analítica y adapters | 1 | ✅ Hecho (mergeado) | `feat/m07-settings-analitica` | Cierra la fase 1. Ver detalle abajo |
 | M8 — Shell del dashboard | 2 | ⏳ Pendiente | — | |
 | M9 — Órdenes y cola de confirmación | 2 | ⏳ Pendiente | — | |
 | M10 — Catálogo en admin | 2 | ⏳ Pendiente | — | |
