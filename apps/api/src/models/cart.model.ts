@@ -1,6 +1,7 @@
-import type { ItemType } from "@bw-bikes/shared";
+import type { ItemType, ShippingAddress } from "@bw-bikes/shared";
 import { type Document, model, Schema, type Types } from "mongoose";
 import { MAX_SKU_LENGTH } from "./schemas/product-variant.schema.js";
+import { shippingAddressSchema } from "./schemas/shipping-address.schema.js";
 import { MAX_RESERVATION_QTY } from "./stock-reservation.model.js";
 
 /** A cart with more distinct lines than this is a bug or an attack, not shopping. */
@@ -24,6 +25,8 @@ export interface ICartLine {
 export interface ICart extends Document {
   userId: Types.ObjectId;
   lines: ICartLine[];
+  /** Captured here, ahead of checkout, and copied onto the order at that point. */
+  shippingAddress?: ShippingAddress;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -71,6 +74,10 @@ const cartSchema = new Schema<ICart>(
         message: `Un carrito no puede tener más de ${MAX_CART_LINES} líneas.`,
       },
     },
+    // Optional here, required on the order: checkout refuses with 400 until
+    // the customer has set one, rather than the schema enforcing it on a
+    // document that legitimately starts life without it.
+    shippingAddress: { type: shippingAddressSchema },
   },
   { timestamps: true },
 );

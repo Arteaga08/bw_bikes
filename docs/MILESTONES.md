@@ -11,7 +11,7 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M3 — Catálogo | 1 | ✅ Hecho | `feat/m03-catalogo` (mergeado) | Ver detalle abajo |
 | M4 — Inventario y reservas | 1 | ✅ Hecho | `feat/m04-inventario` (mergeado) | Ver detalle abajo |
 | M5 — Carrito, órdenes y pagos | 1 | ✅ Hecho (pendiente de merge) | `feat/m05-ordenes-pagos` | Módulo crítico. Ver detalle abajo |
-| M6 — Envíos, estatus y solicitudes | 1 | ⏳ Pendiente | — | Depende de decisión abierta #1 (costo de envío) |
+| M6 — Envíos, estatus y solicitudes | 1 | ✅ Hecho (pendiente de merge) | `feat/m06-envios-solicitudes` | Cierra la decisión abierta #1. Ver detalle abajo |
 | M7 — Settings, analítica y adapters | 1 | ⏳ Pendiente | — | |
 | M8 — Shell del dashboard | 2 | ⏳ Pendiente | — | |
 | M9 — Órdenes y cola de confirmación | 2 | ⏳ Pendiente | — | |
@@ -548,3 +548,115 @@ el túnel del CLI):
 existe y vale 0 para que M6 no migre órdenes; migración de los umbrales a `Settings` (M7); correos
 reales al cliente (M15 — hasta entonces la auditoría es el registro durable); la cola de confirmación
 en el panel (M9) y el checkout visual (M13); cupones, MSI y facturación CFDI (decisión abierta #3).
+
+---
+
+## M6 — Envíos, estatus y solicitudes
+
+**Entregado:**
+- **Cierra la decisión abierta #1 (costo de envío).** `shippingService.quote()` (nuevo,
+  `apps/api/src/services/shipping.service.ts`), función pura sobre `lineTotalCents`: subtotal ≥
+  `FREE_SHIPPING_THRESHOLD_CENTS` → gratis, si no `SHIPPING_ACCESSORY_FLAT_CENTS`. Sin excepción
+  explícita para bicis — su propio precio ($80k–$300k MXN) ya rebasa el umbral, así que la regla
+  única basta. No lee catálogo ni categorías: cada línea ya trae `itemType` en su snapshot
+  inmutable. `calculateTotals` (M5) perdió su constante `SHIPPING_CENTS = 0` fija; ahora recibe el
+  monto cotizado como parámetro, tanto en el checkout (`order.service.ts`) como en la vista previa
+  del carrito (`cart.service.ts`).
+- **Dirección de envío**: `packages/shared` suma `ShippingAddress` (formato mexicano, `MEXICAN_STATES`
+  cerrado a 32 estados) y `apps/api/src/models/schemas/shipping-address.schema.ts`. Se captura en el
+  carrito (`PUT /api/v1/cart/shipping-address`), **no en el body del checkout** — `createOrderSchema`
+  sigue siendo `Joi.object({})`, así que la garantía de M5 de "ningún dato del body del checkout llega
+  a la orden" queda intacta. El checkout la copia del carrito como snapshot y responde 400 explícito
+  si falta, antes de apartar stock o llamar a Stripe. `PATCH /api/v1/admin/orders/:id/shipping-address`
+  permite al admin capturarla o corregirla, bloqueado (409) una vez la orden llegó a `shipped`,
+  `delivered` o un estatus terminal.
+- **Paquetería, guía y rastreo**: `ShipmentSummary` en shared + `schemas/shipment.schema.ts`
+  (`carrier`, `carrierName?`, `trackingNumber`, `trackingUrl`, `shippedAt`). `PATCH
+  /api/v1/admin/orders/:id/shipment` con dos comportamientos según el estatus actual: sobre
+  `processing`, captura la guía **y** dispara `processing → shipped` en la misma llamada a
+  `applyTransition` (una sola entrada de historial); sobre `shipped`/`delivered`, corrige la guía sin
+  tocar el estatus. `shippingService.buildTrackingUrl` arma la URL de rastreo a partir de la guía
+  para las paqueterías conocidas; `"otro"` exige `carrierName` y `trackingUrl` explícitos.
+- **Actualización masiva de estatus**: `PATCH /api/v1/admin/orders/bulk-status` (`orderIds[]`, 1–50,
+  `status` restringido a `processing`/`delivered`, `reason?`). Itera sobre `applyTransition` —
+  nunca un `updateMany` — y reporta el resultado por orden (`updated`/`unchanged`/`rejected`) sin
+  abortar el lote ante un 409 individual. Una entrada de auditoría por orden actualizada, no una del
+  lote.
+- **Historial de eventos con timestamp**: ya existía (`Order.statusHistory[]`, M5). Lo único nuevo es
+  exponer `actorId` en el DTO de admin (`AdminOrderStatusHistoryEntry`) para que el panel diga *quién*
+  movió la orden; el DTO público lo sigue omitiendo.
+- **Solicitudes de embajador y patrocinio**: una sola colección `Application` (`apps/api/src/models/application.model.ts`)
+  discriminada por `type`, con sub-documentos opcionales `ambassador`/`sponsorship` y un validador de
+  esquema que exige exactamente el que corresponde al tipo. Máquina de estados propia
+  (`services/application-state.ts`, `pending → approved | rejected`, ambos terminales). Rechazo con
+  motivo obligatorio; cooldown de reaplicación (`APPLICATION_COOLDOWN_DAYS`, default 90) contado desde
+  el rechazo, cerrado ante condiciones de carrera por un **índice único parcial**
+  `{ userId, type }` con `partialFilterExpression: { status: "pending" }` — el mismo razonamiento que
+  el dedupe de webhooks de M5. Rutas `POST /api/v1/applications/{ambassador,sponsorship}` (solo con
+  cuenta, `applicationRateLimiter` 10/15min), `GET /api/v1/applications/mine`, y la bandeja admin
+  (`GET /admin/applications`, `GET /admin/applications/:id`, `POST .../approve`, `POST .../reject`).
+- **Adjuntos imagen + PDF**: se extiende la cadena de M3 sin tocarla — `utils/magic-bytes.ts` suma la
+  firma `%PDF-1.x` (`detectAttachmentFormat`); `middlewares/upload-attachments.ts` nuevo (campo
+  `attachments`, 10 MB, hasta 5 archivos); `services/storage/attachment-pipeline.ts` nuevo
+  (`prepareAttachment`): imagen pasa por el mismo strip de EXIF que la galería
+  (`normalizeImageBuffer`, extraído de `image-pipeline.ts` para reuso), PDF se sube tal cual. El
+  rechazo sigue siendo por **contradicción** entre extensión, `Content-Type` y bytes reales, nunca
+  solo por firma. `storage.service.ts` sube los adjuntos con `resource_type` `raw` (PDF) o `image`, y
+  con **entrega privada** (`type: "authenticated"` de Cloudinary) — una solicitud de embajador trae
+  fotos de una persona y una de patrocinio documentos de un tercero, así que la URL nunca es pública
+  ni adivinable desde el `publicId`. `buildSignedAttachmentUrl` genera la URL firmada al leer el DTO.
+  Nota de alcance: es una URL firmada, no todavía de vida corta — expirar de verdad requiere una
+  llave `auth_token` en la cuenta de Cloudinary, pendiente como mejora futura si se quiere esa
+  garantía adicional.
+- **Sanitización explícita en rutas multipart**: `sanitizeMultipartBody` (ya existía desde M3) se hizo
+  **recursivo** (antes solo escapaba claves de primer nivel) — corrección, no feature nueva. Se agregó
+  `readOptionalUploadedFiles` para los formularios cuyos adjuntos son opcionales (a diferencia de la
+  galería del catálogo, que exige al menos una imagen).
+- Variables de entorno nuevas, con default explícito y nota de migración a `Settings` (M7):
+  `SHIPPING_ACCESSORY_FLAT_CENTS` (25000 = $250 MXN), `FREE_SHIPPING_THRESHOLD_CENTS` (200000 =
+  $2,000 MXN), `APPLICATION_COOLDOWN_DAYS` (90).
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm typecheck   (incluye tests)       → limpio (shared + api)
+pnpm lint                              → limpio
+pnpm build                             → limpio
+pnpm test                              → 28 archivos, 308/308 tests pasan (Mongo real en memoria,
+                                          replica set de un nodo)
+pnpm audit --prod                      → sin vulnerabilidades conocidas
+node dist/server.js + SIGTERM          → arranca los tres jobs de M4/M5 (M6 no agrega jobs propios),
+                                          los detiene y sale con código 0
+```
+
+Los cuatro criterios de cierre, con su prueba (`order-fulfillment.test.ts`, 22; `applications.test.ts`, 24):
+1. **Transición de estatus inválida rechazada** — `PATCH /shipment` sobre una orden en `paid` → 409;
+   `bulk-status` a `delivered` sobre una orden en `processing` → `outcome: "rejected"` sin afectar a
+   las demás del lote; `bulk-status` con `status: "shipped"` → 400 en el validador.
+2. **Solicitud rechazada sin motivo → 400** — `reason` vacío y `reason: "   "`, ambos 400; con motivo
+   válido → 200 y `rejectionReason`/`rejectedAt` persistidos.
+3. **Reenvío dentro del cooldown rechazado** — reenvío inmediato tras un rechazo → 409; con
+   `rejectedAt` retrodatado más allá del cooldown → 201. Caso concurrente: dos envíos simultáneos del
+   mismo tipo → exactamente un 201 y un 409, cerrado por el índice único parcial.
+4. **XSS en campo de texto multipart queda escapado** — payload `<script>` en `motivation`, verificado
+   **contra la DB**, no solo en la respuesta.
+
+**Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
+- **La regla de envío es una sola condición, sin caso especial para bicis.** Nombrar "bicis gratis"
+  como regla aparte habría sido redundante: toda bici por sí sola ya rebasa el umbral de $2,000.
+- **La dirección se captura en el carrito, no en el body del checkout**, precisamente para no romper
+  la garantía estructural de M5 (`createOrderSchema` vacío). Es además el flujo real que va a usar
+  M13 (paso de dirección, luego paso de pago).
+- **Una sola colección `Application`, no dos.** Embajador y patrocinio comparten el 100% del flujo de
+  aprobación (estados, cooldown, adjuntos, bandeja); separarlas habría duplicado esa máquina de
+  estados para ganar nada.
+- **`bulk-status` excluye `shipped`, `cancelled` y `refunded` a propósito.** `shipped` exige guía por
+  orden (solo alcanzable por `recordShipment`); los otros dos mueven dinero y stock, que no es una
+  operación de lote.
+- **Entrega privada para los adjuntos de solicitudes**, a diferencia de la galería pública del
+  catálogo — es el único punto del milestone donde se subió el nivel de exigencia por encima del
+  enunciado literal, dado que estos archivos identifican a una persona o a un tercero.
+
+**Fuera de este milestone:** migración de los tres umbrales nuevos a `Settings` (M7); bandeja de
+solicitudes en el panel visual (M11); URLs de adjuntos con expiración real vía `auth_token` de
+Cloudinary (mejora futura, no pedida); checkout visual con paso de dirección (M13).

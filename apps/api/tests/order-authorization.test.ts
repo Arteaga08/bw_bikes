@@ -10,6 +10,7 @@ import { AuditLog, InventoryItem, Order, StockReservation } from "../src/models/
 import { orderMaintenanceService } from "../src/services/order-maintenance.service.js";
 import { createAdminSession, createCustomerSession } from "./helpers/admin-session.js";
 import { createInventoryItemDoc, seedAccessoryWithVariant, seedBikeWithVariant } from "./helpers/factories.js";
+import { setShippingAddress } from "./helpers/shipping.js";
 import { paymentIntentObject, signStripeEvent, stubStripe } from "./helpers/stripe.js";
 
 const CART = "/api/v1/cart";
@@ -31,6 +32,7 @@ describe("supplier confirmation and the authorization clock", () => {
   beforeEach(async () => {
     app = buildApp();
     cookie = await createCustomerSession(app, "order-buyer@example.com");
+    await setShippingAddress(app, cookie);
     adminCookie = await createAdminSession(app);
     stripe = stubStripe();
     onRequest = await seedBikeWithVariant({

@@ -4,10 +4,16 @@ import {
   clearCart,
   getCart,
   removeCartLine,
+  setCartShippingAddress,
   updateCartLine,
 } from "../controllers/cart.controller.js";
 import { protect, validate } from "../middlewares/index.js";
-import { addCartLineSchema, cartLineParamSchema, updateCartLineSchema } from "../validators/index.js";
+import {
+  addCartLineSchema,
+  cartLineParamSchema,
+  shippingAddressSchema,
+  updateCartLineSchema,
+} from "../validators/index.js";
 
 /**
  * The authenticated customer's cart.
@@ -26,6 +32,8 @@ router.use(protect);
 
 router.get("/", getCart);
 router.delete("/", clearCart);
+
+router.put("/shipping-address", validate(shippingAddressSchema), setCartShippingAddress);
 
 router.post("/lines", validate(addCartLineSchema), addCartLine);
 

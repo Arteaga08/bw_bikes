@@ -2,7 +2,9 @@ import type { UploadApiResponse } from "cloudinary";
 import { CLOUDINARY_ROOT_FOLDER, cloudinary } from "../../config/cloudinary.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
+import type { AttachmentFormat } from "../../utils/index.js";
 import { AppError } from "../../utils/index.js";
+import { prepareAttachment } from "./attachment-pipeline.js";
 import { prepareImage } from "./image-pipeline.js";
 
 export interface UploadedImage {
@@ -110,4 +112,103 @@ export async function deleteImage(publicId: string): Promise<void> {
   } catch (error) {
     logger.error({ err: error, publicId }, "Cloudinary delete failed; asset may be orphaned");
   }
+}
+
+// --- Application attachments (M6) ------------------------------------------
+//
+// A separate upload path from the catalog gallery: an ambassador or event
+// sponsorship attachment may be a PDF, and — unlike a product photo, which is
+// meant to be public — it belongs to a real person or a third party's event
+// proposal, so it is stored under Cloudinary's `authenticated` delivery type
+// rather than the gallery's plain public one.
+
+export interface UploadedAttachment {
+  publicId: string;
+  format: AttachmentFormat;
+}
+
+export interface UploadableAttachment {
+  buffer: Buffer;
+  originalname: string;
+  mimetype?: string;
+}
+
+function assertAttachmentsConfigured(): void {
+  if (!env.isCloudinaryConfigured) {
+    throw new AppError("Los adjuntos no están disponibles: falta configurar Cloudinary en este entorno.", 503);
+  }
+}
+
+/** PDFs are not images, so Cloudinary has to be told to treat them as a raw asset. */
+function resourceTypeFor(format: AttachmentFormat): "image" | "raw" {
+  return format === "pdf" ? "raw" : "image";
+}
+
+function uploadAttachmentBuffer(buffer: Buffer, folder: string, format: AttachmentFormat): Promise<UploadApiResponse> {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        resource_type: resourceTypeFor(format),
+        // Private delivery: see `buildSignedAttachmentUrl` for what this buys.
+        type: "authenticated",
+        overwrite: false,
+        unique_filename: true,
+      },
+      (error, result) => {
+        if (error || !result) {
+          reject(error ?? new Error("Cloudinary returned no result"));
+          return;
+        }
+        resolve(result);
+      },
+    );
+
+    stream.end(buffer);
+  });
+}
+
+/** Same two-pass shape as `uploadImages`: validate every file before uploading any of them. */
+export async function uploadAttachments(files: UploadableAttachment[], folder: string): Promise<UploadedAttachment[]> {
+  assertAttachmentsConfigured();
+
+  const prepared = await Promise.all(
+    files.map((file) => prepareAttachment(file.buffer, file.originalname, file.mimetype)),
+  );
+
+  const destination = `${CLOUDINARY_ROOT_FOLDER}/${folder}`;
+
+  try {
+    const results = await Promise.all(
+      prepared.map((file) => uploadAttachmentBuffer(file.buffer, destination, file.format)),
+    );
+
+    return results.map((result, index) => ({ publicId: result.public_id, format: prepared[index]!.format }));
+  } catch (error) {
+    logger.error({ err: error, folder: destination }, "Cloudinary attachment upload failed");
+    throw new AppError("No se pudo subir el archivo. Intenta de nuevo.", 502);
+  }
+}
+
+/**
+ * A signed URL for a privately-stored attachment. `type: "authenticated"` at
+ * upload time means the plain public URL a gallery image would have simply
+ * refuses the request; only a request carrying this signature resolves.
+ *
+ * This is a signed link, not yet a **time-limited** one — a hard expiry needs
+ * an `auth_token` signing key configured on the Cloudinary account, which is
+ * a follow-up if that stronger guarantee is wanted. What this already
+ * guarantees: the URL cannot be guessed or enumerated from the stored
+ * `publicId` alone, which is the property that matters for a document that
+ * names a real person or a third party's event.
+ */
+export function buildSignedAttachmentUrl(publicId: string, format: AttachmentFormat): string {
+  assertAttachmentsConfigured();
+
+  return cloudinary.url(publicId, {
+    resource_type: resourceTypeFor(format),
+    type: "authenticated",
+    sign_url: true,
+    secure: true,
+  });
 }

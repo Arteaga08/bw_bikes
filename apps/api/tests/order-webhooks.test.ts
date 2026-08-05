@@ -9,6 +9,7 @@ import {
   seedAccessoryWithVariant,
   seedBikeWithVariant,
 } from "./helpers/factories.js";
+import { setShippingAddress } from "./helpers/shipping.js";
 import { chargeObject, paymentIntentObject, signStripeEvent, stubStripe } from "./helpers/stripe.js";
 
 const CART = "/api/v1/cart";
@@ -31,6 +32,7 @@ describe("payment webhook", () => {
   beforeEach(async () => {
     app = buildApp();
     cookie = await createCustomerSession(app, "webhook-buyer@example.com");
+    await setShippingAddress(app, cookie);
     stripe = stubStripe();
     bike = await seedBikeWithVariant({ sku: "BK-WH-M", price: 19_999_900 });
     await createInventoryItemDoc({ itemId: new Types.ObjectId(bike.itemId), sku: bike.sku, onHand: 5 });

@@ -12,17 +12,35 @@ import { AppError } from "../utils/index.js";
  * `middlewares/sanitize-input.ts`.
  */
 
-/** XSS-escapes every string field multer parsed. Called after `validate`, before the service. */
-export function sanitizeMultipartBody(req: Request): void {
-  const body = req.body as Record<string, unknown> | undefined;
-  if (!body || typeof body !== "object") return;
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-  for (const key of Object.keys(body)) {
-    const value = body[key];
+function sanitizeInPlace(target: unknown): void {
+  if (Array.isArray(target)) {
+    for (const item of target) sanitizeInPlace(item);
+    return;
+  }
+  if (!isPlainObject(target)) return;
+
+  for (const key of Object.keys(target)) {
+    const value = target[key];
     if (typeof value === "string") {
-      body[key] = filterXSS(value);
+      target[key] = filterXSS(value);
+    } else {
+      sanitizeInPlace(value);
     }
   }
+}
+
+/**
+ * XSS-escapes every string field multer parsed, recursing into nested
+ * objects and arrays (a `socialLinks[0]` or a details sub-object, e.g. M6's
+ * application forms) — not just the top-level keys. Called after `validate`,
+ * before the service.
+ */
+export function sanitizeMultipartBody(req: Request): void {
+  sanitizeInPlace(req.body);
 }
 
 export interface UploadedFile {
@@ -31,13 +49,9 @@ export interface UploadedFile {
   mimetype: string;
 }
 
-/** Narrows multer's `req.files` and rejects a request that carried no file at all. */
-export function readUploadedFiles(req: Request): UploadedFile[] {
+function narrowFiles(req: Request): UploadedFile[] {
   const files = req.files;
-
-  if (!Array.isArray(files) || files.length === 0) {
-    throw new AppError("Envía al menos una imagen.", 400);
-  }
+  if (!Array.isArray(files)) return [];
 
   // `mimetype` is forwarded only so the pipeline can catch it *contradicting*
   // the real bytes — it is never trusted as evidence of the format.
@@ -46,4 +60,22 @@ export function readUploadedFiles(req: Request): UploadedFile[] {
     originalname: file.originalname,
     mimetype: file.mimetype,
   }));
+}
+
+/** Narrows multer's `req.files` and rejects a request that carried no file at all. */
+export function readUploadedFiles(req: Request): UploadedFile[] {
+  const files = narrowFiles(req);
+  if (files.length === 0) {
+    throw new AppError("Envía al menos una imagen.", 400);
+  }
+  return files;
+}
+
+/**
+ * Same narrowing, without the "at least one" requirement — the application
+ * forms' attachments are optional (a text-only sponsorship pitch is a valid
+ * submission).
+ */
+export function readOptionalUploadedFiles(req: Request): UploadedFile[] {
+  return narrowFiles(req);
 }

@@ -1,4 +1,4 @@
-import type { CartLineInput, ItemType, PublicCart, PublicCartLine } from "@bw-bikes/shared";
+import type { CartLineInput, ItemType, PublicCart, PublicCartLine, ShippingAddress } from "@bw-bikes/shared";
 import { CURRENCY } from "@bw-bikes/shared";
 import { Types } from "mongoose";
 import type { ICart, ICartLine } from "../models/index.js";
@@ -6,6 +6,7 @@ import { Cart, MAX_CART_LINES } from "../models/index.js";
 import { AppError } from "../utils/index.js";
 import { inventoryService } from "./inventory.service.js";
 import { calculateTotals, resolveCaptureMethod, resolveCartLines } from "./order-pricing.js";
+import { shippingService } from "./shipping.service.js";
 
 /**
  * The customer's shopping list.
@@ -123,25 +124,30 @@ async function toPublicCart(cart: ICart): Promise<PublicCart> {
   // what checkout would actually charge if the customer removed the blocked
   // ones — not a total they can never pay.
   const purchasable = lines.filter((line) => line.isPurchasable);
-  const totals = calculateTotals(
-    purchasable.map((line) => ({
-      itemType: line.itemType,
-      itemId: line.itemId,
-      sku: line.sku,
-      name: line.name,
-      brand: line.brand,
-      fulfillmentMode: line.fulfillmentMode,
-      unitPriceCents: line.unitPriceCents,
-      qty: line.qty,
-      lineTotalCents: line.lineTotalCents,
-    })),
-  );
+  const purchasableSnapshots = purchasable.map((line) => ({
+    itemType: line.itemType,
+    itemId: line.itemId,
+    sku: line.sku,
+    name: line.name,
+    brand: line.brand,
+    fulfillmentMode: line.fulfillmentMode,
+    unitPriceCents: line.unitPriceCents,
+    qty: line.qty,
+    lineTotalCents: line.lineTotalCents,
+  }));
+
+  // Same quote checkout will apply, so the cart can preview "Envío: Gratis"
+  // or a monto before the customer ever commits to paying.
+  const shippingQuote = shippingService.quote(purchasableSnapshots);
+  const totals = calculateTotals(purchasableSnapshots, shippingQuote.shippingCents);
 
   return {
     id: String(cart._id),
     lines,
+    ...(cart.shippingAddress ? { shippingAddress: cart.shippingAddress } : {}),
     subtotalCents: totals.subtotalCents,
     taxCents: totals.taxCents,
+    shippingCents: totals.shippingCents,
     totalCents: totals.totalCents,
     currency: CURRENCY,
     captureMethod: resolveCaptureMethod(purchasable),
@@ -241,6 +247,24 @@ async function clearCart(userId: string): Promise<PublicCart> {
 }
 
 /**
+ * Where checkout will ship. Captured here, ahead of payment, so
+ * `createOrderSchema` can stay empty — the order copies this as a snapshot
+ * instead of accepting an address in the checkout body.
+ */
+async function setShippingAddress(userId: string, address: ShippingAddress): Promise<PublicCart> {
+  const cart = await findOrCreate(userId);
+  cart.shippingAddress = address;
+  await cart.save();
+  return toPublicCart(cart);
+}
+
+/** The raw address for the checkout to copy onto the order. `undefined` if never set. */
+async function getShippingAddress(userId: string): Promise<ShippingAddress | undefined> {
+  const cart = await Cart.findOne({ userId }).exec();
+  return cart?.shippingAddress;
+}
+
+/**
  * The raw lines, for the checkout to price and freeze. Returns the stored
  * shape rather than the rendered one on purpose: the order must re-resolve
  * everything itself at the moment of purchase, not inherit a view that was
@@ -262,6 +286,8 @@ export const cartService = {
   updateLine,
   removeLine,
   clearCart,
+  setShippingAddress,
+  getShippingAddress,
   getCheckoutLines,
   emptyAfterCheckout,
 };

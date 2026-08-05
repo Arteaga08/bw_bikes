@@ -1,5 +1,6 @@
 import type { CURRENCY, FulfillmentMode, ItemType, PriceCents } from "./catalog.js";
 import type { CaptureMethod } from "./order.js";
+import type { ShippingAddress } from "./shipping.js";
 
 /** What the client sends to put something in the cart. Quantity is bounded server-side. */
 export interface CartLineInput {
@@ -55,12 +56,20 @@ export interface PublicCartLine {
  * `captureMethod` is a preview of what checkout will do, so the storefront can
  * warn up front that a purchase containing a made-to-order bike is authorized
  * now and charged only once the shop confirms with the supplier.
+ *
+ * `shippingAddress` is captured here, before checkout, and copied onto the
+ * order as a snapshot when it is placed — checkout itself takes no body, so
+ * this is the only place the customer supplies it. `shippingCents` previews
+ * `shippingService`'s quote (see `order-pricing.ts` / M6) so the storefront
+ * can show "Envío: Gratis" or a monto before the customer commits to paying.
  */
 export interface PublicCart {
   id: string;
   lines: PublicCartLine[];
+  shippingAddress?: ShippingAddress;
   subtotalCents: PriceCents;
   taxCents: PriceCents;
+  shippingCents: PriceCents;
   totalCents: PriceCents;
   currency: typeof CURRENCY;
   captureMethod: CaptureMethod;

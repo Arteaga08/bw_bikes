@@ -9,6 +9,7 @@ import {
   seedAccessoryWithVariant,
   seedBikeWithVariant,
 } from "./helpers/factories.js";
+import { setShippingAddress } from "./helpers/shipping.js";
 import { stubStripe } from "./helpers/stripe.js";
 
 const CART = "/api/v1/cart";
@@ -33,6 +34,7 @@ describe("checkout", () => {
   beforeEach(async () => {
     app = buildApp();
     cookie = await createCustomerSession(app, "buyer@example.com");
+    await setShippingAddress(app, cookie);
     bike = await seedBikeWithVariant({ sku: "BK-CO-M", price: 19_999_900 });
     await createInventoryItemDoc({ itemId: new Types.ObjectId(bike.itemId), sku: bike.sku, onHand: 3 });
   });
@@ -189,6 +191,7 @@ describe("checkout", () => {
     it("lets two different customers use the same key without colliding", async () => {
       stubStripe();
       const other = await createCustomerSession(app, "buyer2@example.com");
+      await setShippingAddress(app, other);
 
       await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
       await addToCart(app, other, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
@@ -233,6 +236,7 @@ describe("checkout", () => {
       await InventoryItem.updateOne({ sku: bike.sku }, { $set: { onHand: 1 } }).exec();
 
       const other = await createCustomerSession(app, "rival@example.com");
+      await setShippingAddress(app, other);
       await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
       await addToCart(app, other, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
 

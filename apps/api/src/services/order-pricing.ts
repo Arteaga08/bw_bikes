@@ -30,9 +30,6 @@ import { AppError } from "../utils/index.js";
  * *for how much*. Everything else is re-read from the catalog at this moment.
  */
 
-/** Shipping is a flat zero until M6 closes the shipping-cost decision. */
-const SHIPPING_CENTS = 0;
-
 /** Products with no image: the snapshot simply carries none, never a broken reference. */
 const NO_IMAGE = undefined;
 
@@ -211,8 +208,14 @@ function resolveCaptureMethod(lines: { fulfillmentMode: FulfillmentMode }[]): Ca
  * (`total × bps / (10000 + bps)`) rather than added to it. Charging
  * `subtotal + 16%` here would silently bill every customer 16% above the price
  * they saw on the product page.
+ *
+ * `shippingCents` is supplied by the caller — `shippingService.quote()` for
+ * an order or a cart preview — never decided here. This function only knows
+ * how to fold a shipping amount into the totals, not what that amount should
+ * be; the default of 0 is for callers with nothing to ship (there are none in
+ * production, but it keeps this a pure function callable in isolation).
  */
-function calculateTotals(lines: OrderLineSnapshot[], shippingCents: number = SHIPPING_CENTS): OrderTotals {
+function calculateTotals(lines: OrderLineSnapshot[], shippingCents = 0): OrderTotals {
   let subtotalCents = 0;
 
   for (const line of lines) {
@@ -232,4 +235,4 @@ function calculateTotals(lines: OrderLineSnapshot[], shippingCents: number = SHI
 }
 
 export type { LineResolution, ResolvedLine };
-export { SHIPPING_CENTS, buildLineSnapshots, calculateTotals, resolveCaptureMethod, resolveCartLines };
+export { buildLineSnapshots, calculateTotals, resolveCaptureMethod, resolveCartLines };

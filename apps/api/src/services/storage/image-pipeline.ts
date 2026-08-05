@@ -61,6 +61,25 @@ function assertDeclaredTypeMatches(real: ImageFormat, originalName: string, mime
 }
 
 /**
+ * The EXIF-strip + dimension-cap step, split out from `prepareImage` so
+ * `attachment-pipeline.ts` (M6) can reuse it for the image branch of an
+ * application attachment without redoing signature detection — by the time
+ * either caller reaches this, the format is already known good.
+ */
+export async function normalizeImageBuffer(buffer: Buffer, originalName: string): Promise<Buffer> {
+  try {
+    return await sharp(buffer)
+      .rotate()
+      .resize({ width: MAX_STORED_EDGE, height: MAX_STORED_EDGE, fit: "inside", withoutEnlargement: true })
+      .toBuffer();
+  } catch {
+    // Header said "PNG" but the body doesn't decode — a truncated upload or a
+    // file with a grafted-on signature. Same 400 either way.
+    throw new AppError(`El archivo "${originalName}" está dañado o no se pudo procesar.`, 400);
+  }
+}
+
+/**
  * Validates and normalizes an uploaded buffer before anything is sent to
  * Cloudinary. Three steps, in this order:
  *
@@ -97,16 +116,6 @@ export async function prepareImage(
 
   assertDeclaredTypeMatches(format, originalName, mimetype);
 
-  try {
-    const normalized = await sharp(buffer)
-      .rotate()
-      .resize({ width: MAX_STORED_EDGE, height: MAX_STORED_EDGE, fit: "inside", withoutEnlargement: true })
-      .toBuffer();
-
-    return { buffer: normalized, format };
-  } catch {
-    // Header said "PNG" but the body doesn't decode — a truncated upload or a
-    // file with a grafted-on signature. Same 400 either way.
-    throw new AppError(`El archivo "${originalName}" está dañado o no se pudo procesar.`, 400);
-  }
+  const normalized = await normalizeImageBuffer(buffer, originalName);
+  return { buffer: normalized, format };
 }

@@ -1,4 +1,4 @@
-import type { CartLineInput, ItemType } from "@bw-bikes/shared";
+import type { CartLineInput, ItemType, ShippingAddress } from "@bw-bikes/shared";
 import type { Request, Response } from "express";
 import { cartService } from "../services/cart.service.js";
 import { AppError, asyncHandler, routeParam, sendResponse } from "../utils/index.js";
@@ -48,6 +48,11 @@ export const removeCartLine = asyncHandler(async (req: Request, res: Response) =
 export const clearCart = asyncHandler(async (req: Request, res: Response) => {
   const cart = await cartService.clearCart(requireUserId(req));
   sendResponse(res, 200, "Carrito vaciado.", { cart });
+});
+
+export const setCartShippingAddress = asyncHandler(async (req: Request, res: Response) => {
+  const cart = await cartService.setShippingAddress(requireUserId(req), req.body as ShippingAddress);
+  sendResponse(res, 200, "Dirección de envío guardada.", { cart });
 });
 
 export { requireUserId };

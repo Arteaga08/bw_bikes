@@ -5,10 +5,13 @@ import type {
   OrderStatus,
   PaymentProviderName,
   PaymentState,
+  ShippingAddress,
 } from "@bw-bikes/shared";
 import { type Document, model, Schema, type Types } from "mongoose";
 import { MAX_PRICE_CENTS } from "./schemas/product-variant.schema.js";
 import { MAX_ORDER_LINES, orderLineSchema } from "./schemas/order-line.schema.js";
+import { type IOrderShipment, shipmentSchema } from "./schemas/shipment.schema.js";
+import { shippingAddressSchema } from "./schemas/shipping-address.schema.js";
 
 export const MAX_CANCEL_REASON_LENGTH = 300;
 
@@ -49,6 +52,9 @@ export interface IOrder extends Document {
   totalCents: number;
   currency: typeof CURRENCY;
   payment: IOrderPayment;
+  shippingAddress: ShippingAddress;
+  /** Present only once the order has shipped. */
+  shipment?: IOrderShipment;
   idempotencyKey?: string;
   statusHistory: IOrderStatusHistoryEntry[];
   /** Sealed once, when the day-5 warning about the expiring authorization went out. */
@@ -157,6 +163,18 @@ const orderSchema = new Schema<IOrder>(
     currency: { type: String, required: true, default: "MXN" },
 
     payment: { type: paymentSchema, required: true },
+
+    // Copied from the cart at checkout, same snapshot reasoning as `lines`: an
+    // address the customer edits afterward must not silently redirect an order
+    // already placed. Checkout itself takes no body (see `createOrderSchema`),
+    // so this is where that guarantee actually gets enforced — `createFromCart`
+    // reads it off the cart and refuses with 400 if it is missing.
+    shippingAddress: { type: shippingAddressSchema, required: true },
+
+    // Absent until the order ships; captured by `recordShipment` alongside the
+    // `processing → shipped` transition, corrected afterward without touching
+    // `status`.
+    shipment: { type: shipmentSchema },
 
     // Set by the client on the checkout request so a double click or a network
     // retry resolves to the same order instead of two. Unique **per user**

@@ -1,12 +1,22 @@
 import { Router } from "express";
 import {
+  bulkUpdateOrderStatus,
   confirmSupplierStock,
   getOrderForAdmin,
   listOrdersForAdmin,
+  recordOrderShipment,
   rejectSupplierStock,
+  updateOrderShippingAddress,
 } from "../controllers/order.controller.js";
 import { protect, restrictTo, validate } from "../middlewares/index.js";
-import { adminOrderListQuerySchema, idParamSchema, rejectSupplierStockSchema } from "../validators/index.js";
+import {
+  adminOrderListQuerySchema,
+  bulkOrderStatusSchema,
+  idParamSchema,
+  recordShipmentSchema,
+  rejectSupplierStockSchema,
+  shippingAddressSchema,
+} from "../validators/index.js";
 
 /**
  * The supplier-confirmation queue — the operational heart of the made-to-order
@@ -23,6 +33,12 @@ const router = Router();
 router.use(protect, restrictTo("admin", "superadmin"));
 
 router.get("/orders", validate(adminOrderListQuerySchema, "query"), listOrdersForAdmin);
+
+// Registered ahead of `/orders/:id`: a fixed segment must win over the
+// wildcard param, or `PATCH /orders/bulk-status` would be read as an update
+// to the order whose id is literally "bulk-status".
+router.patch("/orders/bulk-status", validate(bulkOrderStatusSchema), bulkUpdateOrderStatus);
+
 router.get("/orders/:id", validate(idParamSchema, "params"), getOrderForAdmin);
 
 router.post(
@@ -36,6 +52,20 @@ router.post(
   validate(idParamSchema, "params"),
   validate(rejectSupplierStockSchema),
   rejectSupplierStock,
+);
+
+router.patch(
+  "/orders/:id/shipping-address",
+  validate(idParamSchema, "params"),
+  validate(shippingAddressSchema),
+  updateOrderShippingAddress,
+);
+
+router.patch(
+  "/orders/:id/shipment",
+  validate(idParamSchema, "params"),
+  validate(recordShipmentSchema),
+  recordOrderShipment,
 );
 
 export { router as adminOrderRouter };
