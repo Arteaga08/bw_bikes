@@ -8,6 +8,7 @@ import {
 } from "../src/jobs/order-authorization.job.js";
 import { AuditLog, InventoryItem, Order, StockReservation } from "../src/models/index.js";
 import { orderMaintenanceService } from "../src/services/order-maintenance.service.js";
+import { settingsService } from "../src/services/settings.service.js";
 import { createAdminSession, createCustomerSession } from "./helpers/admin-session.js";
 import { createInventoryItemDoc, seedAccessoryWithVariant, seedBikeWithVariant } from "./helpers/factories.js";
 import { setShippingAddress } from "./helpers/shipping.js";
@@ -40,6 +41,19 @@ describe("supplier confirmation and the authorization clock", () => {
       fulfillmentMode: "on_request",
       price: 25_000_000,
     });
+
+    // The sweeper now reads its interval from `Settings.jobs` on every tick
+    // (M7) instead of a fixed env var — seed a short one so the real-timer
+    // test below observes a tick within its wait window.
+    await settingsService.updateSection(
+      "jobs",
+      {
+        reservationReaperIntervalMs: 50,
+        orderAuthSweepIntervalMs: 50,
+        paymentReconciliationIntervalMs: 50,
+      },
+      { actorType: "system" },
+    );
   });
 
   afterEach(() => {

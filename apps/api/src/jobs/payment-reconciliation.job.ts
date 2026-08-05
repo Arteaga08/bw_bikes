@@ -1,6 +1,7 @@
-import { env } from "../config/env.js";
+import { DEFAULT_PAYMENT_RECONCILIATION_INTERVAL_MS } from "../config/settings.defaults.js";
 import { logger } from "../config/logger.js";
 import { orderMaintenanceService } from "../services/order-maintenance.service.js";
+import { settingsService } from "../services/settings.service.js";
 
 /**
  * The backstop for webhooks that never arrived.
@@ -16,17 +17,14 @@ import { orderMaintenanceService } from "../services/order-maintenance.service.j
  * functions the webhook would have used. A late webhook then finds the work
  * done and changes nothing.
  *
- * Follows the reservation reaper's shape exactly — see that file for why it is
- * a plain interval and not a scheduler dependency.
+ * Follows the reservation reaper's self-rescheduling shape exactly — see
+ * that file for why it is a `setTimeout` loop reading `Settings` fresh on
+ * every tick, and not a fixed `setInterval` or a scheduler dependency.
  */
 let timer: NodeJS.Timeout | undefined;
+let stopped = true;
 
-let running = false;
-
-async function sweep(): Promise<void> {
-  if (running) return;
-  running = true;
-
+async function tick(): Promise<void> {
   try {
     const reconciled = await orderMaintenanceService.reconcilePendingPayments();
     if (reconciled > 0) {
@@ -35,23 +33,39 @@ async function sweep(): Promise<void> {
   } catch (error) {
     logger.error({ err: error }, "Payment reconciliation sweep failed");
   } finally {
-    running = false;
+    await scheduleNext();
   }
 }
 
-export function startPaymentReconciliation(): void {
-  if (timer) return;
+async function scheduleNext(): Promise<void> {
+  if (stopped) return;
 
-  timer = setInterval(() => void sweep(), env.paymentReconciliationIntervalMs);
+  const intervalMs = await settingsService
+    .get()
+    .then((settings) => settings.jobs.paymentReconciliationIntervalMs)
+    .catch(() => DEFAULT_PAYMENT_RECONCILIATION_INTERVAL_MS);
+
+  if (stopped) return;
+
+  timer = setTimeout(() => void tick(), intervalMs);
   timer.unref();
+}
 
-  logger.info({ intervalMs: env.paymentReconciliationIntervalMs }, "Payment reconciliation started");
+export function startPaymentReconciliation(): void {
+  if (!stopped) return;
+  stopped = false;
+
+  logger.info("Payment reconciliation started");
+  void scheduleNext();
 }
 
 export function stopPaymentReconciliation(): void {
-  if (!timer) return;
+  if (stopped) return;
+  stopped = true;
 
-  clearInterval(timer);
-  timer = undefined;
+  if (timer) {
+    clearTimeout(timer);
+    timer = undefined;
+  }
   logger.info("Payment reconciliation stopped");
 }

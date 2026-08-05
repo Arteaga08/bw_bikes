@@ -1,3 +1,4 @@
+import type { BillingInfo } from "./billing.js";
 import type { CURRENCY, FulfillmentMode, ItemType, PriceCents } from "./catalog.js";
 import type { CaptureMethod } from "./order.js";
 import type { ShippingAddress } from "./shipping.js";
@@ -62,11 +63,16 @@ export interface PublicCartLine {
  * this is the only place the customer supplies it. `shippingCents` previews
  * `shippingService`'s quote (see `order-pricing.ts` / M6) so the storefront
  * can show "Envío: Gratis" or a monto before the customer commits to paying.
+ *
+ * `billingInfo` (M7) follows the exact same pattern for the optional CFDI
+ * data: captured on the cart, copied onto the order at checkout. Unlike the
+ * shipping address, it is never required — an order is valid with none of it.
  */
 export interface PublicCart {
   id: string;
   lines: PublicCartLine[];
   shippingAddress?: ShippingAddress;
+  billingInfo?: BillingInfo;
   subtotalCents: PriceCents;
   taxCents: PriceCents;
   shippingCents: PriceCents;

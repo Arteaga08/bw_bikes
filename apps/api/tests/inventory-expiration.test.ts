@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { startReservationReaper, stopReservationReaper } from "../src/jobs/index.js";
 import { AuditLog, InventoryItem, StockReservation } from "../src/models/index.js";
 import { inventoryService } from "../src/services/inventory.service.js";
+import { settingsService } from "../src/services/settings.service.js";
 import { createInventoryItemDoc } from "./helpers/factories.js";
 
 const BIKE_ID = new Types.ObjectId();
@@ -121,9 +122,22 @@ describe("expired reservations are released on their own", () => {
 });
 
 describe("reservation reaper job", () => {
-  // `RESERVATION_REAPER_INTERVAL_MS` is 50ms under test (see vitest.config.ts),
-  // so this waits on a real tick rather than faking timers — which would also
-  // fake the ones the Mongo driver runs on.
+  // The reaper now reads its interval from `Settings.jobs` on every tick
+  // (M7) instead of a fixed env var — seed a short one so this waits on a
+  // real tick rather than faking timers, which would also fake the ones the
+  // Mongo driver runs on.
+  beforeEach(async () => {
+    await settingsService.updateSection(
+      "jobs",
+      {
+        reservationReaperIntervalMs: 50,
+        orderAuthSweepIntervalMs: 50,
+        paymentReconciliationIntervalMs: 50,
+      },
+      { actorType: "system" },
+    );
+  });
+
   async function waitFor(condition: () => Promise<boolean>, timeoutMs = 2000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {

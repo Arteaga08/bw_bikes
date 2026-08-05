@@ -12,7 +12,7 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M4 — Inventario y reservas | 1 | ✅ Hecho | `feat/m04-inventario` (mergeado) | Ver detalle abajo |
 | M5 — Carrito, órdenes y pagos | 1 | ✅ Hecho (pendiente de merge) | `feat/m05-ordenes-pagos` | Módulo crítico. Ver detalle abajo |
 | M6 — Envíos, estatus y solicitudes | 1 | ✅ Hecho (pendiente de merge) | `feat/m06-envios-solicitudes` | Cierra la decisión abierta #1. Ver detalle abajo |
-| M7 — Settings, analítica y adapters | 1 | ⏳ Pendiente | — | |
+| M7 — Settings, analítica y adapters | 1 | ✅ Hecho (pendiente de merge) | `feat/m07-settings-analitica` | Cierra la fase 1. Ver detalle abajo |
 | M8 — Shell del dashboard | 2 | ⏳ Pendiente | — | |
 | M9 — Órdenes y cola de confirmación | 2 | ⏳ Pendiente | — | |
 | M10 — Catálogo en admin | 2 | ⏳ Pendiente | — | |
@@ -660,3 +660,142 @@ Los cuatro criterios de cierre, con su prueba (`order-fulfillment.test.ts`, 22; 
 **Fuera de este milestone:** migración de los tres umbrales nuevos a `Settings` (M7); bandeja de
 solicitudes en el panel visual (M11); URLs de adjuntos con expiración real vía `auth_token` de
 Cloudinary (mejora futura, no pedida); checkout visual con paso de dirección (M13).
+
+---
+
+## M7 — Settings, analítica y adapters de notificación
+
+**Cierra la fase 1.**
+
+**Entregado:**
+- **`Settings` singleton editable por secciones** (`apps/api/src/models/settings.model.ts`):
+  documento único (`key: "global"`, índice único, creado de forma perezosa en el primer `get()`) con
+  seis secciones — `inventory`, `orders`, `pricing`, `shipping`, `applications`, `jobs` — cada una con
+  su propio endpoint `PUT /api/v1/admin/settings/:seccion` y su propia `AuditAction`
+  (`settings.*_updated`). Nunca un PUT que reemplace el documento entero. `apps/api/src/config/settings.defaults.ts`
+  es la única fuente de los valores por defecto, heredados textualmente de los `DEFAULT_*` que vivían
+  en `config/env.ts`.
+- **Migración real de los trece umbrales acumulados de M4/M5/M6** —
+  `STOCK_RESERVATION_TTL_MINUTES`, `RESERVATION_REAPER_INTERVAL_MS`, `RESERVATION_RETENTION_DAYS`,
+  `ORDER_PAYMENT_TTL_MINUTES`, `ORDER_AUTH_ALERT_HOURS`, `ORDER_AUTH_CANCEL_HOURS`,
+  `ORDER_AUTH_SWEEP_INTERVAL_MS`, `PAYMENT_RECONCILIATION_INTERVAL_MS`,
+  `PAYMENT_RECONCILIATION_AFTER_MINUTES`, `TAX_RATE_BPS`, `SHIPPING_ACCESSORY_FLAT_CENTS`,
+  `FREE_SHIPPING_THRESHOLD_CENTS`, `APPLICATION_COOLDOWN_DAYS` — eliminados de `config/env.ts`, de los
+  dos `.env.*.example` y de `vitest.config.ts`. `shipping.service.ts` (`quote`) y `order-pricing.ts`
+  (`calculateTotals`) siguen siendo **funciones puras**: reciben los umbrales como parámetro en vez de
+  leer `Settings` dentro, con un default de conveniencia para llamadas aisladas; `inventory.service.ts`,
+  `application.service.ts` y `order.service.ts` sí son async y hacen `await settingsService.get()`.
+  `STRIPE_WEBHOOK_TOLERANCE_SECONDS` se queda en `env` a propósito: es un control de seguridad
+  (ventana anti-replay de firma), no una regla de negocio.
+- **`settingsService`** (`apps/api/src/services/settings.service.ts`): `get()` cacheado en proceso con
+  TTL de 60s y una sola promesa en vuelo (colapsa lecturas concurrentes en un solo viaje a Mongo).
+  `updateSection()` usa `document.save()`, nunca `findOneAndUpdate` — es lo que permite que dos
+  escrituras concurrentes a secciones distintas apliquen cada una un `$set` dirigido a sus propios
+  paths sin pisarse, y lo que hace que el hook `pre("validate")` del modelo (el invariante
+  `orderAuthAlertHours < orderAuthCancelHours`, ya no solo verificado en Joi) se ejecute de verdad.
+- **Jobs a `setTimeout` autoreagendado**: los tres (`reservation-reaper`, `order-authorization`,
+  `payment-reconciliation`) dejaron el `setInterval` fijo de M4/M5 por un ciclo que relee
+  `Settings.jobs` antes de cada tick — un cambio del admin surte efecto en el siguiente tick, no tras
+  un redeploy. Desaparece el flag `running`: como el siguiente tick solo se agenda al terminar el
+  anterior, un barrido lento no puede solaparse consigo mismo por construcción. Una lectura de
+  `Settings` fallida cae al default en vez de dejar el job sin reagendar.
+- **Stats por módulo con ventana compartida**: `apps/api/src/utils/stats-range.ts`
+  (`parseStatsRange`, hermano de `parseListQuery`) resuelve `{preset, from, to}` una sola vez por
+  request — presets `today|7d|30d|90d|custom`, tope de 365 días, `from < to` obligatorio.
+  `apps/api/src/services/stats/`: `orders.stats.ts` (conteo por estatus, ingresos — solo estatus con
+  dinero capturado, ticket promedio, órdenes por día), `inventory.stats.ts` (unidades comprometidas
+  dentro de la ventana; SKUs agotados/bajo umbral **fuera** de ella, expuestos también para
+  `alerts.stats.ts`), `applications.stats.ts` (enviadas por `createdAt`, aprobadas/rechazadas por el
+  momento de la decisión). Endpoints `GET /api/v1/admin/stats/{orders,inventory,applications,preferences,alerts}`.
+- **Alertas operativas fuera del filtro de fechas** (`stats/alerts.stats.ts`): firma **sin** `range` a
+  propósito — órdenes en cola de proveedor, autorizaciones por vencer y órdenes `pending_payment`
+  atrasadas reutilizan literalmente los mismos umbrales y funciones (`alertThreshold`,
+  `reconciliationThreshold`) que ya usan los jobs de fondo, más solicitudes `pending` y SKUs agotados.
+- **Analítica de preferencias, sin dimensión "disciplina"**: decisión de Manuel al planear — todo el
+  catálogo es ciclismo, así que no existe "disciplina más vendida". `preferences.stats.ts` entrega
+  cuatro rankings (modelos y tallas, más vistos y más vendidos, top 10). Los dos de "más vendidos"
+  salen enteros del snapshot inmutable de `Order.lines` — el módulo de órdenes sigue sin leer jamás el
+  catálogo. Los de "más vistos" sí hacen un lookup acotado (≤10 ids, máximo dos queries) porque
+  `ProductView` no guarda nombre/marca.
+- **Vistas de producto anónimas**: `apps/api/src/models/product-view.model.ts` (sin `userId`, sin IP,
+  TTL de 90 días fijo en el índice — no configurable desde `Settings`, documentado en el modelo).
+  `POST /api/v1/catalog/views`, público, con `productViewRateLimiter` propio (300/15min, además del
+  `publicReadRateLimiter` del router) y **silencio anti-enumeración**: id inexistente, producto
+  archivado o SKU que no resuelve a una variante real responden el mismo 202 genérico que un evento
+  válido, sin persistir nada.
+- **`/admin/stats/overview`, al final, por composición pura**: resuelve `parseStatsRange` una vez y
+  reparte el mismo objeto a los cuatro módulos más `alerts.stats.ts` sin ventana. Cero agregación
+  propia.
+- **`mailer` y `notifier` con factory**: `services/mailer/index.ts` pasa de stub duro a factory con
+  aviso único por proceso (`logger.warn`) cuando no hay proveedor — M15 registra Resend sin tocar
+  `auth.service.ts`. `services/notifier/` (nuevo): misma forma, interfaz `notifyAdmin({kind, title,
+  body, meta})`, stub que loguea a `warn`. Único punto de llamada: `order-maintenance.service.ts` en
+  `alertExpiringAuthorizations`, justo donde ya se sella `adminAlertedAt` — no se inventan emisiones
+  nuevas.
+- **Datos fiscales opcionales (decisión abierta #3, cerrada parcialmente)**: `BillingInfo` en
+  `packages/shared` (`rfc`, `legalName`, `cfdiUse`, `taxRegime`, `postalCode`, catálogos `CFDI_USES`/
+  `TAX_REGIMES` cerrados). Se captura en el carrito (`PUT /api/v1/cart/billing-info`), nunca en el
+  body del checkout — mismo patrón que la dirección de envío de M6 — y se copia como snapshot a la
+  orden. Ningún PAC integrado; el RFC se agrega a la redacción de `config/logger.ts` por ser PII.
+- Fila de `docs/superpowers/specs/…-design.md` actualizada: decisión abierta #3 → cerrada
+  parcialmente (se capturan datos, sin timbrado); decisión abierta #4 (Sentry) → cerrada a favor,
+  implementación baja a M15.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm typecheck   (incluye tests)       → limpio (shared + api)
+pnpm lint                              → limpio
+pnpm build                             → limpio
+pnpm test                              → 31 archivos, 324/324 tests pasan (Mongo real en memoria,
+                                          replica set de un nodo)
+pnpm audit --prod                      → sin vulnerabilidades conocidas
+node dist/server.js + SIGTERM          → arranca los tres jobs (ahora releyendo Settings), detecta
+                                          replica set, los detiene y sale con código 0
+```
+
+Los tres criterios de cierre, con su prueba (`settings.test.ts`, 6; `stats.test.ts`, 5;
+`product-views.test.ts`, 5):
+1. **Editar una sección de Settings no pisa otra** — `PUT /shipping` y `PUT /orders` en paralelo
+   (`Promise.all`), releídos directo de la base: los cuatro valores de `orders` y los dos de
+   `shipping` quedan correctos, y `pricing`/`inventory` conservan sus defaults intactos. Un caso
+   hermano manda un campo de otra sección en el body y confirma que Joi `stripUnknown` lo descartó
+   antes de llegar al servicio.
+2. **Stats de dos módulos del mismo panel usan la misma ventana** — `GET /admin/stats/overview?preset=7d`:
+   el `range` que hace eco cada uno de los cuatro módulos es **idéntico** (`toEqual`) al `range` del
+   overview. Una orden sembrada hace 30 días en `awaiting_supplier_confirmation` sigue apareciendo en
+   `alerts.awaitingSupplierConfirmation` incluso con `preset=today`.
+3. **Evento de vista con id inexistente responde éxito genérico sin persistir nada** — un id
+   inexistente, un producto archivado y uno real devuelven el **mismo cuerpo** byte a byte;
+   `ProductView.countDocuments()` contra la base confirma que solo el evento válido escribió.
+
+**Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
+- **No existe la dimensión "disciplina" en la analítica de preferencias** — decisión de Manuel: todo
+  el catálogo es ciclismo, así que "disciplina más vendida" no aporta información. Se quedó en
+  modelos y tallas, lo que además evitó tener que denormalizar categoría en el snapshot de línea.
+- **`updateSection` usa `document.save()`, no `findOneAndUpdate`** — la única forma de que el hook
+  `pre("validate")` del modelo corra de verdad (Mongoose no ejecuta middleware de documento en
+  `findOneAndUpdate`, ni con `runValidators: true`) y, a la vez, la única forma de que dos escrituras
+  concurrentes a secciones distintas no puedan pisarse: `save()` envía un `$set` dirigido solo a los
+  paths modificados en memoria.
+- **El invariante de `Settings.pre("validate")` usa `this.invalidate(path, msg)`, no `next(new Error())`**
+  — es lo que garantiza que Mongoose levante un `mongoose.Error.ValidationError` de verdad (que
+  `error-handler.ts` mapea a 400); un `Error` genérico pasado a `next()` desde un hook de documento se
+  propaga tal cual y el handler lo trataría como 500.
+- **El TTL de `ProductView` es una constante del modelo, no una sección de `Settings`** —
+  `expireAfterSeconds` se fija al crear el índice; cambiarlo exige recrear el índice, no es del mismo
+  tipo de operación que escribir un documento.
+- **`mailer`/`notifier` avisan una sola vez por proceso**, no en cada llamada — un `warnedOnce`
+  módulo-local, para que el modo stub sea visible en el log de arranque sin inundarlo en cada correo o
+  alerta.
+- **Un solo punto de llamada para `notifier`** (`alertExpiringAuthorizations`), no uno por cada alerta
+  operativa — el resto ya se expone por `/admin/stats/overview`; inventar más emisiones habría sido
+  una feature no pedida.
+- **`resetSettingsCache()` se agregó a `tests/setup.ts`**, mismo patrón que `resetRateLimiters()` —
+  sin él, el caché en proceso de 60s sobreviviría al `deleteMany` entre tests y un test posterior
+  leería un snapshot obsoleto en vez de lo que la base realmente tiene.
+
+**Fuera de este milestone:** timbrado CFDI real (ningún PAC integrado — decisión abierta #3 sigue
+parcialmente abierta como decisión de negocio, no como pendiente técnico); Sentry (decisión #4 sí,
+pero implementación en M15); adapters reales de Resend/Telegram (M15); panel visual de Settings y
+analítica (M11).

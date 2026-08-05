@@ -7,7 +7,6 @@ import type {
   SponsorshipDetails,
 } from "@bw-bikes/shared";
 import { Types } from "mongoose";
-import { env } from "../config/env.js";
 import type { IApplication, IUser } from "../models/index.js";
 import { Application } from "../models/index.js";
 import { buildSignedAttachmentUrl } from "../services/storage/index.js";
@@ -16,6 +15,7 @@ import { AppError, buildMeta, parseListQuery } from "../utils/index.js";
 import { assertTransition } from "./application-state.js";
 import { recordAuditLog } from "./audit-log.service.js";
 import type { ActorContext } from "./product.service.js";
+import { settingsService } from "./settings.service.js";
 
 /** What the controller hands the service after uploading — Cloudinary's result plus the name the client sent. */
 export interface ApplicationAttachmentInput {
@@ -115,7 +115,8 @@ async function assertCanApply(userId: string, type: ApplicationType): Promise<vo
   // Rejected: blocked only within the cooldown window, measured from the
   // rejection itself, not from the original submission.
   if (latest.rejectedAt) {
-    const cooldownEndsAt = new Date(latest.rejectedAt.getTime() + env.applicationCooldownDays * MS_PER_DAY);
+    const { applications } = await settingsService.get();
+    const cooldownEndsAt = new Date(latest.rejectedAt.getTime() + applications.cooldownDays * MS_PER_DAY);
     if (cooldownEndsAt > new Date()) {
       throw new AppError(
         `Puedes volver a enviar una solicitud de este tipo a partir del ${cooldownEndsAt.toISOString().slice(0, 10)}.`,

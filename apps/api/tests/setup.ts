@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import { resetTransactionSupport } from "../src/config/db.js";
 import { resetRateLimiters } from "../src/middlewares/rate-limit.js";
+import { resetSettingsCache } from "../src/services/settings.service.js";
 
 /**
  * Shared DB fixture for the whole suite. Connects mongoose's default
@@ -43,6 +44,14 @@ afterEach(async () => {
   // rate-limit.ts) — reset it so one test's lockout doesn't bleed into the
   // next.
   resetRateLimiters();
+
+  // `settingsService` caches in-process with a 60s TTL (see
+  // settings.service.ts). Without this, a test that mutated a section (or
+  // simply triggered the lazy-create default) would leave that snapshot
+  // cached in memory across the `deleteMany` above, so the *next* test would
+  // silently read stale settings instead of the freshly-defaulted document
+  // Mongo actually holds.
+  resetSettingsCache();
 
   // Restores any mailer spy set up via tests/helpers/mailer.ts.
   vi.restoreAllMocks();

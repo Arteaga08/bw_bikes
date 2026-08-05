@@ -1,4 +1,4 @@
-import type { CartLineInput, ItemType, PublicCart, PublicCartLine, ShippingAddress } from "@bw-bikes/shared";
+import type { BillingInfo, CartLineInput, ItemType, PublicCart, PublicCartLine, ShippingAddress } from "@bw-bikes/shared";
 import { CURRENCY } from "@bw-bikes/shared";
 import { Types } from "mongoose";
 import type { ICart, ICartLine } from "../models/index.js";
@@ -6,6 +6,7 @@ import { Cart, MAX_CART_LINES } from "../models/index.js";
 import { AppError } from "../utils/index.js";
 import { inventoryService } from "./inventory.service.js";
 import { calculateTotals, resolveCaptureMethod, resolveCartLines } from "./order-pricing.js";
+import { settingsService } from "./settings.service.js";
 import { shippingService } from "./shipping.service.js";
 
 /**
@@ -138,13 +139,15 @@ async function toPublicCart(cart: ICart): Promise<PublicCart> {
 
   // Same quote checkout will apply, so the cart can preview "Envío: Gratis"
   // or a monto before the customer ever commits to paying.
-  const shippingQuote = shippingService.quote(purchasableSnapshots);
-  const totals = calculateTotals(purchasableSnapshots, shippingQuote.shippingCents);
+  const { shipping, pricing } = await settingsService.get();
+  const shippingQuote = shippingService.quote(purchasableSnapshots, shipping);
+  const totals = calculateTotals(purchasableSnapshots, shippingQuote.shippingCents, pricing.taxRateBps);
 
   return {
     id: String(cart._id),
     lines,
     ...(cart.shippingAddress ? { shippingAddress: cart.shippingAddress } : {}),
+    ...(cart.billingInfo ? { billingInfo: cart.billingInfo } : {}),
     subtotalCents: totals.subtotalCents,
     taxCents: totals.taxCents,
     shippingCents: totals.shippingCents,
@@ -265,6 +268,24 @@ async function getShippingAddress(userId: string): Promise<ShippingAddress | und
 }
 
 /**
+ * Optional CFDI data (M7), captured ahead of checkout — same
+ * capture-here-copy-at-checkout pattern as the shipping address, except
+ * nothing ever requires it to be set.
+ */
+async function setBillingInfo(userId: string, billingInfo: BillingInfo): Promise<PublicCart> {
+  const cart = await findOrCreate(userId);
+  cart.billingInfo = billingInfo;
+  await cart.save();
+  return toPublicCart(cart);
+}
+
+/** The raw CFDI data for the checkout to copy onto the order. `undefined` if never set. */
+async function getBillingInfo(userId: string): Promise<BillingInfo | undefined> {
+  const cart = await Cart.findOne({ userId }).exec();
+  return cart?.billingInfo;
+}
+
+/**
  * The raw lines, for the checkout to price and freeze. Returns the stored
  * shape rather than the rendered one on purpose: the order must re-resolve
  * everything itself at the moment of purchase, not inherit a view that was
@@ -288,6 +309,8 @@ export const cartService = {
   clearCart,
   setShippingAddress,
   getShippingAddress,
+  setBillingInfo,
+  getBillingInfo,
   getCheckoutLines,
   emptyAfterCheckout,
 };

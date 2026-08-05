@@ -1,5 +1,8 @@
-import type { Carrier, OrderLineSnapshot } from "@bw-bikes/shared";
-import { env } from "../config/env.js";
+import type { Carrier, OrderLineSnapshot, ShippingSettings } from "@bw-bikes/shared";
+import {
+  DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS,
+  DEFAULT_SHIPPING_ACCESSORY_FLAT_CENTS,
+} from "../config/settings.defaults.js";
 
 /**
  * Closes open decision #1 (shipping cost). A narrow interface — `quote` takes
@@ -10,21 +13,35 @@ import { env } from "../config/env.js";
  *
  * A single threshold, no bike-specific exception:
  *
- *   subtotal >= FREE_SHIPPING_THRESHOLD_CENTS  ->  free
- *   otherwise                                  ->  SHIPPING_ACCESSORY_FLAT_CENTS
+ *   subtotal >= freeShippingThresholdCents  ->  free
+ *   otherwise                               ->  accessoryFlatCents
  *
  * A bike's own price ($80k–$300k MXN per the spec) already clears the
  * threshold on its own, so "bikes ship free" is not a rule this file encodes —
  * it is simply what the arithmetic always produces for a bike. That is also
  * why this function needs nothing from the catalog or the category trees:
  * every line already carries its own `lineTotalCents` in the snapshot.
+ *
+ * `thresholds` is a **parameter, not a read from `Settings` in here** — this
+ * stays a pure function, callable in isolation (as the tests do), and the
+ * two real callers (`cart.service.ts`, `order.service.ts`) fetch `Settings`
+ * once per request and pass the live values down. The default below exists
+ * only so an isolated call is still meaningful without wiring `Settings`.
  */
 export interface ShippingQuote {
   shippingCents: number;
   isFree: boolean;
 }
 
-function quote(lines: Pick<OrderLineSnapshot, "lineTotalCents">[]): ShippingQuote {
+const DEFAULT_THRESHOLDS: ShippingSettings = {
+  accessoryFlatCents: DEFAULT_SHIPPING_ACCESSORY_FLAT_CENTS,
+  freeShippingThresholdCents: DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS,
+};
+
+function quote(
+  lines: Pick<OrderLineSnapshot, "lineTotalCents">[],
+  thresholds: ShippingSettings = DEFAULT_THRESHOLDS,
+): ShippingQuote {
   // Nothing to ship is not the same as an order under the threshold — an
   // empty cart preview must not show a shipping fee for a purchase that
   // doesn't exist yet.
@@ -34,11 +51,11 @@ function quote(lines: Pick<OrderLineSnapshot, "lineTotalCents">[]): ShippingQuot
 
   const subtotalCents = lines.reduce((sum, line) => sum + line.lineTotalCents, 0);
 
-  if (subtotalCents >= env.freeShippingThresholdCents) {
+  if (subtotalCents >= thresholds.freeShippingThresholdCents) {
     return { shippingCents: 0, isFree: true };
   }
 
-  return { shippingCents: env.shippingAccessoryFlatCents, isFree: false };
+  return { shippingCents: thresholds.accessoryFlatCents, isFree: false };
 }
 
 /**

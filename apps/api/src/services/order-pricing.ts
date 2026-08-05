@@ -9,7 +9,7 @@ import type {
 } from "@bw-bikes/shared";
 import { CURRENCY } from "@bw-bikes/shared";
 import { Types } from "mongoose";
-import { env } from "../config/env.js";
+import { DEFAULT_TAX_RATE_BPS } from "../config/settings.defaults.js";
 import type { IAccessory, IBike } from "../models/index.js";
 import { Accessory, Bike, MAX_RESERVATION_QTY } from "../models/index.js";
 import { AppError } from "../utils/index.js";
@@ -214,8 +214,17 @@ function resolveCaptureMethod(lines: { fulfillmentMode: FulfillmentMode }[]): Ca
  * how to fold a shipping amount into the totals, not what that amount should
  * be; the default of 0 is for callers with nothing to ship (there are none in
  * production, but it keeps this a pure function callable in isolation).
+ *
+ * `taxRateBps` is a parameter for the same reason `shippingService.quote`
+ * takes `thresholds` as one: this stays pure and testable without wiring
+ * `Settings`, and the real callers (`cart.service.ts`, `order.service.ts`)
+ * fetch it once per request and pass the live value down.
  */
-function calculateTotals(lines: OrderLineSnapshot[], shippingCents = 0): OrderTotals {
+function calculateTotals(
+  lines: OrderLineSnapshot[],
+  shippingCents = 0,
+  taxRateBps: number = DEFAULT_TAX_RATE_BPS,
+): OrderTotals {
   let subtotalCents = 0;
 
   for (const line of lines) {
@@ -229,7 +238,7 @@ function calculateTotals(lines: OrderLineSnapshot[], shippingCents = 0): OrderTo
   }
 
   const totalCents = subtotalCents + shippingCents;
-  const taxCents = Math.round((totalCents * env.taxRateBps) / (10_000 + env.taxRateBps));
+  const taxCents = Math.round((totalCents * taxRateBps) / (10_000 + taxRateBps));
 
   return { subtotalCents, taxCents, shippingCents, totalCents, currency: CURRENCY };
 }

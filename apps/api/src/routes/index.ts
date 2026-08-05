@@ -3,6 +3,8 @@ import { adminApplicationRouter } from "./admin-application.route.js";
 import { adminCatalogRouter } from "./admin-catalog.route.js";
 import { adminInventoryRouter } from "./admin-inventory.route.js";
 import { adminOrderRouter } from "./admin-order.route.js";
+import { adminSettingsRouter } from "./admin-settings.route.js";
+import { adminStatsRouter } from "./admin-stats.route.js";
 import { applicationRouter } from "./application.route.js";
 import { authRouter } from "./auth.route.js";
 import { cartRouter } from "./cart.route.js";
@@ -32,5 +34,7 @@ v1Router.use("/admin", adminCatalogRouter);
 v1Router.use("/admin", adminInventoryRouter);
 v1Router.use("/admin", adminOrderRouter);
 v1Router.use("/admin", adminApplicationRouter);
+v1Router.use("/admin", adminSettingsRouter);
+v1Router.use("/admin", adminStatsRouter);
 
 export { v1Router, webhookRouter };

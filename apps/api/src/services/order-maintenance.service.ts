@@ -3,8 +3,10 @@ import type { IOrder } from "../models/index.js";
 import { Order } from "../models/index.js";
 import { recordAuditLog } from "./audit-log.service.js";
 import { inventoryService } from "./inventory.service.js";
+import { createNotifier } from "./notifier/index.js";
 import { alertThreshold, cancelThreshold, orderService, reconciliationThreshold, reservationRef } from "./order.service.js";
 import { getPaymentProvider } from "./payments/index.js";
+import { settingsService } from "./settings.service.js";
 
 const MODULE_NAME = "orders";
 
@@ -29,13 +31,13 @@ const SWEEP_BATCH_SIZE = 200;
  * often the sweep runs. Until M15 wires real email, the audit entry *is* the
  * notification — and it is the durable record either way.
  */
-async function alertExpiringAuthorizations(now: Date): Promise<number> {
+async function alertExpiringAuthorizations(now: Date, orderAuthAlertHours: number): Promise<number> {
   const due = await Order.find({
     status: "awaiting_supplier_confirmation",
     adminAlertedAt: { $exists: false },
     // Measured from the authorization, not from order creation: the hold is
     // what expires, and it starts when the card was authorized.
-    "payment.authorizedAt": { $lte: alertThreshold(now) },
+    "payment.authorizedAt": { $lte: alertThreshold(now, orderAuthAlertHours) },
   })
     .limit(SWEEP_BATCH_SIZE)
     .exec();
@@ -58,6 +60,24 @@ async function alertExpiringAuthorizations(now: Date): Promise<number> {
       { orderId: String(claimed._id), orderNumber: claimed.orderNumber },
       "Order authorization is close to expiring and still awaits supplier confirmation",
     );
+
+    // The one call site for `notifier` in M7 (`Notifier`'s doc comment
+    // explains why it isn't spread across every alert): this is exactly
+    // where the code already decided the admin needs to act, so the
+    // notification rides the same moment rather than a new emission point.
+    // Best-effort — a failed notification must never block sealing
+    // `adminAlertedAt`, or a flaky provider would make this fire on every
+    // sweep instead of exactly once.
+    await createNotifier()
+      .notifyAdmin({
+        kind: "order.authorization_expiring",
+        title: `Autorización por vencer — orden ${claimed.orderNumber}`,
+        body: "El pago fue autorizado hace varios días y la orden sigue esperando confirmación del proveedor. Confírmala o recházala antes de que la autorización venza.",
+        meta: { orderId: String(claimed._id), orderNumber: claimed.orderNumber, totalCents: claimed.totalCents },
+      })
+      .catch((error: unknown) => {
+        logger.error({ err: error, orderId: String(claimed._id) }, "Failed to notify the admin of an expiring authorization");
+      });
 
     await recordAuditLog({
       actorType: "system",
@@ -83,10 +103,10 @@ async function alertExpiringAuthorizations(now: Date): Promise<number> {
  * no longer exists; cancelling deliberately releases the units and closes the
  * order at a moment we chose, with a reason the customer can be told.
  */
-async function cancelExpiredAuthorizations(now: Date): Promise<number> {
+async function cancelExpiredAuthorizations(now: Date, orderAuthCancelHours: number): Promise<number> {
   const due = await Order.find({
     status: { $in: ["authorized", "awaiting_supplier_confirmation"] },
-    "payment.authorizedAt": { $lte: cancelThreshold(now) },
+    "payment.authorizedAt": { $lte: cancelThreshold(now, orderAuthCancelHours) },
   })
     .limit(SWEEP_BATCH_SIZE)
     .exec();
@@ -128,8 +148,9 @@ async function cancelExpiredAuthorizations(now: Date): Promise<number> {
 }
 
 async function sweepAuthorizations(now: Date = new Date()): Promise<{ alerted: number; cancelled: number }> {
-  const alerted = await alertExpiringAuthorizations(now);
-  const cancelled = await cancelExpiredAuthorizations(now);
+  const { orders } = await settingsService.get();
+  const alerted = await alertExpiringAuthorizations(now, orders.orderAuthAlertHours);
+  const cancelled = await cancelExpiredAuthorizations(now, orders.orderAuthCancelHours);
   return { alerted, cancelled };
 }
 
@@ -149,10 +170,11 @@ async function sweepAuthorizations(now: Date = new Date()): Promise<{ alerted: n
  * guarantee.
  */
 async function reconcilePendingPayments(now: Date = new Date()): Promise<number> {
+  const { orders } = await settingsService.get();
   const stale = await Order.find({
     status: "pending_payment",
     "payment.intentId": { $exists: true },
-    createdAt: { $lte: reconciliationThreshold(now) },
+    createdAt: { $lte: reconciliationThreshold(now, orders.paymentReconciliationAfterMinutes) },
   })
     .limit(SWEEP_BATCH_SIZE)
     .exec();

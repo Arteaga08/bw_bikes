@@ -127,11 +127,19 @@ evitar que las dos fuentes diverjan; `docs/MILESTONES.md` es la fuente de verdad
 
 ## Decisiones abiertas
 
-1. **Costo de envío** (M6): tarifa plana configurable vs. tarifas por zona vs. agregador. Hasta
-   cerrarla, `shippingService` devuelve tarifa plana desde `Settings`.
-2. **Jobs en background** (M5): cron + TTL de Mongo (recomendado para arrancar) vs. BullMQ + Redis.
-3. **Facturación CFDI/SAT**: no está en la propuesta original. Confirmar si se necesita.
-4. **Sentry** para error tracking: sí/no.
+1. **Costo de envío** — **cerrada en M6**: tarifa plana configurable desde `Settings` (M7 la migró
+   del env var donde vivía hasta entonces).
+2. **Jobs en background** — **cerrada en M4**: cron (`setTimeout` autoreagendado desde M7, leyendo el
+   intervalo de `Settings.jobs` en cada tick) + TTL de Mongo, no BullMQ + Redis.
+3. **Facturación CFDI/SAT** — **cerrada parcialmente en M7**: no se integra ningún PAC (Facturama, SW
+   Sapien, etc.); si más adelante se necesita, es un milestone propio con timbrado, cancelación y
+   notas de crédito por reembolso. Lo que M7 sí hace es capturar los datos fiscales opcionales
+   (`BillingInfo`: RFC, razón social, uso de CFDI, régimen fiscal) en el carrito y congelarlos en la
+   orden al checkout, para que un futuro milestone de facturación no tenga que migrar órdenes
+   históricas.
+4. **Sentry** para error tracking — **cerrada en M7: sí**. La implementación (DSN, adapter detrás de
+   la misma factory que `mailer`/`notifier`) baja a M15, junto con el resto de las integraciones
+   reales de la fase 4.
 
 ## Verificación
 

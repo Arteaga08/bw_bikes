@@ -2,6 +2,7 @@ import { randomInt } from "node:crypto";
 import type {
   AdminOrder,
   AdminOrderStatusHistoryEntry,
+  BillingInfo,
   Carrier,
   CheckoutResult,
   OrderLineSnapshot,
@@ -10,7 +11,6 @@ import type {
   ShippingAddress,
 } from "@bw-bikes/shared";
 import { Types } from "mongoose";
-import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 import type { IOrder, IUser } from "../models/index.js";
 import { Order } from "../models/index.js";
@@ -23,6 +23,7 @@ import { assertTransition, canTransition, isTerminal } from "./order-state.js";
 import { buildLineSnapshots, calculateTotals, resolveCaptureMethod } from "./order-pricing.js";
 import { assertPaymentsConfigured, getPaymentProvider } from "./payments/index.js";
 import type { ActorContext } from "./product.service.js";
+import { settingsService } from "./settings.service.js";
 import { shippingService } from "./shipping.service.js";
 
 const MODULE_NAME = "orders";
@@ -103,6 +104,7 @@ function toPublicOrder(order: IOrder): PublicOrder {
         : {}),
     },
     shippingAddress: order.shippingAddress,
+    ...(order.billingInfo ? { billingInfo: order.billingInfo } : {}),
     ...(order.shipment
       ? {
           shipment: {
@@ -261,10 +263,15 @@ async function createFromCart(userId: string, input: CreateOrderInput, actor: Ac
     throw new AppError("Agrega una dirección de envío antes de continuar.", 400);
   }
 
+  // Optional CFDI data (M7) — copied as a snapshot exactly like the shipping
+  // address, but never required: an order is valid with none of it.
+  const billingInfo = await cartService.getBillingInfo(userId);
+
   const lines = await cartService.getCheckoutLines(userId);
   const snapshots = await buildLineSnapshots(lines);
-  const shippingQuote = shippingService.quote(snapshots);
-  const totals = calculateTotals(snapshots, shippingQuote.shippingCents);
+  const settings = await settingsService.get();
+  const shippingQuote = shippingService.quote(snapshots, settings.shipping);
+  const totals = calculateTotals(snapshots, shippingQuote.shippingCents, settings.pricing.taxRateBps);
   const captureMethod = resolveCaptureMethod(snapshots);
 
   // One live checkout per customer. A second attempt supersedes the first
@@ -278,6 +285,7 @@ async function createFromCart(userId: string, input: CreateOrderInput, actor: Ac
     totals,
     captureMethod,
     shippingAddress,
+    ...(billingInfo !== undefined ? { billingInfo } : {}),
     ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
   });
 
@@ -286,7 +294,7 @@ async function createFromCart(userId: string, input: CreateOrderInput, actor: Ac
       referenceType: "order",
       referenceId: String(order._id),
       userId,
-      ttlMinutes: env.orderPaymentTtlMinutes,
+      ttlMinutes: settings.orders.orderPaymentTtlMinutes,
     });
   } catch (error) {
     await failOrder(order, "No hay unidades suficientes para completar la compra.");
@@ -361,6 +369,7 @@ async function createOrderDocument(params: {
   totals: ReturnType<typeof calculateTotals>;
   captureMethod: "automatic" | "manual";
   shippingAddress: ShippingAddress;
+  billingInfo?: BillingInfo;
   idempotencyKey?: string;
 }): Promise<IOrder> {
   for (let attempt = 0; attempt < ORDER_NUMBER_ATTEMPTS; attempt++) {
@@ -377,6 +386,7 @@ async function createOrderDocument(params: {
         currency: params.totals.currency,
         payment: { provider: "stripe", state: "pending", captureMethod: params.captureMethod },
         shippingAddress: params.shippingAddress,
+        ...(params.billingInfo !== undefined ? { billingInfo: params.billingInfo } : {}),
         ...(params.idempotencyKey !== undefined ? { idempotencyKey: params.idempotencyKey } : {}),
         statusHistory: [{ status: "pending_payment", at: new Date(), actorType: "user" }],
       });
@@ -966,16 +976,24 @@ async function findByIntentId(intentId: string): Promise<IOrder | null> {
 
 // --- Deadlines (used by the background jobs) -----------------------------
 
-function alertThreshold(now: Date): Date {
-  return new Date(now.getTime() - env.orderAuthAlertHours * MS_PER_HOUR);
+/**
+ * The three thresholds below take their hours/minutes as a parameter rather
+ * than reading `Settings` themselves — same reasoning as
+ * `order-pricing.ts`'s `calculateTotals`: they stay pure and synchronous,
+ * cheaply unit-testable, and the two real callers
+ * (`stats/alerts.stats.ts`, `order-maintenance.service.ts`) fetch `Settings`
+ * once per sweep/request and pass the live value down.
+ */
+function alertThreshold(now: Date, orderAuthAlertHours: number): Date {
+  return new Date(now.getTime() - orderAuthAlertHours * MS_PER_HOUR);
 }
 
-function cancelThreshold(now: Date): Date {
-  return new Date(now.getTime() - env.orderAuthCancelHours * MS_PER_HOUR);
+function cancelThreshold(now: Date, orderAuthCancelHours: number): Date {
+  return new Date(now.getTime() - orderAuthCancelHours * MS_PER_HOUR);
 }
 
-function reconciliationThreshold(now: Date): Date {
-  return new Date(now.getTime() - env.paymentReconciliationAfterMinutes * MS_PER_MINUTE);
+function reconciliationThreshold(now: Date, paymentReconciliationAfterMinutes: number): Date {
+  return new Date(now.getTime() - paymentReconciliationAfterMinutes * MS_PER_MINUTE);
 }
 
 export const orderService = {
