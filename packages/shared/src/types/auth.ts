@@ -42,6 +42,11 @@ export interface AuthUser {
  * M6 adds fulfillment (shipping address corrections, shipment/tracking
  * capture, the bulk status update — one entry per order, never one for the
  * whole batch) and the ambassador/sponsorship application flow.
+ *
+ * M7 adds one action **per `Settings` section** — never a generic
+ * `settings.updated` — because a section write is exactly the granularity
+ * the section-scoped `$set` operates at, and the audit trail should read at
+ * the same resolution as the write it records.
  */
 export type AuditAction =
   | "admin.login"
@@ -76,4 +81,10 @@ export type AuditAction =
   | "order.bulk_status_updated"
   | "application.submitted"
   | "application.approved"
-  | "application.rejected";
+  | "application.rejected"
+  | "settings.inventory_updated"
+  | "settings.orders_updated"
+  | "settings.pricing_updated"
+  | "settings.shipping_updated"
+  | "settings.applications_updated"
+  | "settings.jobs_updated";

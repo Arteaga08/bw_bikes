@@ -6,7 +6,6 @@ import type {
 } from "@bw-bikes/shared";
 import type { ClientSession, Model } from "mongoose";
 import { Types } from "mongoose";
-import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 import type { IInventoryItem, IStockReservation } from "../models/index.js";
 import {
@@ -20,6 +19,7 @@ import {
 import { AppError, buildMeta, escapeRegex, parseListQuery, withOptionalTransaction } from "../utils/index.js";
 import { recordAuditLog } from "./audit-log.service.js";
 import type { ActorContext } from "./product.service.js";
+import { settingsService } from "./settings.service.js";
 
 const MODULE_NAME = "inventory";
 
@@ -102,8 +102,8 @@ function assertQty(qty: number, sku: string): void {
   }
 }
 
-function purgeDateFrom(now: Date): Date {
-  return new Date(now.getTime() + env.reservationRetentionDays * MS_PER_DAY);
+function purgeDateFrom(now: Date, retentionDays: number): Date {
+  return new Date(now.getTime() + retentionDays * MS_PER_DAY);
 }
 
 function toAvailability(item: IInventoryItem): InventoryAvailability {
@@ -187,13 +187,14 @@ async function decrementReserved(
 async function releaseReservationById(
   reservationId: Types.ObjectId | string,
   context: string,
+  retentionDays: number,
 ): Promise<IStockReservation | null> {
   return withOptionalTransaction(async (session) => {
     const now = new Date();
 
     const claimed = await StockReservation.findOneAndUpdate(
       { _id: reservationId, status: "held" },
-      { $set: { status: "released", releasedAt: now, purgeAt: purgeDateFrom(now) } },
+      { $set: { status: "released", releasedAt: now, purgeAt: purgeDateFrom(now, retentionDays) } },
       { new: true, session },
     ).exec();
 
@@ -251,7 +252,7 @@ async function rollbackReservationById(reservationId: Types.ObjectId | string): 
  * `supportsTransactions()` logs a warning when it finds one.
  */
 async function reserve(lines: ReservationLine[], options: ReserveOptions): Promise<ReservedLine[]> {
-  const ttlMinutes = options.ttlMinutes ?? env.stockReservationTtlMinutes;
+  const ttlMinutes = options.ttlMinutes ?? (await settingsService.get()).inventory.stockReservationTtlMinutes;
   const referenceId = toObjectId(options.referenceId, "referencia");
   const userId = options.userId !== undefined ? toObjectId(options.userId, "usuario") : undefined;
 
@@ -368,6 +369,7 @@ async function compensate(applied: { line: ReservationLine; reservationId?: Type
  * Returns how many reservations this call actually released.
  */
 async function release(ref: ReservationRef): Promise<number> {
+  const { inventory } = await settingsService.get();
   const reservations = await StockReservation.find({
     referenceType: ref.referenceType,
     referenceId: toObjectId(ref.referenceId, "referencia"),
@@ -376,7 +378,9 @@ async function release(ref: ReservationRef): Promise<number> {
 
   let released = 0;
   for (const reservation of reservations) {
-    if (await releaseReservationById(reservation._id as Types.ObjectId, "release")) released++;
+    if (await releaseReservationById(reservation._id as Types.ObjectId, "release", inventory.reservationRetentionDays)) {
+      released++;
+    }
   }
   return released;
 }
@@ -391,6 +395,7 @@ async function release(ref: ReservationRef): Promise<number> {
  * whichever claims first, never to both.
  */
 async function commit(ref: ReservationRef): Promise<number> {
+  const { inventory } = await settingsService.get();
   const reservations = await StockReservation.find({
     referenceType: ref.referenceType,
     referenceId: toObjectId(ref.referenceId, "referencia"),
@@ -407,7 +412,7 @@ async function commit(ref: ReservationRef): Promise<number> {
 
       const claimed = await StockReservation.findOneAndUpdate(
         { _id: reservation._id, status: "held" },
-        { $set: { status: "committed", committedAt: now, purgeAt: purgeDateFrom(now) } },
+        { $set: { status: "committed", committedAt: now, purgeAt: purgeDateFrom(now, inventory.reservationRetentionDays) } },
         { new: true, session },
       ).exec();
 
@@ -490,6 +495,7 @@ async function extendHold(ref: ReservationRef, expiresAt: Date): Promise<number>
  * lock is needed.
  */
 async function releaseExpiredReservations(now: Date = new Date()): Promise<number> {
+  const { inventory } = await settingsService.get();
   const expired = await StockReservation.find({ status: "held", expiresAt: { $lte: now } })
     .limit(EXPIRY_BATCH_SIZE)
     .exec();
@@ -497,7 +503,11 @@ async function releaseExpiredReservations(now: Date = new Date()): Promise<numbe
   let released = 0;
 
   for (const reservation of expired) {
-    const claimed = await releaseReservationById(reservation._id as Types.ObjectId, "expiry");
+    const claimed = await releaseReservationById(
+      reservation._id as Types.ObjectId,
+      "expiry",
+      inventory.reservationRetentionDays,
+    );
     if (!claimed) continue;
 
     released++;

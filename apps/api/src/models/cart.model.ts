@@ -1,5 +1,6 @@
-import type { ItemType, ShippingAddress } from "@bw-bikes/shared";
+import type { BillingInfo, ItemType, ShippingAddress } from "@bw-bikes/shared";
 import { type Document, model, Schema, type Types } from "mongoose";
+import { billingInfoSchema } from "./schemas/billing-info.schema.js";
 import { MAX_SKU_LENGTH } from "./schemas/product-variant.schema.js";
 import { shippingAddressSchema } from "./schemas/shipping-address.schema.js";
 import { MAX_RESERVATION_QTY } from "./stock-reservation.model.js";
@@ -27,6 +28,8 @@ export interface ICart extends Document {
   lines: ICartLine[];
   /** Captured here, ahead of checkout, and copied onto the order at that point. */
   shippingAddress?: ShippingAddress;
+  /** Optional CFDI data (M7), same capture-here-copy-at-checkout pattern as `shippingAddress`. */
+  billingInfo?: BillingInfo;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,6 +81,10 @@ const cartSchema = new Schema<ICart>(
     // the customer has set one, rather than the schema enforcing it on a
     // document that legitimately starts life without it.
     shippingAddress: { type: shippingAddressSchema },
+    // Optional everywhere, unlike shippingAddress — an order is valid with
+    // no CFDI data at all (design-spec open decision #3, captured but not
+    // timbrado in M7).
+    billingInfo: { type: billingInfoSchema },
   },
   { timestamps: true },
 );

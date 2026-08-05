@@ -144,14 +144,18 @@ function parseExpiresIn(name: string, raw: string): string {
 }
 
 /**
- * Operational knobs with a documented default: unset means "use the default",
- * a malformed value still fails fast. They're tuning parameters, not secrets —
- * a silent fallback here can't weaken anything, unlike a missing JWT secret.
+ * An operational knob with a documented default: unset means "use the
+ * default", a malformed value still fails fast. It is a tuning parameter,
+ * not a secret — a silent fallback here can't weaken anything, unlike a
+ * missing JWT secret.
  *
- * These move to the `Settings` singleton in M7, which is where
- * ECOMMERCE_ARCHITECTURE_GUIDELINES.md wants business thresholds so the owner
- * can change them without a redeploy. Until that collection exists, env is the
- * honest place for them.
+ * This is the **one** survivor of the `parsePositiveInt` env pattern M4–M6
+ * used for business thresholds — the other thirteen moved to the `Settings`
+ * singleton in M7 (`config/settings.defaults.ts`), which is where
+ * ECOMMERCE_ARCHITECTURE_GUIDELINES.md wants a threshold the owner can
+ * change without a redeploy. This one stays here on purpose: a webhook
+ * signature replay window is a security control, not a business rule an
+ * admin panel should expose.
  */
 function parsePositiveInt(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -164,86 +168,12 @@ function parsePositiveInt(name: string, fallback: number): number {
   return parsed;
 }
 
-/** How long a checkout may hold stock before the expiry job takes it back. */
-const DEFAULT_RESERVATION_TTL_MINUTES = 30;
-
-/** How often that job sweeps. Well under the TTL, so an expiry is acted on promptly. */
-const DEFAULT_REAPER_INTERVAL_MS = 60_000;
-
-/** How long a finished reservation is kept for forensics before Mongo's TTL drops it. */
-const DEFAULT_RESERVATION_RETENTION_DAYS = 30;
-
-/**
- * How long an order may sit in `pending_payment` holding stock while the
- * customer completes the payment form. Shorter than the generic reservation
- * TTL on purpose: a checkout in progress is a live user, not an abandoned
- * cart, and holding a bike for half an hour per attempt is how a catalog looks
- * sold out without a single sale.
- *
- * This is only the *payment* window. Once a manual-capture order is
- * authorized, its holds are extended to cover the supplier-confirmation window
- * (see `extendHold` in inventory.service.ts) — otherwise the in-stock helmet
- * of a mixed cart would be released while the admin is still confirming the
- * made-to-order bike.
- */
-const DEFAULT_ORDER_PAYMENT_TTL_MINUTES = 15;
-
-/**
- * Stripe drops an uncaptured authorization after about 7 days. These two
- * thresholds keep the shop ahead of that deadline: warn the admin on day 5,
- * and on day 6.5 cancel the authorization ourselves.
- *
- * Cancelling deliberately rather than letting it lapse is what makes the
- * outcome deterministic — we release the stock and notify the customer at a
- * moment we chose, instead of discovering after the fact that a hold silently
- * evaporated.
- */
-const DEFAULT_ORDER_AUTH_ALERT_HOURS = 120;
-const DEFAULT_ORDER_AUTH_CANCEL_HOURS = 156;
-
-/** How often the authorization sweep runs. Minutes-level is plenty for a day-scale deadline. */
-const DEFAULT_ORDER_AUTH_SWEEP_INTERVAL_MS = 300_000;
-
-/**
- * Backstop for payments whose webhook never arrived (provider outage, our own
- * downtime, a dropped delivery). The job asks the provider what really
- * happened instead of leaving the order orphaned.
- */
-const DEFAULT_PAYMENT_RECONCILIATION_INTERVAL_MS = 600_000;
-
-/** Grace period before an unresolved `pending_payment` order is worth reconciling. */
-const DEFAULT_PAYMENT_RECONCILIATION_AFTER_MINUTES = 20;
-
 /**
  * Webhook signature timestamp tolerance, in seconds. Short window so a
  * captured event cannot be replayed at leisure; 5 minutes is Stripe's own
  * default and absorbs ordinary clock skew.
  */
 const DEFAULT_STRIPE_WEBHOOK_TOLERANCE_SECONDS = 300;
-
-/**
- * IVA in basis points, used **only** to break the tax out of a total that
- * already contains it (Mexican B2C prices are quoted IVA-included). It never
- * adds to what is charged: `tax = round(total × bps / (10000 + bps))`.
- */
-const DEFAULT_TAX_RATE_BPS = 1600;
-
-/**
- * Shipping (M6, closes open decision #1): a bike's own price already clears
- * the free-shipping threshold, so there is no separate "bikes ship free"
- * rule — the arithmetic in `shipping.service.ts` just always lands on free
- * for them. Accessory-only orders under the threshold pay the flat fee.
- * Both move to the `Settings` singleton in M7.
- */
-const DEFAULT_SHIPPING_ACCESSORY_FLAT_CENTS = 25_000;
-const DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS = 200_000;
-
-/**
- * How long a rejected ambassador/sponsorship applicant must wait before
- * reapplying. An approved applicant never reapplies at all; a pending one is
- * blocked by the partial unique index, not this value.
- */
-const DEFAULT_APPLICATION_COOLDOWN_DAYS = 90;
 
 function buildEnv() {
   assertPresent();
@@ -263,61 +193,10 @@ function buildEnv() {
   const stripeSecretKey = process.env["STRIPE_SECRET_KEY"] ?? "";
   const stripeWebhookSecret = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
   const isStripeConfigured = STRIPE_REQUIRED_VARS.every(isSet);
-  const stockReservationTtlMinutes = parsePositiveInt(
-    "STOCK_RESERVATION_TTL_MINUTES",
-    DEFAULT_RESERVATION_TTL_MINUTES,
-  );
-  const reservationReaperIntervalMs = parsePositiveInt(
-    "RESERVATION_REAPER_INTERVAL_MS",
-    DEFAULT_REAPER_INTERVAL_MS,
-  );
-  const reservationRetentionDays = parsePositiveInt(
-    "RESERVATION_RETENTION_DAYS",
-    DEFAULT_RESERVATION_RETENTION_DAYS,
-  );
-  const orderPaymentTtlMinutes = parsePositiveInt(
-    "ORDER_PAYMENT_TTL_MINUTES",
-    DEFAULT_ORDER_PAYMENT_TTL_MINUTES,
-  );
-  const orderAuthAlertHours = parsePositiveInt("ORDER_AUTH_ALERT_HOURS", DEFAULT_ORDER_AUTH_ALERT_HOURS);
-  const orderAuthCancelHours = parsePositiveInt("ORDER_AUTH_CANCEL_HOURS", DEFAULT_ORDER_AUTH_CANCEL_HOURS);
-  const orderAuthSweepIntervalMs = parsePositiveInt(
-    "ORDER_AUTH_SWEEP_INTERVAL_MS",
-    DEFAULT_ORDER_AUTH_SWEEP_INTERVAL_MS,
-  );
-  const paymentReconciliationIntervalMs = parsePositiveInt(
-    "PAYMENT_RECONCILIATION_INTERVAL_MS",
-    DEFAULT_PAYMENT_RECONCILIATION_INTERVAL_MS,
-  );
-  const paymentReconciliationAfterMinutes = parsePositiveInt(
-    "PAYMENT_RECONCILIATION_AFTER_MINUTES",
-    DEFAULT_PAYMENT_RECONCILIATION_AFTER_MINUTES,
-  );
   const stripeWebhookToleranceSeconds = parsePositiveInt(
     "STRIPE_WEBHOOK_TOLERANCE_SECONDS",
     DEFAULT_STRIPE_WEBHOOK_TOLERANCE_SECONDS,
   );
-  const taxRateBps = parsePositiveInt("TAX_RATE_BPS", DEFAULT_TAX_RATE_BPS);
-  const shippingAccessoryFlatCents = parsePositiveInt(
-    "SHIPPING_ACCESSORY_FLAT_CENTS",
-    DEFAULT_SHIPPING_ACCESSORY_FLAT_CENTS,
-  );
-  const freeShippingThresholdCents = parsePositiveInt(
-    "FREE_SHIPPING_THRESHOLD_CENTS",
-    DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS,
-  );
-  const applicationCooldownDays = parsePositiveInt(
-    "APPLICATION_COOLDOWN_DAYS",
-    DEFAULT_APPLICATION_COOLDOWN_DAYS,
-  );
-
-  // Warning the admin *after* the authorization was already cancelled would
-  // make the alert useless, so the ordering is enforced rather than assumed.
-  if (orderAuthAlertHours >= orderAuthCancelHours) {
-    fail(
-      `ORDER_AUTH_ALERT_HOURS (${orderAuthAlertHours}) must be lower than ORDER_AUTH_CANCEL_HOURS (${orderAuthCancelHours})`,
-    );
-  }
 
   assertMinLength("JWT_SECRET", jwtSecret, MIN_SECRET_LENGTH);
   assertMinLength("ENCRYPTION_KEY", encryptionKey, MIN_SECRET_LENGTH);
@@ -366,19 +245,6 @@ function buildEnv() {
     stripeWebhookSecret,
     isStripeConfigured,
     stripeWebhookToleranceSeconds,
-    orderPaymentTtlMinutes,
-    orderAuthAlertHours,
-    orderAuthCancelHours,
-    orderAuthSweepIntervalMs,
-    paymentReconciliationIntervalMs,
-    paymentReconciliationAfterMinutes,
-    taxRateBps,
-    shippingAccessoryFlatCents,
-    freeShippingThresholdCents,
-    applicationCooldownDays,
-    stockReservationTtlMinutes,
-    reservationReaperIntervalMs,
-    reservationRetentionDays,
     isProduction: nodeEnv === "production",
     isTest: nodeEnv === "test",
   });

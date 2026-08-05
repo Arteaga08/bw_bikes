@@ -38,13 +38,6 @@ export default defineConfig({
       CLOUDINARY_CLOUD_NAME: "test-cloud",
       CLOUDINARY_API_KEY: "000000000000000",
       CLOUDINARY_API_SECRET: "test-cloudinary-api-secret-fixture",
-      STOCK_RESERVATION_TTL_MINUTES: "30",
-      // Deliberately tiny so the reaper's own test can observe a real tick in
-      // milliseconds instead of faking timers — faking them would also stub the
-      // ones the Mongo driver uses. The job only runs when a test starts it
-      // explicitly; nothing else in the suite is affected.
-      RESERVATION_REAPER_INTERVAL_MS: "50",
-      RESERVATION_RETENTION_DAYS: "30",
       // Inert Stripe fixtures. The secret key never reaches the network:
       // tests/helpers/stripe.ts replaces the provider's SDK calls with spies.
       // The webhook secret, by contrast, is used **for real** — the suite signs
@@ -54,21 +47,14 @@ export default defineConfig({
       STRIPE_SECRET_KEY: "sk_test_fixture000000000000000000000000",
       STRIPE_WEBHOOK_SECRET: "whsec_test_fixture0000000000000000000000",
       STRIPE_WEBHOOK_TOLERANCE_SECONDS: "300",
-      ORDER_PAYMENT_TTL_MINUTES: "15",
-      ORDER_AUTH_ALERT_HOURS: "120",
-      ORDER_AUTH_CANCEL_HOURS: "156",
-      // Same reasoning as the reaper above: short enough for a test to observe
-      // a real tick, and the jobs only run when a test starts them explicitly.
-      ORDER_AUTH_SWEEP_INTERVAL_MS: "50",
-      PAYMENT_RECONCILIATION_INTERVAL_MS: "50",
-      PAYMENT_RECONCILIATION_AFTER_MINUTES: "20",
-      TAX_RATE_BPS: "1600",
-      // Round numbers so `subtotal >= threshold` boundary tests stay legible.
-      SHIPPING_ACCESSORY_FLAT_CENTS: "25000",
-      FREE_SHIPPING_THRESHOLD_CENTS: "200000",
-      // Short enough that a cooldown test can backdate `rejectedAt` past it
-      // without inventing an implausible number of days.
-      APPLICATION_COOLDOWN_DAYS: "90",
+      // Every other threshold that used to be seeded here (reservation TTLs,
+      // order authorization windows, tax rate, shipping fees, the
+      // application cooldown, and the three job intervals) moved to the
+      // `Settings` singleton in M7 — see config/settings.defaults.ts. Their
+      // defaults there equal the values that used to live here, so no test
+      // needed to change its expectations; tests that specifically need a
+      // short job interval (for observing a real timer tick) now seed
+      // `Settings.jobs` directly via `settingsService.updateSection`.
     },
   },
 });

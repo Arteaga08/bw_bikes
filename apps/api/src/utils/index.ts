@@ -8,4 +8,5 @@ export * from "./list-query.js";
 export * from "./magic-bytes.js";
 export * from "./send-response.js";
 export * from "./slugify.js";
+export * from "./stats-range.js";
 export * from "./with-transaction.js";

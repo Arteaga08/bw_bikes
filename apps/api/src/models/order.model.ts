@@ -1,4 +1,5 @@
 import type {
+  BillingInfo,
   CaptureMethod,
   CURRENCY,
   OrderLineSnapshot,
@@ -8,6 +9,7 @@ import type {
   ShippingAddress,
 } from "@bw-bikes/shared";
 import { type Document, model, Schema, type Types } from "mongoose";
+import { billingInfoSchema } from "./schemas/billing-info.schema.js";
 import { MAX_PRICE_CENTS } from "./schemas/product-variant.schema.js";
 import { MAX_ORDER_LINES, orderLineSchema } from "./schemas/order-line.schema.js";
 import { type IOrderShipment, shipmentSchema } from "./schemas/shipment.schema.js";
@@ -55,6 +57,8 @@ export interface IOrder extends Document {
   shippingAddress: ShippingAddress;
   /** Present only once the order has shipped. */
   shipment?: IOrderShipment;
+  /** Optional CFDI data (M7), copied from the cart at checkout — never required, unlike `shippingAddress`. */
+  billingInfo?: BillingInfo;
   idempotencyKey?: string;
   statusHistory: IOrderStatusHistoryEntry[];
   /** Sealed once, when the day-5 warning about the expiring authorization went out. */
@@ -170,6 +174,12 @@ const orderSchema = new Schema<IOrder>(
     // so this is where that guarantee actually gets enforced — `createFromCart`
     // reads it off the cart and refuses with 400 if it is missing.
     shippingAddress: { type: shippingAddressSchema, required: true },
+
+    // Optional CFDI data (M7, design-spec open decision #3, captured but not
+    // timbrado): copied from the cart at checkout exactly like
+    // `shippingAddress`, except it stays optional — an order is valid with
+    // none of it.
+    billingInfo: { type: billingInfoSchema },
 
     // Absent until the order ships; captured by `recordShipment` alongside the
     // `processing → shipped` transition, corrected afterward without touching

@@ -1,3 +1,4 @@
+import type { BillingInfo } from "./billing.js";
 import type { CURRENCY, FulfillmentMode, ItemType, PriceCents } from "./catalog.js";
 import type { ShipmentSummary, ShippingAddress } from "./shipping.js";
 
@@ -158,6 +159,8 @@ export interface PublicOrder {
   shippingAddress: ShippingAddress;
   /** Present only once the order has shipped. */
   shipment?: ShipmentSummary;
+  /** Optional CFDI data, captured on the cart and frozen here (M7) — not billed against, just kept for a future invoicing milestone. */
+  billingInfo?: BillingInfo;
   statusHistory: OrderStatusHistoryEntry[];
   createdAt: string;
   updatedAt: string;

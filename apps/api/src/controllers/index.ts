@@ -5,5 +5,7 @@ export * from "./cart.controller.js";
 export * from "./category.controller.js";
 export * from "./inventory.controller.js";
 export * from "./order.controller.js";
+export * from "./product-view.controller.js";
+export * from "./settings.controller.js";
 export * from "./upload.helpers.js";
 export * from "./webhook.controller.js";

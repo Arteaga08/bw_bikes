@@ -2,11 +2,13 @@ import { Router } from "express";
 import { getPublicAccessoryBySlug, listPublicAccessories } from "../controllers/accessory.controller.js";
 import { getPublicBikeBySlug, listPublicBikes } from "../controllers/bike.controller.js";
 import { createCategoryController } from "../controllers/category.controller.js";
-import { publicReadRateLimiter, validate } from "../middlewares/index.js";
+import { recordProductView } from "../controllers/product-view.controller.js";
+import { productViewRateLimiter, publicReadRateLimiter, validate } from "../middlewares/index.js";
 import { accessoryCategoryService } from "../services/accessory-category.service.js";
 import { bikeCategoryService } from "../services/bike-category.service.js";
 import {
   categoryListQuerySchema,
+  productViewSchema,
   publicProductListQuerySchema,
   slugParamSchema,
 } from "../validators/index.js";
@@ -51,5 +53,10 @@ router.get("/bikes/:slug", validate(slugParamSchema, "params"), getPublicBikeByS
 
 router.get("/accessories", validate(publicProductListQuerySchema, "query"), listPublicAccessories);
 router.get("/accessories/:slug", validate(slugParamSchema, "params"), getPublicAccessoryBySlug);
+
+// M7: anonymous "someone looked at this" event, feeding the preferences
+// report. `productViewRateLimiter` runs in addition to the router-wide
+// `publicReadRateLimiter` above — see that limiter's own comment.
+router.post("/views", productViewRateLimiter, validate(productViewSchema), recordProductView);
 
 export { router as catalogRouter };

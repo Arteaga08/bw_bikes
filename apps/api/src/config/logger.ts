@@ -21,6 +21,13 @@ export const logger = pino({
       "*.secret",
       "twoFactor.secret",
       "*.twoFactor.secret",
+      // Fiscal id (M7's optional CFDI `BillingInfo`) — a government-issued
+      // identifier, same category as any other PII this logger already keeps
+      // out of the log stream.
+      "rfc",
+      "*.rfc",
+      "billingInfo.rfc",
+      "*.billingInfo.rfc",
     ],
     censor: "[redacted]",
   },

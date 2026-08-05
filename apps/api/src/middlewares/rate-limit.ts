@@ -138,6 +138,20 @@ export const webhookRateLimiter = createRateLimiter({
 });
 
 /**
+ * Product view events (M7's `POST /catalog/views`). A write, not a read, so
+ * it doesn't share `publicReadRateLimiter`'s much larger browsing budget —
+ * but it's still an anonymous, cheap event, so the ceiling stays generous
+ * relative to the truly sensitive actions above. It runs *in addition to*
+ * `publicReadRateLimiter` (mounted for the whole catalog router), not
+ * instead of it: this is the extra, write-specific budget on top.
+ */
+export const productViewRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: "Demasiadas solicitudes. Intenta de nuevo más tarde.",
+});
+
+/**
  * Global backstop mounted once in the middleware chain (app.ts), after
  * verifyOrigin and before the routers. Generous on purpose — it's a safety
  * net against abusive traffic in general, not the primary control for any
