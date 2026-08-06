@@ -43,6 +43,7 @@ const ordersSchema = new Schema<OrdersSettings>(
     orderAuthAlertHours: { type: Number, required: true, min: 1 },
     orderAuthCancelHours: { type: Number, required: true, min: 1 },
     paymentReconciliationAfterMinutes: { type: Number, required: true, min: 1 },
+    requestThreeDSecure: { type: String, required: true, enum: ["automatic", "any"] },
   },
   { _id: false },
 );

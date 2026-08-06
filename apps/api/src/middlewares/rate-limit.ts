@@ -123,6 +123,23 @@ export const checkoutRateLimiter = createRateLimiter({
 });
 
 /**
+ * `POST /auth/refresh`. The refresh token itself is an unguessable CSPRNG
+ * opaque value (token.service.ts), so this isn't a brute-force guard the way
+ * `loginRateLimiter` is — it's a backstop against a stolen-token flood and
+ * against the family-revocation side effect: `rotateRefreshToken` revokes an
+ * entire session family the moment it sees a token reused, so a script
+ * hammering this endpoint with a leaked token is also the fastest way to lock
+ * a real user out of every device at once. Generous enough for legitimate
+ * multi-tab/multi-device silent refresh, which the flat 10/15min profile of
+ * `authActionRateLimiter` was never sized for.
+ */
+export const refreshRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: "Demasiados intentos de renovación de sesión. Intenta de nuevo más tarde.",
+});
+
+/**
  * The payment webhook. It is mounted before the global backstop (raw body must
  * precede `express.json`), so without this it would have no limiter at all.
  *

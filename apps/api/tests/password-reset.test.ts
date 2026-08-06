@@ -5,6 +5,7 @@ import { User } from "../src/models/index.js";
 import { cookieHeader, parseCookies } from "./helpers/cookies.js";
 import { createUser } from "./helpers/factories.js";
 import { captureNextResetLink, extractToken } from "./helpers/mailer.js";
+import { stubPasswordBreach } from "./helpers/password-breach.js";
 
 const BASE = "/api/v1/auth";
 
@@ -74,6 +75,32 @@ describe("password reset", () => {
 
     const loginNewRes = await request(app).post(`${BASE}/login`).send({ email, password: newPassword });
     expect(loginNewRes.status).toBe(200);
+  });
+
+  it("refuses a new password the HaveIBeenPwned corpus reports as breached", async () => {
+    const app = buildApp();
+    const email = "breach-check-reset@example.com";
+    await createUser({ email, password: "Old-Password-1", emailVerified: true });
+
+    const captured = captureNextResetLink();
+    await request(app).post(`${BASE}/forgot-password`).send({ email });
+    const token = extractToken(captured.getUrl());
+
+    stubPasswordBreach(true);
+    const res = await request(app)
+      .post(`${BASE}/reset-password`)
+      .send({ token, password: "Correct-Horse-1", passwordConfirm: "Correct-Horse-1" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain("fugas de datos");
+
+    // The token is still live — a rejected breached password must not burn
+    // the customer's one reset attempt.
+    stubPasswordBreach(false);
+    const retry = await request(app)
+      .post(`${BASE}/reset-password`)
+      .send({ token, password: "Correct-Horse-1", passwordConfirm: "Correct-Horse-1" });
+    expect(retry.status).toBe(200);
   });
 
   it("gives the same generic response for forgot-password regardless of whether the email exists", async () => {

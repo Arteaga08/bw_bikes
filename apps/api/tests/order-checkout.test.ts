@@ -70,6 +70,19 @@ describe("checkout", () => {
     });
   });
 
+  it("passes the 3D Secure policy from Settings and the cart's shipping address to the gateway", async () => {
+    const stripe = stubStripe();
+    await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
+
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+
+    expect(res.status).toBe(201);
+    expect(stripe.createPayment.mock.calls[0]![0]).toMatchObject({
+      requestThreeDSecure: "automatic",
+      shippingAddress: expect.objectContaining({ postalCode: expect.any(String) }),
+    });
+  });
+
   it("holds stock for the order, on the checkout deadline and not the generic one", async () => {
     stubStripe();
     await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku, qty: 2 });
@@ -188,6 +201,44 @@ describe("checkout", () => {
       });
     });
 
+    it("persists a new intentId when the gateway's idempotency key has expired and it minted a fresh PaymentIntent", async () => {
+      // Stripe only remembers a provider idempotency key for ~24h. A replay
+      // past that window returns a genuinely new PaymentIntent rather than the
+      // original — regression test for `payment.intentId` being left pointing
+      // at the old, uncompletable one.
+      const stripe = stubStripe();
+      await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
+
+      const first = await request(app)
+        .post(ORDERS)
+        .set("Cookie", cookie)
+        .set("Idempotency-Key", "checkout-expired-key")
+        .send({});
+      const originalIntentId = (await Order.findById(first.body.data.order.id).exec())?.payment.intentId;
+
+      // Simulate the key having expired at Stripe: the next call to
+      // createPayment (the replay) mints a brand new intent instead of
+      // resolving to the one already recorded.
+      const freshIntentId = "pi_test_replayed_fresh";
+      stripe.createPayment.mockResolvedValueOnce({
+        intentId: freshIntentId,
+        clientSecret: `${freshIntentId}_secret_test`,
+        state: "pending",
+        amountCents: 19_999_900,
+      });
+
+      const second = await request(app)
+        .post(ORDERS)
+        .set("Cookie", cookie)
+        .set("Idempotency-Key", "checkout-expired-key")
+        .send({});
+
+      expect(second.body.data.order.id).toBe(first.body.data.order.id);
+      const updated = await Order.findById(first.body.data.order.id).exec();
+      expect(updated?.payment.intentId).toBe(freshIntentId);
+      expect(updated?.payment.intentId).not.toBe(originalIntentId);
+    });
+
     it("lets two different customers use the same key without colliding", async () => {
       stubStripe();
       const other = await createCustomerSession(app, "buyer2@example.com");
@@ -272,6 +323,43 @@ describe("checkout", () => {
     const stale = await Order.findById(first.body.data.order.id).exec();
     expect(stale?.status).toBe("cancelled");
     expect((await InventoryItem.findOne({ sku: bike.sku }).exec())?.reserved).toBe(1);
+  });
+
+  it("cancels the superseded checkout's PaymentIntent at the gateway, not only locally", async () => {
+    // Regression test: a superseded order used to be marked `cancelled`
+    // without ever telling Stripe, leaving its old clientSecret chargeable.
+    // If the customer completed that stale payment afterwards, the resulting
+    // webhook would try `cancelled -> paid`, which the state machine refuses —
+    // money captured with no order left to receive it.
+    const stripe = stubStripe();
+    await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
+
+    const first = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
+    await request(app).post(ORDERS).set("Cookie", cookie).send({});
+
+    const staleOrder = await Order.findById(first.body.data.order.id).exec();
+    expect(stripe.cancelPayment).toHaveBeenCalledWith(
+      staleOrder?.payment.intentId,
+      `cancel_${String(staleOrder?._id)}`,
+    );
+  });
+
+  it("does not supersede (and keeps the reservation) when the gateway refuses to cancel the old intent", async () => {
+    // If Stripe reports the superseded PaymentIntent can no longer be
+    // cancelled (e.g. it was already captured), the order must not be
+    // silently marked `cancelled` — the reconciliation job is left to resolve
+    // it against whatever the gateway actually did.
+    const stripe = stubStripe();
+    stripe.cancelPayment.mockRejectedValueOnce(new Error("already captured"));
+    await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
+
+    const first = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
+    await request(app).post(ORDERS).set("Cookie", cookie).send({});
+
+    const staleOrder = await Order.findById(first.body.data.order.id).exec();
+    expect(staleOrder?.status).toBe("pending_payment");
   });
 
   it("refuses an empty cart", async () => {

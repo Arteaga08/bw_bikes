@@ -1,4 +1,4 @@
-import type { CaptureMethod, PaymentState } from "@bw-bikes/shared";
+import type { CaptureMethod, PaymentState, ShippingAddress, ThreeDSecurePolicy } from "@bw-bikes/shared";
 
 /**
  * The narrow, domain-owned surface every payment gateway must implement.
@@ -32,6 +32,22 @@ export interface CreatePaymentInput {
   idempotencyKey: string;
   /** Echoed back on every webhook, so an event can be traced to an order without a lookup table. */
   metadata: Record<string, string>;
+  /**
+   * The gateway's 3D Secure challenge policy for this payment — read from
+   * `Settings.orders.requestThreeDSecure`, never hardcoded in the adapter, so
+   * the owner can tighten it without a redeploy. This is the control that
+   * shifts chargeback liability to the card issuer; omitting it silently
+   * would leave that decision to Stripe's dashboard defaults instead of this
+   * codebase's own security posture.
+   */
+  requestThreeDSecure: ThreeDSecurePolicy;
+  /**
+   * Where the order ships. Not required by the gateway, but handed over
+   * because Radar's risk scoring uses address/BIN mismatches as a fraud
+   * signal — an omission a random POST wouldn't notice, but a real fraud
+   * attempt would benefit from.
+   */
+  shippingAddress?: ShippingAddress;
 }
 
 /**

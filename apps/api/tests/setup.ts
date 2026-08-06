@@ -1,9 +1,10 @@
 import { MongoMemoryReplSet } from "mongodb-memory-server";
 import mongoose from "mongoose";
-import { afterAll, afterEach, beforeAll, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { resetTransactionSupport } from "../src/config/db.js";
 import { resetRateLimiters } from "../src/middlewares/rate-limit.js";
 import { resetSettingsCache } from "../src/services/settings.service.js";
+import { stubPasswordBreach } from "./helpers/password-breach.js";
 
 /**
  * Shared DB fixture for the whole suite. Connects mongoose's default
@@ -33,6 +34,14 @@ beforeAll(async () => {
   // brand new, so make sure it isn't answered from a previous run's cache.
   resetTransactionSupport();
 }, 120_000); // first run downloads the mongod binary; give it room
+
+beforeEach(() => {
+  // Default every test to "not breached" so the suite never depends on
+  // reaching the real HIBP API — a test that wants the breached-password path
+  // calls `stubPasswordBreach(true)` itself, which overrides this until the
+  // next test's `restoreAllMocks` + this hook re-applies the default.
+  stubPasswordBreach(false);
+});
 
 afterEach(async () => {
   // Wipe every collection between tests so cases stay independent, without

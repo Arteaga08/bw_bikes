@@ -52,6 +52,7 @@ function toAdminSettings(doc: ISettings): AdminSettings {
       orderAuthAlertHours: doc.orders.orderAuthAlertHours,
       orderAuthCancelHours: doc.orders.orderAuthCancelHours,
       paymentReconciliationAfterMinutes: doc.orders.paymentReconciliationAfterMinutes,
+      requestThreeDSecure: doc.orders.requestThreeDSecure,
     },
     pricing: { taxRateBps: doc.pricing.taxRateBps },
     shipping: {

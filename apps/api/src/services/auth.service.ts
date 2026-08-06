@@ -18,6 +18,10 @@ import {
   verifyChallengeToken,
 } from "./token.service.js";
 import { completeTwoFactorEnrollment, verifyTwoFactorCode } from "./two-factor.service.js";
+import { passwordBreachService } from "./password-breach.service.js";
+
+const BREACHED_PASSWORD_MESSAGE =
+  "Esta contraseña ha aparecido en fugas de datos conocidas. Elige una diferente.";
 
 export type LoginOutcome =
   | { kind: "session"; user: IUser; accessToken: string; refreshToken: string }
@@ -70,6 +74,14 @@ async function establishSession(user: IUser, meta: SessionMeta): Promise<Session
  * exists resolves exactly like a fresh registration — same response, same
  * timing shape — but creates nothing and sends nothing. The controller
  * always replies 201 with the same generic message either way.
+ *
+ * The breach check runs **before** the existing-email lookup, and its
+ * outcome is the only thing that can turn this into a 400 — deliberately,
+ * so the response depends only on the password an attacker chose, never on
+ * whether the email they probed already has an account. Checking it after
+ * the early-return would have made a well-known breached password (trivial
+ * for an attacker to pick on purpose) a two-value oracle for account
+ * existence: 400 only ever possible for an email that doesn't exist yet.
  */
 export async function registerUser(input: {
   email: string;
@@ -77,6 +89,10 @@ export async function registerUser(input: {
   firstName: string;
   lastName: string;
 }): Promise<void> {
+  if (await passwordBreachService.isBreached(input.password)) {
+    throw new AppError(BREACHED_PASSWORD_MESSAGE, 400);
+  }
+
   const email = input.email.toLowerCase().trim();
   const existing = await User.findOne({ email });
   if (existing) return;
@@ -146,6 +162,10 @@ export async function resetPassword(rawToken: string, newPassword: string): Prom
 
   if (!user) {
     throw new AppError("Token de restablecimiento inválido o expirado.", 400);
+  }
+
+  if (await passwordBreachService.isBreached(newPassword)) {
+    throw new AppError(BREACHED_PASSWORD_MESSAGE, 400);
   }
 
   user.password = newPassword;
@@ -235,6 +255,17 @@ export async function completeAdminTwoFactorEnrollment(
   return result;
 }
 
+/**
+ * Rotates the refresh token and mints a fresh access token — but only for an
+ * account still in good standing. `protect` already revalidates `emailVerified`
+ * indirectly (nothing before that middleware requires it, and every mutating
+ * route runs behind it), but nothing previously stopped `refresh` itself from
+ * handing a **new** access token to an account whose email verification was
+ * revoked after the original login — the rotated refresh token would keep
+ * minting valid sessions until it expired on its own (up to
+ * `JWT_REFRESH_EXPIRES_IN`), rather than the access token's much shorter
+ * `JWT_ACCESS_EXPIRES_IN`.
+ */
 export async function refreshSession(rawRefreshToken: string, meta: SessionMeta): Promise<SessionResult> {
   const rotated = await rotateRefreshToken(rawRefreshToken, meta);
   if (!rotated) {
@@ -244,6 +275,10 @@ export async function refreshSession(rawRefreshToken: string, meta: SessionMeta)
   const user = await User.findById(rotated.userId);
   if (!user) {
     throw new AppError("Sesión inválida o expirada.", 401);
+  }
+
+  if (!user.emailVerified) {
+    throw new AppError("Verifica tu correo antes de iniciar sesión.", 403);
   }
 
   const accessToken = signAccessToken({ id: String(user._id), role: user.role });

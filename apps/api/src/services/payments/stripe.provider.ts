@@ -159,8 +159,26 @@ function extractMetadata(object: Record<string, unknown>): Record<string, string
   return result;
 }
 
+/** Stripe's own shape for the address Radar scores against. `undefined` when the order has none yet. */
+function toStripeShipping(address: CreatePaymentInput["shippingAddress"]): Stripe.PaymentIntentCreateParams.Shipping | undefined {
+  if (!address) return undefined;
+  return {
+    name: address.recipientName,
+    phone: address.phone,
+    address: {
+      line1: address.street,
+      ...(address.interiorNumber !== undefined ? { line2: address.interiorNumber } : {}),
+      city: address.city,
+      state: address.state,
+      postal_code: address.postalCode,
+      country: address.country,
+    },
+  };
+}
+
 async function createPayment(input: CreatePaymentInput): Promise<PaymentIntentResult> {
   try {
+    const shipping = toStripeShipping(input.shippingAddress);
     const intent = await stripeClient().paymentIntents.create(
       {
         amount: input.amountCents,
@@ -168,6 +186,14 @@ async function createPayment(input: CreatePaymentInput): Promise<PaymentIntentRe
         capture_method: input.captureMethod,
         payment_method_types: PAYMENT_METHOD_TYPES,
         metadata: input.metadata,
+        // The control that shifts chargeback liability to the card issuer.
+        // `"automatic"` (Stripe's own default) lets its risk engine decide;
+        // `"any"` forces a challenge on every card payment. Read from
+        // Settings, never a literal here — see CreatePaymentInput's doc.
+        payment_method_options: {
+          card: { request_three_d_secure: input.requestThreeDSecure },
+        },
+        ...(shipping ? { shipping } : {}),
       },
       // Stripe's own idempotency: a retried network call resolves to the same
       // PaymentIntent instead of creating a second one for the same purchase.
