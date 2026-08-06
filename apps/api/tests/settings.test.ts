@@ -23,6 +23,7 @@ describe("Settings — singleton editable by section", () => {
         orderAuthAlertHours: 120,
         orderAuthCancelHours: 156,
         paymentReconciliationAfterMinutes: 20,
+        requestThreeDSecure: "automatic",
       },
       pricing: { taxRateBps: 1600 },
       shipping: { accessoryFlatCents: 25_000, freeShippingThresholdCents: 200_000 },
@@ -70,6 +71,7 @@ describe("Settings — singleton editable by section", () => {
           orderAuthAlertHours: 100,
           orderAuthCancelHours: 140,
           paymentReconciliationAfterMinutes: 25,
+          requestThreeDSecure: "automatic",
         }),
     ]);
 
@@ -85,6 +87,7 @@ describe("Settings — singleton editable by section", () => {
       orderAuthAlertHours: 100,
       orderAuthCancelHours: 140,
       paymentReconciliationAfterMinutes: 25,
+      requestThreeDSecure: "automatic",
     });
     // Untouched sections kept their defaults — the two concurrent writes did
     // not clobber anything outside the section each one targeted.
@@ -124,6 +127,47 @@ describe("Settings — singleton editable by section", () => {
     expect(entry?.after).toMatchObject({ taxRateBps: 800 });
   });
 
+  it("rejects an orders write with an invalid 3D Secure policy", async () => {
+    const app: App = buildApp();
+    const adminCookie = await createAdminSession(app);
+
+    const res = await request(app)
+      .put(`${ADMIN}/settings/orders`)
+      .set("Cookie", adminCookie)
+      .send({
+        orderPaymentTtlMinutes: 15,
+        orderAuthAlertHours: 120,
+        orderAuthCancelHours: 156,
+        paymentReconciliationAfterMinutes: 20,
+        requestThreeDSecure: "always", // not a value Stripe's request_three_d_secure accepts
+      });
+
+    expect(res.status).toBe(400);
+
+    const stored = await Settings.findOne({ key: "global" }).exec();
+    expect(stored?.orders.requestThreeDSecure ?? "automatic").toBe("automatic");
+  });
+
+  it("lets the admin tighten the 3D Secure policy to 'any' for every future checkout", async () => {
+    const app: App = buildApp();
+    const adminCookie = await createAdminSession(app);
+
+    const res = await request(app)
+      .put(`${ADMIN}/settings/orders`)
+      .set("Cookie", adminCookie)
+      .send({
+        orderPaymentTtlMinutes: 15,
+        orderAuthAlertHours: 120,
+        orderAuthCancelHours: 156,
+        paymentReconciliationAfterMinutes: 20,
+        requestThreeDSecure: "any",
+      });
+
+    expect(res.status).toBe(200);
+    const stored = await Settings.findOne({ key: "global" }).exec();
+    expect(stored?.orders.requestThreeDSecure).toBe("any");
+  });
+
   it("rejects an orders write where the alert threshold isn't lower than the cancel threshold", async () => {
     const app: App = buildApp();
     const adminCookie = await createAdminSession(app);
@@ -136,6 +180,7 @@ describe("Settings — singleton editable by section", () => {
         orderAuthAlertHours: 160,
         orderAuthCancelHours: 156,
         paymentReconciliationAfterMinutes: 20,
+        requestThreeDSecure: "automatic",
       });
 
     expect(res.status).toBe(400);

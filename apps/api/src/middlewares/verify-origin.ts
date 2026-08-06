@@ -18,17 +18,33 @@ export function verifyOrigin(req: Request, _res: Response, next: NextFunction): 
     return;
   }
 
-  const origin = req.headers.origin ?? req.headers.referer;
-  if (!origin) {
+  const header = req.headers.origin ?? req.headers.referer;
+  if (!header) {
     next();
     return;
   }
 
-  const isAllowed = allowedOrigins.some((allowed) => origin.startsWith(allowed));
+  // Parsed and compared as an exact origin (scheme + host + port), never by
+  // string prefix: `startsWith` would let `https://midominio.com.evil.com`
+  // through for an allowed `https://midominio.com`, since the attacker's host
+  // simply *starts with* the legitimate one. A Referer carries a full URL
+  // (path and query included), so it is normalized to its origin the same way
+  // before comparing.
+  const origin = parseOrigin(header);
+  const isAllowed = origin !== null && allowedOrigins.some((allowed) => origin === parseOrigin(allowed));
   if (!isAllowed) {
     next(new AppError("Origen no permitido", 403));
     return;
   }
 
   next();
+}
+
+/** `null` for a header that isn't a parseable absolute URL — treated as not allowed, never as a pass-through. */
+function parseOrigin(value: string): string | null {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
 }

@@ -36,6 +36,10 @@ export const settingsOrdersSchema = Joi.object({
   orderAuthAlertHours: positiveInt("Las horas de aviso de autorización"),
   orderAuthCancelHours: positiveInt("Las horas de cancelación de autorización"),
   paymentReconciliationAfterMinutes: positiveInt("Los minutos de gracia de reconciliación"),
+  requestThreeDSecure: Joi.string().valid("automatic", "any").required().messages({
+    "any.only": 'La política de 3D Secure debe ser "automatic" o "any".',
+    "any.required": "La política de 3D Secure es obligatoria.",
+  }),
 }).custom((value, helpers) => {
   if (value.orderAuthAlertHours >= value.orderAuthCancelHours) {
     return helpers.message({

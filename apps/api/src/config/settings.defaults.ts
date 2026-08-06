@@ -1,4 +1,4 @@
-import type { SettingsSections } from "@bw-bikes/shared";
+import type { SettingsSections, ThreeDSecurePolicy } from "@bw-bikes/shared";
 
 /**
  * Defaults for the `Settings` singleton (M7). Every constant here used to
@@ -40,6 +40,15 @@ export const DEFAULT_ORDER_AUTH_CANCEL_HOURS = 156;
 export const DEFAULT_PAYMENT_RECONCILIATION_AFTER_MINUTES = 20;
 
 /**
+ * `"automatic"` matches Stripe's own default — its risk engine decides
+ * whether a given card payment needs a 3D Secure challenge. Selling
+ * high-value bikes is exactly the case the admin might want to tighten this
+ * to `"any"` (force a challenge on every payment) without a redeploy, which is
+ * why it lives in `Settings` rather than being a constant in the provider.
+ */
+export const DEFAULT_REQUEST_THREE_D_SECURE: ThreeDSecurePolicy = "automatic";
+
+/**
  * IVA in basis points, used **only** to break the tax out of a total that
  * already contains it (Mexican B2C prices are quoted IVA-included). Never
  * adds to what is charged: `tax = round(total × bps / (10000 + bps))`.
@@ -76,6 +85,7 @@ export const SETTINGS_DEFAULTS: SettingsSections = Object.freeze({
     orderAuthAlertHours: DEFAULT_ORDER_AUTH_ALERT_HOURS,
     orderAuthCancelHours: DEFAULT_ORDER_AUTH_CANCEL_HOURS,
     paymentReconciliationAfterMinutes: DEFAULT_PAYMENT_RECONCILIATION_AFTER_MINUTES,
+    requestThreeDSecure: DEFAULT_REQUEST_THREE_D_SECURE,
   }),
   pricing: Object.freeze({ taxRateBps: DEFAULT_TAX_RATE_BPS }),
   shipping: Object.freeze({

@@ -19,6 +19,7 @@ import {
   authActionRateLimiter,
   loginRateLimiter,
   protect,
+  refreshRateLimiter,
   restrictTo,
   twoFactorRateLimiter,
   validate,
@@ -70,8 +71,11 @@ router.post(
   disableTwoFactorHandler,
 );
 
-router.post("/refresh", refresh);
-router.post("/logout", logoutHandler);
+router.post("/refresh", refreshRateLimiter, refresh);
+// Presenting a refresh cookie is not a credential guess, but logout is still a
+// cheap, unauthenticated-in-effect endpoint (any cookie value reaches the
+// handler) worth the same baseline throttle as the other auth actions above.
+router.post("/logout", authActionRateLimiter, logoutHandler);
 router.post("/logout-all", protect, logoutAllHandler);
 
 router.post("/forgot-password", authActionRateLimiter, validate(forgotPasswordSchema), forgotPasswordHandler);

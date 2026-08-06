@@ -1,10 +1,10 @@
 import cookieParser from "cookie-parser";
 import express, { type Express } from "express";
-import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import { corsMiddleware } from "./config/cors.js";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
+import { securityHeaders } from "./config/security-headers.js";
 import { errorHandler, globalRateLimiter, mongoSanitize, notFound, sanitizeInput, verifyOrigin } from "./middlewares/index.js";
 import { v1Router, webhookRouter } from "./routes/index.js";
 
@@ -50,7 +50,7 @@ export function buildApp(): Express {
   }
 
   app.disable("x-powered-by");
-  app.use(helmet());
+  app.use(securityHeaders);
   app.use(corsMiddleware);
   app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === "/api/v1/health" } }));
 

@@ -310,6 +310,8 @@ async function createFromCart(userId: string, input: CreateOrderInput, actor: Ac
       // gateway payment even when our own request never got a response.
       idempotencyKey: `order_${String(order._id)}`,
       metadata: { orderId: String(order._id), orderNumber: order.orderNumber },
+      requestThreeDSecure: settings.orders.requestThreeDSecure,
+      shippingAddress,
     });
 
     order.payment.intentId = payment.intentId;
@@ -345,20 +347,35 @@ async function createFromCart(userId: string, input: CreateOrderInput, actor: Ac
  * payment, and a database that holds it is a database that can leak it. It is
  * recovered instead by asking the gateway to create the payment again with the
  * *same* provider idempotency key, which by definition returns the original
- * payment rather than a second one.
+ * payment rather than a second one — **as long as that key is still live**.
+ * Stripe only remembers an idempotency key for ~24h; a replay after that
+ * window gets back a genuinely new PaymentIntent instead. When the id Stripe
+ * hands back differs from the one already on the order, it is persisted here
+ * — otherwise the unique partial index on `payment.intentId` (order.model.ts)
+ * would keep pointing at a payment nobody can complete any more, and the
+ * webhook would have to fall back to matching by `metadata.orderId` instead of
+ * finding the order directly.
  */
 async function replayCheckout(order: IOrder): Promise<CheckoutResult> {
   if (order.status !== "pending_payment") {
     throw new AppError(`La orden ${order.orderNumber} ya fue procesada.`, 409);
   }
 
+  const settings = await settingsService.get();
   const payment = await getPaymentProvider().createPayment({
     amountCents: order.totalCents,
     currency: order.currency,
     captureMethod: order.payment.captureMethod,
     idempotencyKey: `order_${String(order._id)}`,
     metadata: { orderId: String(order._id), orderNumber: order.orderNumber },
+    requestThreeDSecure: settings.orders.requestThreeDSecure,
+    shippingAddress: order.shippingAddress,
   });
+
+  if (payment.intentId !== order.payment.intentId) {
+    order.payment.intentId = payment.intentId;
+    await order.save();
+  }
 
   return { order: toPublicOrder(order), clientSecret: payment.clientSecret };
 }
@@ -425,11 +442,36 @@ async function failOrder(order: IOrder, reason: string): Promise<void> {
 /**
  * Drops any earlier checkout the same customer left hanging, giving its stock
  * back immediately instead of waiting out the 15-minute deadline.
+ *
+ * The superseded order's PaymentIntent is cancelled at the gateway *before*
+ * the order itself is marked `cancelled` — mirroring
+ * `cancelExpiredAuthorizations` (order-maintenance.service.ts), the sibling
+ * flow that already gets this right. Skipping that call would leave the old
+ * `clientSecret` live: a customer who still has the superseded checkout tab
+ * open could complete that payment after this function returns, and the
+ * resulting `payment_intent.succeeded` webhook would try `cancelled → paid`,
+ * a transition the state machine refuses (order-state.ts) — money captured
+ * with no order left to receive it.
  */
 async function cancelStalePendingOrders(userId: string): Promise<void> {
   const stale = await Order.find({ userId, status: "pending_payment" }).exec();
 
   for (const order of stale) {
+    if (order.payment.intentId) {
+      try {
+        await getPaymentProvider().cancelPayment(order.payment.intentId, `cancel_${String(order._id)}`);
+      } catch (error) {
+        // A payment already captured, or a gateway hiccup, must not stop the
+        // stock release below — but it does mean this order must not be
+        // superseded silently, since the card may still be chargeable.
+        logger.error(
+          { err: error, orderId: String(order._id) },
+          "Could not cancel a superseded order's payment intent before replacing it",
+        );
+        continue;
+      }
+    }
+
     await inventoryService.release(reservationRef(order));
     await applyTransition(
       order,

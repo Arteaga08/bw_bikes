@@ -29,11 +29,23 @@ export interface InventorySettings {
  * alert useless. Enforced in the model, not only in the validator, because
  * the value no longer arrives exclusively through HTTP once it lives here.
  */
+/**
+ * The gateway's 3D Secure challenge policy for a checkout's PaymentIntent.
+ * `"automatic"` (Stripe's own default) lets its risk engine decide whether to
+ * challenge; `"any"` forces a challenge on every card payment regardless of
+ * risk score. Not a security control this codebase can weaken by omission —
+ * requesting 3DS at all is what shifts chargeback liability to the card
+ * issuer, so the field exists precisely so the owner can tighten it (e.g. to
+ * `"any"`) for a catalog of high-value goods without a redeploy.
+ */
+export type ThreeDSecurePolicy = "automatic" | "any";
+
 export interface OrdersSettings {
   orderPaymentTtlMinutes: number;
   orderAuthAlertHours: number;
   orderAuthCancelHours: number;
   paymentReconciliationAfterMinutes: number;
+  requestThreeDSecure: ThreeDSecurePolicy;
 }
 
 /** IVA in basis points, used only to break the tax out of a total that already contains it. */
