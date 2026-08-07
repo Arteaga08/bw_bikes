@@ -22,6 +22,8 @@ module.exports = {
         'btn-pri-disabled-text': '#A89355',
         'btn-sec-disabled':      '#D8D8D3',
         'btn-sec-disabled-text': '#9A9A95',
+        error:   '#B42318',
+        success: '#15803D',
       },
       fontFamily: {
         display: ['Hanken Grotesk', 'sans-serif'], // usar font-extrabold (800)

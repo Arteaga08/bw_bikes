@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-06T20:40:00Z",
+  "generatedAt": "2026-08-07T17:10:00Z",
   "title": "Design System: Black and White Bikes",
   "extensions": {
     "colorMeta": {
@@ -27,6 +27,18 @@
         "displayName": "Grafito Rino",
         "canonical": "#3A3A38",
         "tonalRamp": ["#0A0A0A", "#1C1C1A", "#2B2B29", "#3A3A38", "#54544F", "#767671", "#9A9A95", "#D8D8D3"]
+      },
+      "color-error": {
+        "role": "semantic",
+        "displayName": "Error",
+        "canonical": "#B42318",
+        "tonalRamp": ["#3D0B06", "#6B140C", "#8F1B10", "#B42318", "#D13B2C", "#E56753", "#F0968A", "#FBDAD5"]
+      },
+      "color-success": {
+        "role": "semantic",
+        "displayName": "Success",
+        "canonical": "#15803D",
+        "tonalRamp": ["#052E14", "#0A4B21", "#0F652E", "#15803D", "#22A555", "#5CC584", "#9CDFB6", "#DBF3E4"]
       }
     },
     "typographyMeta": {

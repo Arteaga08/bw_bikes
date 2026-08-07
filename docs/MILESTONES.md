@@ -13,7 +13,7 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M5 — Carrito, órdenes y pagos | 1 | ✅ Hecho (pendiente de merge) | `feat/m05-ordenes-pagos` | Módulo crítico. Ver detalle abajo |
 | M6 — Envíos, estatus y solicitudes | 1 | ✅ Hecho (pendiente de merge) | `feat/m06-envios-solicitudes` | Cierra la decisión abierta #1. Ver detalle abajo |
 | M7 — Settings, analítica y adapters | 1 | ✅ Hecho (mergeado) | `feat/m07-settings-analitica` | Cierra la fase 1. Ver detalle abajo |
-| M8 — Shell del dashboard | 2 | ⏳ Pendiente | — | |
+| M8 — Shell del dashboard | 2 | ✅ Hecho (pendiente de merge) | `feat/m08-dashboard-shell` | Arranca la fase 2. Ver detalle abajo |
 | M9 — Órdenes y cola de confirmación | 2 | ⏳ Pendiente | — | |
 | M10 — Catálogo en admin | 2 | ⏳ Pendiente | — | |
 | M11 — Inventario, solicitudes, settings, analítica, auditoría | 2 | ⏳ Pendiente | — | |
@@ -799,3 +799,127 @@ Los tres criterios de cierre, con su prueba (`settings.test.ts`, 6; `stats.test.
 parcialmente abierta como decisión de negocio, no como pendiente técnico); Sentry (decisión #4 sí,
 pero implementación en M15); adapters reales de Resend/Telegram (M15); panel visual de Settings y
 analítica (M11).
+
+---
+
+## M8 — Shell del dashboard
+
+**Arranca la fase 2.** `apps/web` estaba vacío desde M1; este milestone es el scaffolding real.
+
+**Entregado:**
+- **Scaffolding de `apps/web`**: Next 16.3 (App Router, Turbopack) + React 19.2 + TypeScript estricto
+  (extiende `tsconfig.base.json`) + Tailwind v4 (`@theme` CSS-first). Integrado a los scripts raíz
+  (`build`/`lint`/`typecheck`/`test` vía `pnpm -r`, más `dev:web` hermano de `dev:api`).
+  `.env.development.example` / `.env.production.example` versionados (`API_URL`, server-only, sin
+  `NEXT_PUBLIC_*`); `.env.*.local` y `.next/` ya cubiertos por `.gitignore`.
+- **Transporte por proxy, no CORS directo**: `next.config.ts` reescribe `/api/v1/:path*` hacia
+  `API_URL`. El navegador solo conoce el origen del dashboard — las cookies `HttpOnly`+`Secure`+
+  `SameSite=strict` y host-only del backend llegan como cookies same-origin, sin tocar
+  `apps/api/src/utils/cookies.ts` ni debilitar `allowedOrigins`. `corsMiddleware` y `verifyOrigin`
+  siguen intactos, protegiendo el acceso directo a la API.
+- **Tokens de marca** (`src/app/globals.css`): traducción completa de `handoff/tokens.css` +
+  `handoff/tailwind.config.snippet.js` a `@theme` — colores (negro/blanco/grafito/dorado + estados de
+  botón), tipografía (`text-display`…`text-badge` con line-height/letter-spacing), espaciado de 8px,
+  radios. Fuentes Hanken Grotesk (3 pesos) vía `next/font/local`. Se agregaron tres tokens de estado
+  semántico (`estado-exito/advertencia/error` + variantes `-soft`) que no existían en el sistema de
+  diseño — el badge de estatus operativo necesita más semántica que negro/blanco/grafito/dorado, y el
+  dorado es acento exclusivo del CTA. **Pendiente de tu revisión de diseño**, documentado también en
+  el comentario del propio `globals.css`.
+- **`lib/auth/session.ts`**: `requireAdminSession()`, el guard server-side. Sin cookie → `redirect`;
+  `/auth/me` no-OK o inalcanzable → `redirect` a login (nunca un 500); rol fuera de
+  `admin`/`superadmin` (ej. un `customer` con sesión válida) → `redirect` a `/admin/sin-acceso`, ruta
+  distinta del login. `lib/api/server.ts` (`serverApiFetch`, `cache: "no-store"` siempre, reenvía
+  `Cookie` a mano porque un fetch de servidor no la adjunta solo) y `lib/api/client.ts` (`apiFetch`,
+  mismo origen gracias al proxy) comparten el mapeo `fail`/`error` → `ApiError` vía
+  `lib/api/parse-response.ts`.
+- **Login de dos pasos** (`admin/login/`): `LoginForm.tsx` maneja las tres ramas reales del backend
+  — sin 2FA, 2FA ya enrolado (pide TOTP), 2FA sin enrolar (arranca `2fa/enroll/start`, renderiza QR
+  con `qrcode` desde el `otpauthUrl` + secreto en texto). Cierra el pendiente que M2 dejó
+  explícitamente para el dashboard. Countdown de los 5 minutos de la cookie de challenge con reset a
+  credenciales al expirar (UX, no control de seguridad — el backend sigue siendo quien de verdad
+  rechaza la cookie vencida).
+- **Shell** (`components/shell/`): `Sidebar` (fija en desktop, drawer en móvil vía
+  `MobileNavContext`, cierra sola al cambiar de ruta) + `TopBar` + `Breadcrumbs` (derivados de
+  `usePathname` contra el mapa `{slug: label}` de `lib/nav.ts`) + `CommandPalette` con `Cmd/Ctrl+K`,
+  **lazy** de verdad (el `dynamic()` solo se monta tras la primera apertura, `everOpened` gatea el
+  `import()`). Nav completa con los 7 destinos reales de la fase 2 (Inicio/Órdenes/Catálogo/
+  Inventario/Solicitudes/Analítica/Configuración), cada uno con una página placeholder
+  (`PlaceholderPage`) que anuncia su milestone real. El rinoceronte aparece **una sola vez en todo el
+  panel**: en `/admin/login`, junto al eyebrow — nunca dentro del shell, por decisión ya tomada en
+  `DESIGN_SYSTEM.md` §5.
+- **Componentes base** (`components/ui/`): `Button` (4 variantes × 6 estados reales, `loading`
+  conserva ancho), `Input` (label/error/helper con `aria-describedby`/`aria-invalid`), `Badge`,
+  `Modal` (`role="dialog"`, focus trap, Escape, overlay), `Toast`+`ToastProvider` (`aria-live`, máx 3,
+  auto-dismiss por variante, error sin auto-dismiss), `DataTable` (deliberadamente tonto — no decide
+  estados de carga/vacío, eso es de la página), `Pagination` (consume `ApiResponseMeta` de
+  `packages/shared`), `Skeleton` + presets, `EmptyState`, `ErrorBoundary`, `PageHeader`.
+  `hooks/use-focus-trap.ts` reutilizado por `Modal` y `CommandPalette`.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm typecheck   (shared + api + web)  → limpio
+pnpm lint        (api + web)           → limpio
+pnpm build       (shared + api + web, con API_URL en el entorno) → limpio
+pnpm test        (api + web)           → api: 33 archivos, 344/344; web: 6 archivos, 24/24
+pnpm audit --prod                      → sin vulnerabilidades conocidas
+```
+Los dos criterios de cierre están cubiertos por test, no solo por inspección manual
+(`src/lib/auth/session.test.ts`): sesión inválida (sin cookie, `/auth/me` rechaza, o la API está
+inalcanzable) → siempre `redirect` a `/admin/login`, nunca un 500; un `customer` con sesión
+**válida** → `redirect` a `/admin/sin-acceso`, ruta distinta; `admin`/`superadmin` → el guard
+devuelve el usuario. `src/app/admin/login/LoginForm.test.tsx` cubre las tres ramas del login
+(directo al panel, pide TOTP, pide enrolamiento con QR).
+
+**Pendiente, no automatizable en este entorno:** el checklist manual con la API viva (login real →
+QR → TOTP → panel; confirmar en DevTools que el proxy relaya `Set-Cookie` correctamente) quedó
+preparado en el plan pero no se ejecutó aquí por no contar con una instancia de Mongo real en este
+entorno — los tests automatizados de `apps/api` sí corren contra Mongo real en memoria, pero el
+servidor de desarrollo necesita una URI real. Ejecutarlo antes de mergear.
+
+**Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
+- **`vitest ^4.1.10` + `@vitejs/plugin-react ^5.2.0` + `vite ^7.3.6` explícitos** — `vitest`
+  necesitaba `test.projects` (nativo desde v3) para separar los tests `node` de los `jsdom` sin un
+  archivo de workspace aparte; `@vitejs/plugin-react` en su versión más reciente (6.x) exige
+  `vite ^8`, que solo existe en beta. Se fijó `@vitejs/plugin-react@5.2.0` (soporta `vite ^7` estable)
+  en vez de arrastrar una dependencia en beta a un monorepo de producción.
+- **`pnpm.packageExtensions` en el `package.json` raíz, inyectando `vitest` como peer opcional de
+  `@testing-library/jest-dom`** — `apps/api` (vitest 2.x) y `apps/web` (vitest 4.x) conviviendo en el
+  mismo workspace hacían que pnpm resolviera la carpeta de "hoist" compartida (`.pnpm/node_modules/`)
+  con la versión de `apps/api`, y como `jest-dom` no declara `vitest` como peer, su `declare module
+  "vitest"` (los matchers `toHaveClass`, `toBeInTheDocument`, etc.) terminaba aumentando el tipo
+  equivocado — `tsc` compilaba pero cada matcher de jest-dom era un error de tipos. La extensión
+  fuerza a pnpm a crear una instancia de `jest-dom` con el `vitest` correcto de `apps/web` inyectado.
+- **Imports relativos en `apps/web` sin sufijo `.js`**, a diferencia de `apps/api`. `tsconfig.json`
+  usa `moduleResolution: "bundler"` (lo que exige Next), y aunque `tsc` acepta el sufijo `.js` sobre
+  archivos `.ts` bajo ese modo, Turbopack (el bundler real de `next build`) resuelve rutas relativas
+  de forma literal y no encuentra un `server.js` que no existe. Se detectó con un `next build` real,
+  no con `tsc` ni con Vitest.
+- **`eslint.config.js` usa las exportaciones flat nativas de `eslint-config-next`
+  (`eslint-config-next/core-web-vitals`) en vez de `FlatCompat`** — la traducción de nombres legacy
+  (`"next/core-web-vitals"`) vía `FlatCompat` producía un `TypeError: Converting circular structure to
+  JSON` con ESLint 9.39 + Next 16. Next 16 ya publica sus configs como arrays flat listos para
+  spread, sin capa de compatibilidad.
+- **Cinco componentes reescritos para no llamar `setState` sin condición dentro de un efecto**
+  (`LoginForm`, `MobileNavContext`, `CommandPalette`, `CommandPaletteWrapper`) — regla nueva
+  `react-hooks/set-state-in-effect` de `eslint-plugin-react-hooks` 6 (empaquetada con
+  `eslint-config-next` en Next 16). Se migró al patrón documentado de React "ajustar estado durante
+  el render" (comparar contra un `prev` guardado en estado) en vez de un `useEffect` que solo
+  sincroniza estado interno, no un sistema externo. El único efecto real que sí sobrevive
+  (`LoginForm`, el countdown del challenge de 2FA) se dejó como efecto porque sí sincroniza con un
+  reloj — se le quitó únicamente el `setState` incondicional de su rama "deshabilitado".
+- **Bug real encontrado por el build, no por el linter**: un comentario en `globals.css` contenía
+  literalmente `*/` dentro del texto (`--color-*/--text-*`), cerrando el comentario CSS a la mitad y
+  corrompiendo el resto del bloque `@theme`. Lo detectó el parser de CSS de Turbopack en `next build`;
+  ni `tsc` ni `eslint` lo ven porque no tocan `.css`.
+- **`afterEach(cleanup())` agregado a `vitest.setup.ts`** — `@testing-library/react` no registra
+  limpieza automática para Vitest (a diferencia de Jest); sin esto, cada `render()` de un `it()`
+  posterior se apilaba sobre el DOM del anterior, y `LoginForm.test.tsx` empezó a fallar con
+  "multiple elements" al tener varias pruebas en el mismo archivo.
+
+**Fuera de este milestone:** cualquier página de negocio real (órdenes, catálogo, inventario,
+solicitudes, analítica, configuración) — los siete destinos de la nav son placeholders, M9–M11 los
+reemplazan. Storefront público (M12–M14). `proxy.ts` de Next (no hace falta — el guard vive en el
+layout server-side). Ajuste de `app.set("trust proxy", ...)` a dos saltos para producción con el
+proxy delante — anotado para el momento del despliegue, no aplica en desarrollo. Playwright / pruebas
+contra servicios externos reales (siguen pospuestas al recorrido final de la fase, según lo acordado).

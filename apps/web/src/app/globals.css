@@ -1,0 +1,192 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   BLACK AND WHITE BIKES — DESIGN TOKENS (dashboard, registro "product")
+   Traducción de handoff/tokens.css + handoff/tailwind.config.snippet.js al
+   `@theme` de Tailwind v4. Fuente de verdad visual: handoff/DESIGN_SYSTEM.md.
+   No inventar valores sueltos — todo sale de esta escala.
+   ========================================================================== */
+
+@theme {
+  --font-display: var(--font-hanken), sans-serif;
+  --font-ui: var(--font-hanken), sans-serif;
+  --font-body: var(--font-hanken), sans-serif;
+
+  /* ---- Color · sistema 60/30/10 ---- */
+  --color-negro: #0a0a0a;
+  --color-blanco: #fafafa;
+  --color-grafito: #3a3a38;
+  --color-dorado: #f2b705;
+
+  /* ---- Superficies (jerarquía de profundidad, sin sombras) ---- */
+  --color-base: #f1f1ee;
+  --color-surface: #ffffff;
+  --color-overlay: #0a0a0a;
+  --color-borde: #e2e2de;
+
+  /* ---- Estados de botón primario (dorado) ---- */
+  --color-dorado-hover: #d9a404;
+  --color-dorado-pressed: #bf9003;
+  --color-dorado-disabled: #f6e4ac;
+  --color-dorado-disabled-text: #a89355;
+
+  /* ---- Estados de botón secundario (negro) ---- */
+  --color-negro-hover: #2b2b29;
+  --color-negro-pressed: #3a3a38;
+  --color-negro-disabled: #d8d8d3;
+  --color-negro-disabled-text: #9a9a95;
+
+  /*
+   * Colores de estado semántico — hueco §6 de DESIGN_SYSTEM.md ("Badges/tags
+   * ... sin spec de color formal" cubría solo accent/unavailable). El badge
+   * de estatus operativo (pagado/pendiente/cancelado, en preparación/
+   * enviado) necesita éxito/advertencia/error y la paleta de marca solo
+   * tiene negro/blanco/grafito/dorado — con el dorado reservado como acento
+   * único de CTA. Deliberadamente desaturados (misma familia tonal que
+   * grafito, no colores de alarma saturados) para que un renglón de tabla
+   * lleno de badges no compita con el único dorado de la vista. Documentado
+   * en DESIGN_SYSTEM.md §6 al cerrar M8, pendiente de tu revisión.
+   */
+  --color-estado-exito: #4a5d3a;
+  --color-estado-exito-soft: #e8ece3;
+  --color-estado-advertencia: #8a5a1f;
+  --color-estado-advertencia-soft: #f1e7d6;
+  --color-estado-error: #7a3b32;
+  --color-estado-error-soft: #f1e0dc;
+
+  /* ---- Tipografía — escala completa con line-height y letter-spacing ---- */
+  --text-display: 64px;
+  --text-display--line-height: 1.02;
+  --text-display--letter-spacing: -0.5px;
+
+  --text-h1: 44px;
+  --text-h1--line-height: 1.08;
+  --text-h1--letter-spacing: -0.4px;
+
+  --text-h2: 30px;
+  --text-h2--line-height: 1.15;
+  --text-h2--letter-spacing: -0.3px;
+
+  --text-h3: 20px;
+  --text-h3--line-height: 1.3;
+
+  --text-body-l: 16px;
+  --text-body-l--line-height: 1.6;
+
+  --text-body: 14px;
+  --text-body--line-height: 1.6;
+
+  --text-ui: 13px;
+  --text-ui--line-height: 1.4;
+
+  --text-eyebrow: 11px;
+  --text-eyebrow--line-height: 1.4;
+  --text-eyebrow--letter-spacing: 3px;
+
+  --text-caption: 11px;
+  --text-caption--line-height: 1.5;
+
+  --text-badge: 9px;
+  --text-badge--line-height: 1.3;
+  --text-badge--letter-spacing: 1px;
+
+  /* ---- Espaciado · grid base 8px ---- */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  --spacing-3xl: 64px;
+
+  /* ---- Radios y controles ----
+     Casi rectos en controles (precisión); mayores en superficies grandes
+     (suavizan sin restar precisión) — nunca box-shadow para elevación. */
+  --radius-control: 2px;
+  --radius-card: 10px;
+  --radius-card-lg: 14px;
+
+  /*
+   * Altura de control (44px) y transición (150ms) NO se declaran como
+   * tokens custom aquí: `h-11` (11 × --spacing base de 4px = 44px) y
+   * `duration-150` ya son utilidades nativas de Tailwind — "--height-*" y
+   * "--transition-duration-*" no son namespaces de @theme que generen
+   * utilidades (a diferencia de --color-*, --text-*, --spacing-*, --radius-*),
+   * así que declararlos aquí no habría producido `h-control`/`duration-fast`.
+   */
+}
+
+:root {
+  --focus-ring-width: 3px;
+  --focus-ring-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--color-base);
+  color: var(--color-negro);
+  font-family: var(--font-body);
+}
+
+/* Foco visible global (WCAG AA) — cada componente interactivo hereda esto a
+   menos que defina su propio color de anillo (dorado sobre fondo oscuro). */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-negro);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Skip link — oculto hasta recibir foco por teclado (FRONTEND_GUIDELINES §5). */
+.skip-link {
+  position: absolute;
+  left: var(--spacing-md);
+  top: -100px;
+  z-index: 100;
+  background: var(--color-negro);
+  color: var(--color-blanco);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-control);
+  transition: top var(--ease-fast);
+}
+
+.skip-link:focus-visible {
+  top: var(--spacing-md);
+  outline-color: var(--color-dorado);
+}
+
+/* Shimmer de skeleton — reserva el slot (aspect-ratio fijo en cada preset),
+   nunca provoca CLS al resolver. */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--color-borde) 25%, #ececE8 37%, var(--color-borde) 63%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  border-radius: var(--radius-control);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

@@ -67,10 +67,10 @@
     outline: var(--focus-ring-width) solid var(--color-negro);
     outline-offset: var(--focus-ring-offset);
   }
-  .field.is-error input { border-color: #C0392B; }
-  .field.is-error .field-msg { color: #C0392B; }
-  .field.is-success input { border-color: #2E7D4F; }
-  .field.is-success .field-msg { color: #2E7D4F; }
+  .field.is-error input { border-color: var(--color-error); border-width: var(--field-border-width-invalid); }
+  .field.is-error .field-msg { color: var(--color-error); }
+  .field.is-success input { border-color: var(--color-success); }
+  .field.is-success .field-msg { color: var(--color-success); }
   .field-msg {
     font-size: var(--text-caption);
     line-height: var(--lh-caption);
