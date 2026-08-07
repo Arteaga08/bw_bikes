@@ -1,0 +1,26 @@
+{
+  "id": "2ea6244a",
+  "phase": "completed",
+  "pageUrl": "/playground.html",
+  "sourceFile": "handoff/playground.html",
+  "expectedVariants": 3,
+  "arrivedVariants": 3,
+  "visibleVariant": 2,
+  "paramValues": {},
+  "pendingEventSeq": null,
+  "pendingEvent": null,
+  "deliveryLease": null,
+  "checkpointRevision": 19,
+  "activeOwner": "f7803723",
+  "sourceMarkers": {},
+  "fallbackMode": null,
+  "annotationArtifacts": [],
+  "diagnostics": [
+    {
+      "error": "carbonize_cleanup_required",
+      "file": "handoff/playground.html",
+      "message": "Accepted variant still has carbonize markers that must be folded into source CSS."
+    }
+  ],
+  "updatedAt": "2026-08-06T20:46:30.745Z"
+}

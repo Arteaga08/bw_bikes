@@ -1,0 +1,5 @@
+{
+  "files": ["handoff/playground.html"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html"
+}

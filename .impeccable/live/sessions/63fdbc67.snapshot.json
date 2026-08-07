@@ -1,0 +1,20 @@
+{
+  "id": "63fdbc67",
+  "phase": "discarded",
+  "pageUrl": "/playground.html",
+  "sourceFile": "handoff/playground.html",
+  "expectedVariants": 3,
+  "arrivedVariants": 3,
+  "visibleVariant": 1,
+  "paramValues": {},
+  "pendingEventSeq": null,
+  "pendingEvent": null,
+  "deliveryLease": null,
+  "checkpointRevision": 12,
+  "activeOwner": "07e43c3b",
+  "sourceMarkers": {},
+  "fallbackMode": null,
+  "annotationArtifacts": [],
+  "diagnostics": [],
+  "updatedAt": "2026-08-06T20:35:37.844Z"
+}

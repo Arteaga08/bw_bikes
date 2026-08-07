@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Black and White Bikes — Playground de componentes pendientes</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  body {
+    margin: 0;
+    background: var(--surface-base);
+    color: var(--color-negro);
+    font-family: var(--font-family);
+  }
+  .lab-section {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: var(--space-3xl) var(--space-lg);
+    border-bottom: 1px solid var(--border-color);
+  }
+  .lab-section h2 {
+    font-weight: var(--weight-display);
+    font-size: var(--text-h2);
+    line-height: var(--lh-h2);
+    letter-spacing: var(--track-h2);
+    margin: 0 0 var(--space-xs);
+  }
+  .lab-section p.lab-note {
+    font-size: var(--text-body);
+    line-height: var(--lh-body);
+    color: var(--color-grafito);
+    margin: 0 0 var(--space-xl);
+    max-width: 65ch;
+  }
+  .lab-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-lg);
+    align-items: flex-start;
+  }
+
+  /* ---- Inputs (hueco 1: pendiente formalizar en DESIGN_SYSTEM.md §6) ---- */
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    width: 260px;
+  }
+  .field label {
+    font-size: var(--text-eyebrow);
+    line-height: var(--lh-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-grafito);
+  }
+  .field input {
+    height: var(--control-height);
+    padding: 0 var(--space-md);
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border-color);
+    background: var(--surface-card);
+    font-family: var(--font-family);
+    font-size: var(--text-body);
+    color: var(--color-negro);
+  }
+  .field input:focus-visible {
+    outline: var(--focus-ring-width) solid var(--color-negro);
+    outline-offset: var(--focus-ring-offset);
+  }
+  .field.is-error input { border-color: #C0392B; }
+  .field.is-error .field-msg { color: #C0392B; }
+  .field.is-success input { border-color: #2E7D4F; }
+  .field.is-success .field-msg { color: #2E7D4F; }
+  .field-msg {
+    font-size: var(--text-caption);
+    line-height: var(--lh-caption);
+    color: var(--color-grafito);
+  }
+
+  /* ---- Iconografía (hueco 2: sin set propio, candidato Lucide ~2px) ---- */
+  .icon-row { gap: var(--space-xl); }
+  .icon-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: var(--text-caption);
+    color: var(--color-grafito);
+  }
+  .icon-item svg { width: 24px; height: 24px; stroke: var(--color-negro); stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---- Badges/tags (hueco 4: spec informal ya en DESIGN_SYSTEM.md §6) ---- */
+  .badge {
+    display: inline-block;
+    background: var(--color-dorado);
+    color: var(--color-negro);
+    font-size: 9px;
+    font-weight: var(--weight-ui);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: var(--radius-control);
+  }
+  .badge-outline {
+    display: inline-block;
+    background: transparent;
+    color: var(--color-negro);
+    border: 1px solid var(--color-negro);
+    font-size: 9px;
+    font-weight: var(--weight-ui);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: var(--radius-control);
+  }
+
+  /* ---- Breakpoints (hueco 3: solo Display/H1 en mobile definido) ---- */
+  .bp-frame {
+    border: 1px solid var(--border-color);
+    background: var(--surface-card);
+    border-radius: var(--radius-card);
+    padding: var(--space-lg);
+    resize: horizontal;
+    overflow: auto;
+    min-width: 320px;
+    max-width: 100%;
+    width: 480px;
+  }
+  .bp-frame h3 {
+    font-weight: var(--weight-ui);
+    font-size: var(--text-h3);
+    line-height: var(--lh-h3);
+    margin: 0 0 var(--space-sm);
+  }
+  .bp-frame p {
+    font-size: var(--text-body);
+    line-height: var(--lh-body);
+    color: var(--color-grafito);
+    margin: 0;
+  }
+
+  /* ---- Rinoceronte — acento decorativo (ya definido en Style Brief pág. 5) ---- */
+  .rhino-examples {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+  }
+  .rhino-example-label {
+    font-size: var(--text-caption);
+    color: var(--color-grafito);
+    margin: 0 0 var(--space-sm);
+  }
+
+  /* Uso 1: junto a un eyebrow, antes del título */
+  .rhino-eyebrow-demo {
+    background: var(--surface-overlay);
+    padding: var(--space-lg);
+    border-radius: var(--radius-card);
+  }
+  .rhino-eyebrow-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0 0 var(--space-sm);
+  }
+  .rhino-eyebrow-row img { width: 16px; height: 16px; }
+  .rhino-eyebrow-row span {
+    font-size: var(--text-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-dorado);
+  }
+  .rhino-eyebrow-demo h3 {
+    font-family: var(--font-family);
+    font-weight: var(--weight-display);
+    font-size: var(--text-h2);
+    line-height: var(--lh-h2);
+    color: var(--color-blanco);
+    margin: 0;
+  }
+
+  /* Uso 2: junto al nombre de producto (reemplaza el separador, descartado) */
+  .rhino-product-demo {
+    background: var(--surface-card);
+    border: 1px solid var(--border-color);
+    padding: var(--space-lg);
+    border-radius: var(--radius-card);
+  }
+  .rhino-product-name {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+  .rhino-product-name img { width: 20px; height: 20px; }
+  .rhino-product-name h3 {
+    font-family: var(--font-family);
+    font-weight: var(--weight-ui);
+    font-size: var(--text-h3);
+    line-height: var(--lh-h3);
+    color: var(--color-negro);
+    margin: 0;
+  }
+
+  /* Uso 3: firma de footer, junto a labels o aviso legal */
+  .rhino-footer-demo {
+    background: var(--surface-overlay);
+    color: var(--color-blanco);
+    padding: var(--space-lg);
+    border-radius: var(--radius-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: var(--text-caption);
+  }
+  .rhino-footer-demo .rhino-footer-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+  .rhino-footer-demo img { width: 14px; height: 14px; }
+
+  /* Uso 4: dentro de un modal de confirmación */
+  .rhino-modal-backdrop {
+    background: var(--border-color);
+    padding: var(--space-2xl) var(--space-lg);
+    border-radius: var(--radius-card);
+    display: flex;
+    justify-content: center;
+  }
+  .rhino-modal {
+    background: var(--surface-card);
+    border-radius: var(--radius-card-lg);
+    padding: var(--space-xl);
+    max-width: 320px;
+    text-align: center;
+  }
+  .rhino-modal-confirm {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    margin: 0 0 var(--space-sm);
+  }
+  .rhino-modal-confirm img { width: 16px; height: 16px; }
+  .rhino-modal-confirm span {
+    font-family: var(--font-family);
+    font-weight: var(--weight-ui);
+    font-size: var(--text-body);
+    color: var(--color-negro);
+  }
+  .rhino-modal p {
+    font-size: var(--text-caption);
+    color: var(--color-grafito);
+    margin: 0;
+  }
+</style>
+</head>
+<body>
+
+  <section class="lab-section" id="lab-inputs">
+    <h2>1. Inputs de formulario</h2>
+    <p class="lab-note">Pendiente en DESIGN_SYSTEM.md §6: estados focus/error/success sin spec formal. Punto de partida con los tokens existentes (border-color, radius-control) — seleccionar cada campo en impeccable live para iterar.</p>
+    <div class="lab-row">
+      <div class="field" id="field-default">
+        <label for="input-default">Correo electrónico</label>
+        <input id="input-default" type="email" placeholder="tu@correo.mx" />
+      </div>
+      <div class="field is-error" id="field-error">
+        <label for="input-error">Código postal</label>
+        <input id="input-error" type="text" value="ABC12" />
+        <span class="field-msg">Ingresa un código postal válido de 5 dígitos.</span>
+      </div>
+      <div class="field is-success" id="field-success">
+        <label for="input-success">Teléfono</label>
+        <input id="input-success" type="tel" value="618 123 4567" />
+        <span class="field-msg">Verificado.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="lab-section" id="lab-icons">
+    <h2>2. Iconografía</h2>
+    <p class="lab-note">Decidido en DESIGN_SYSTEM.md §6: Phosphor Icons, peso <code>regular</code> (~2px de trazo, mismo grosor que el rinoceronte). Los SVG de abajo son placeholders de forma equivalente — al integrar el paquete <code>@phosphor-icons</code> en código se sustituyen por los sprites reales, no se redibujan a mano.</p>
+    <div class="lab-row icon-row" id="icon-set">
+      <div class="icon-item">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Buscar
+      </div>
+      <div class="icon-item">
+        <svg viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 2-1.58l1.65-7.42H5.12"/></svg>
+        Carrito
+      </div>
+      <div class="icon-item">
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Cuenta
+      </div>
+      <div class="icon-item">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Confirmar
+      </div>
+      <div class="icon-item">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Alerta
+      </div>
+      <div class="icon-item">
+        <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        Filtros
+      </div>
+    </div>
+  </section>
+
+  <section class="lab-section" id="lab-badges">
+    <h2>3. Badges / tags</h2>
+    <p class="lab-note">Spec informal ya en DESIGN_SYSTEM.md §6: fondo dorado, texto negro, 9px, Medium, mayúsculas. Se incluye una variante outline como alternativa a evaluar.</p>
+    <div class="lab-row">
+      <span class="badge" id="badge-nuevo">Nuevo</span>
+      <span class="badge" id="badge-ebike">E-Bike</span>
+
+      <span class="badge-agotado" id="badge-agotado">Agotado</span>
+
+    </div>
+  </section>
+
+  <section class="lab-section" id="lab-breakpoints">
+    <h2>4. Breakpoints responsive</h2>
+    <p class="lab-note">Pendiente en DESIGN_SYSTEM.md §6: solo el comportamiento de Display/H1 en mobile está definido. El marco de abajo es redimensionable horizontalmente (arrastra la esquina inferior derecha) para probar el punto de quiebre de un componente de referencia.</p>
+    <div class="bp-frame" id="bp-frame">
+      <h3>Rhino Race</h3>
+      <p>Bicicleta de ruta de competición con cuadro de carbono monocasco y geometría agresiva, pensada para quien busca velocidad pura.</p>
+    </div>
+  </section>
+
+  <section class="lab-section" id="lab-rhino">
+    <h2>5. Rinoceronte — acento decorativo</h2>
+    <p class="lab-note">Mapa completo en DESIGN_SYSTEM.md §5.1–5.2: acento pequeño (12–28px), un solo color plano, nunca marca de agua, máximo dos apariciones por vista. El separador entre reglas horizontales quedó descartado tras probarlo en vivo — se sintió genérico. Estos son los 4 usos válidos vigentes.</p>
+    <div class="rhino-examples">
+      <div>
+        <p class="rhino-example-label">Uso 1 — junto a un eyebrow (Home, confirmación de pedido, páginas de contenido)</p>
+        <div class="rhino-eyebrow-demo" id="rhino-eyebrow-demo">
+          <div class="rhino-eyebrow-row">
+            <img src="./brand-assets/rhino-dorado.svg" alt="" />
+            <span>Edición 2026</span>
+          </div>
+          <h3>Beyond the ritmo</h3>
+        </div>
+      </div>
+      <div>
+        <p class="rhino-example-label">Uso 2 — junto al nombre del producto (Ficha de producto)</p>
+        <div class="rhino-product-demo" id="rhino-product-demo">
+          <div class="rhino-product-name">
+            <img src="./brand-assets/rhino-negro.svg" alt="" />
+            <h3>Rhino Race</h3>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="rhino-example-label">Uso 3 — firma de footer, junto a labels o aviso legal</p>
+        <div class="rhino-footer-demo" id="rhino-footer-demo">
+          <span class="rhino-footer-brand">
+            <img src="./brand-assets/rhino-dorado.svg" alt="" />
+            © 2026 Black and White Bikes
+          </span>
+          <span>Durango, México</span>
+        </div>
+      </div>
+      <div>
+        <p class="rhino-example-label">Uso 4 — dentro de un modal de confirmación</p>
+        <div class="rhino-modal-backdrop">
+          <div class="rhino-modal" id="rhino-modal-demo">
+            <div class="rhino-modal-confirm">
+              <img src="./brand-assets/rhino-dorado.svg" alt="" />
+              <span>Agregado al carrito</span>
+            </div>
+            <p>Rhino Urban · Talla M</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</body>
+</html>

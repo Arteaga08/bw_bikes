@@ -1,0 +1,193 @@
+/* ==========================================================================
+   BLACK AND WHITE BIKES — DESIGN TOKENS
+   Fuente de verdad para colores, tipografía, espaciado y componentes.
+   Importar este archivo antes de escribir cualquier componente nuevo.
+   ========================================================================== */
+
+@font-face {
+  font-family: 'Hanken Grotesk';
+  src: url('./fonts/Hanken-Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Hanken Grotesk';
+  src: url('./fonts/Hanken-Medium.ttf') format('truetype');
+  font-weight: 500;
+}
+@font-face {
+  font-family: 'Hanken Grotesk';
+  src: url('./fonts/Hanken-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+}
+
+:root {
+  /* ---- Color · sistema 60/30/10 ---- */
+  --color-negro:   #0A0A0A;  /* primario · 30% */
+  --color-blanco:  #FAFAFA;  /* primario · 30% */
+  --color-grafito: #3A3A38;  /* secundario · 30% */
+  --color-dorado:  #F2B705;  /* acento · 10% — CTAs, precios, focus */
+
+  /* ---- Superficies (jerarquía de profundidad, sin sombras) ---- */
+  --surface-base:    #F1F1EE;  /* fondo de página */
+  --surface-card:    #FFFFFF;  /* tarjetas, inputs */
+  --surface-overlay: #0A0A0A;  /* modal, dropdown, toast */
+  --border-color:    #E2E2DE;
+
+  /* ---- Estados de botón primario (dorado) ---- */
+  --btn-pri-default: #F2B705;
+  --btn-pri-hover:   #D9A404;
+  --btn-pri-pressed: #BF9003;
+  --btn-pri-disabled:#F6E4AC;
+  --btn-pri-disabled-text: #A89355;
+
+  /* ---- Estados de botón secundario (negro) ---- */
+  --btn-sec-default: #0A0A0A;
+  --btn-sec-hover:   #2B2B29;
+  --btn-sec-pressed: #3A3A38;
+  --btn-sec-disabled:#D8D8D3;
+  --btn-sec-disabled-text: #9A9A95;
+
+  /* ---- Focus ring (siempre 3px, separado 2px) ---- */
+  --focus-ring-width: 3px;
+  --focus-ring-offset: 2px;
+  --focus-ring-color-on-dark: var(--color-dorado);
+  --focus-ring-color-on-light: var(--color-negro);
+
+  /* ---- Tipografía ---- */
+  --font-family: 'Hanken Grotesk', sans-serif;
+  --weight-display: 800;  /* títulos, hero */
+  --weight-ui: 500;       /* botones, nav, labels */
+  --weight-body: 400;     /* párrafos */
+
+  --text-display: 64px;  --lh-display: 1.02;  --track-display: -0.5px;
+  --text-h1:      44px;  --lh-h1: 1.08;        --track-h1: -0.4px;
+  --text-h2:      30px;  --lh-h2: 1.15;        --track-h2: -0.3px;
+  --text-h3:      20px;  --lh-h3: 1.30;        --track-h3: 0;
+  --text-body-l:  16px;  --lh-body-l: 1.60;
+  --text-body:    14px;  --lh-body: 1.60;
+  --text-ui:      13px;  --lh-ui: 1.40;
+  --text-eyebrow: 11px;  --lh-eyebrow: 1.40;   --track-eyebrow: 3px;
+  --text-caption: 11px;  --lh-caption: 1.50;
+  --text-badge:   9px;   --lh-badge: 1.30;     --track-badge: 1px;
+
+  /* ---- Espaciado · grid base 8px ---- */
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* ---- Radios y controles ----
+     Casi rectos en controles (precisión, marca técnica); mayores en
+     superficies grandes (suavizan sin restar la sensación de precisión). */
+  --radius-control: 2px;   /* botones, inputs */
+  --radius-card:    10px;  /* tarjetas pequeñas */
+  --radius-card-lg: 14px;  /* frames, contenedores grandes */
+  --control-height: 44px;
+  --transition-fast: 150ms ease;
+}
+
+/* ==========================================================================
+   Clases base de botón — 3 variantes principales.
+   Ver DESIGN_SYSTEM.md para la matriz completa de 4 variantes × 6 estados.
+   ========================================================================== */
+
+.btn {
+  display: inline-block;
+  font-family: var(--font-family);
+  font-weight: var(--weight-ui);
+  font-size: var(--text-ui);
+  height: var(--control-height);
+  padding: 0 var(--space-lg);
+  border-radius: var(--radius-control);
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.btn-primary { background: var(--btn-pri-default); color: var(--color-negro); }
+.btn-primary:hover { background: var(--btn-pri-hover); }
+.btn-primary:active { background: var(--btn-pri-pressed); }
+.btn-primary:disabled { background: var(--btn-pri-disabled); color: var(--btn-pri-disabled-text); cursor: not-allowed; }
+.btn-primary:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-negro);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.btn-secondary { background: var(--btn-sec-default); color: var(--color-blanco); }
+.btn-secondary:hover { background: var(--btn-sec-hover); }
+.btn-secondary:active { background: var(--btn-sec-pressed); }
+.btn-secondary:disabled { background: var(--btn-sec-disabled); color: var(--btn-sec-disabled-text); cursor: not-allowed; }
+.btn-secondary:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-dorado);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.btn-ghost { background: transparent; color: var(--color-negro); border: 1px solid var(--color-negro); }
+.btn-ghost:hover { background: var(--surface-base); }
+.btn-ghost:active { background: var(--border-color); }
+.btn-ghost:disabled { color: #B5B5B0; border-color: #DCDCD7; cursor: not-allowed; }
+.btn-ghost:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-negro);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.btn-text { background: transparent; color: var(--color-negro); padding: 0 4px; border-radius: 0; border-bottom: 1px solid var(--color-negro); height: auto; }
+.btn-text:hover { color: var(--color-dorado); border-color: var(--color-dorado); }
+.btn-text:disabled { color: #B5B5B0; border-color: #DCDCD7; cursor: not-allowed; }
+.btn-text:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-negro);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* ---- Loading (btn-primary / btn-secondary) ----
+   Conserva el ancho, bloquea el click, spinner de 10px a la izquierda. */
+.btn-primary.is-loading,
+.btn-secondary.is-loading {
+  position: relative;
+  pointer-events: none;
+  color: transparent;
+}
+.btn-primary.is-loading::before,
+.btn-secondary.is-loading::before {
+  content: '';
+  position: absolute;
+  left: var(--space-lg);
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: btn-spin 600ms linear infinite;
+}
+.btn-primary.is-loading::before { color: var(--color-negro); }
+.btn-secondary.is-loading::before { color: var(--color-blanco); }
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   Badges/tags — decidido vía impeccable live (hueco §6 de DESIGN_SYSTEM.md).
+   ========================================================================== */
+
+.badge {
+  display: inline-block;
+  font-family: var(--font-family);
+  font-weight: var(--weight-ui);
+  font-size: var(--text-badge);
+  line-height: var(--lh-badge);
+  letter-spacing: var(--track-badge);
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: var(--radius-control);
+  background: var(--color-dorado);
+  color: var(--color-negro);
+}
+.badge-agotado {
+  background: var(--color-grafito);
+  color: var(--color-blanco);
+}

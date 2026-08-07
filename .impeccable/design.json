@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-06T20:40:00Z",
+  "title": "Design System: Black and White Bikes",
+  "extensions": {
+    "colorMeta": {
+      "dorado-triunfo": {
+        "role": "primary",
+        "displayName": "Dorado Triunfo",
+        "canonical": "#F2B705",
+        "tonalRamp": ["#3D2E00", "#7A5900", "#A87A00", "#BF9003", "#D9A404", "#F2B705", "#F6E4AC", "#FCF3D9"]
+      },
+      "negro-carbono": {
+        "role": "neutral",
+        "displayName": "Negro Carbono",
+        "canonical": "#0A0A0A",
+        "tonalRamp": ["#000000", "#0A0A0A", "#1A1A1A", "#2B2B29", "#3A3A38", "#5C5C58", "#8C8C88", "#D8D8D3"]
+      },
+      "blanco-hueso": {
+        "role": "neutral",
+        "displayName": "Blanco Hueso",
+        "canonical": "#FAFAFA",
+        "tonalRamp": ["#3A3A38", "#5C5C58", "#8C8C88", "#B5B5B0", "#D8D8D3", "#E2E2DE", "#F1F1EE", "#FAFAFA"]
+      },
+      "grafito-rino": {
+        "role": "neutral",
+        "displayName": "Grafito Rino",
+        "canonical": "#3A3A38",
+        "tonalRamp": ["#0A0A0A", "#1C1C1A", "#2B2B29", "#3A3A38", "#54544F", "#767671", "#9A9A95", "#D8D8D3"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Hero principal, se reduce 25% en mobile." },
+      "h1": { "displayName": "Headline", "purpose": "Título de sección." },
+      "h2": { "displayName": "Title", "purpose": "Bloques internos." },
+      "h3": { "displayName": "Product Title", "purpose": "Nombre de producto, título de tarjeta." },
+      "body-l": { "displayName": "Body Large", "purpose": "Texto editorial, máx. 65ch por línea." },
+      "body": { "displayName": "Body", "purpose": "Descripciones." },
+      "ui": { "displayName": "UI Label", "purpose": "Navegación, botones." },
+      "eyebrow": { "displayName": "Eyebrow", "purpose": "Kickers, labels de precio." },
+      "caption": { "displayName": "Caption", "purpose": "Precios secundarios, metadatos." },
+      "badge": { "displayName": "Badge", "purpose": "Tags de estado sobre tarjetas de producto (Nuevo, E-Bike, Agotado)." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "transition-fast", "value": "150ms ease", "purpose": "Transición de background-color/color en estados de botón." },
+      { "name": "spinner-spin", "value": "600ms linear infinite", "purpose": "Rotación del spinner en el estado .is-loading de los botones." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Una sola acción principal por vista (Comprar, Ir a pagar, Guardar cambios).",
+      "html": "<button class=\"ds-btn-primary\">Comprar</button>",
+      "css": ".ds-btn-primary { display: inline-block; font-family: 'Hanken Grotesk', sans-serif; font-weight: 500; font-size: 13px; height: 44px; padding: 0 24px; border-radius: 2px; border: none; background: #F2B705; color: #0A0A0A; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; } .ds-btn-primary:hover { background: #D9A404; } .ds-btn-primary:active { background: #BF9003; } .ds-btn-primary:disabled { background: #F6E4AC; color: #A89355; cursor: not-allowed; } .ds-btn-primary:focus-visible { outline: 3px solid #0A0A0A; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Acción de igual peso a la principal, no la principal (Ver bici, Cancelar).",
+      "html": "<button class=\"ds-btn-secondary\">Ver bici</button>",
+      "css": ".ds-btn-secondary { display: inline-block; font-family: 'Hanken Grotesk', sans-serif; font-weight: 500; font-size: 13px; height: 44px; padding: 0 24px; border-radius: 2px; border: none; background: #0A0A0A; color: #FAFAFA; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; } .ds-btn-secondary:hover { background: #2B2B29; } .ds-btn-secondary:active { background: #3A3A38; } .ds-btn-secondary:disabled { background: #D8D8D3; color: #9A9A95; cursor: not-allowed; } .ds-btn-secondary:focus-visible { outline: 3px solid #F2B705; outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Acción terciaria (Detalles, filtros).",
+      "html": "<button class=\"ds-btn-ghost\">Detalles</button>",
+      "css": ".ds-btn-ghost { display: inline-block; font-family: 'Hanken Grotesk', sans-serif; font-weight: 500; font-size: 13px; height: 44px; padding: 0 24px; border-radius: 2px; border: 1px solid #0A0A0A; background: transparent; color: #0A0A0A; cursor: pointer; transition: background-color 150ms ease; } .ds-btn-ghost:hover { background: #F1F1EE; } .ds-btn-ghost:active { background: #E2E2DE; } .ds-btn-ghost:disabled { color: #B5B5B0; border-color: #DCDCD7; cursor: not-allowed; } .ds-btn-ghost:focus-visible { outline: 3px solid #0A0A0A; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Button",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Navegación inline (Ver más, Seguir comprando).",
+      "html": "<button class=\"ds-btn-text\">Ver más</button>",
+      "css": ".ds-btn-text { display: inline-block; font-family: 'Hanken Grotesk', sans-serif; font-weight: 500; font-size: 13px; padding: 0 4px; background: transparent; color: #0A0A0A; border: none; border-bottom: 1px solid #0A0A0A; cursor: pointer; transition: color 150ms ease, border-color 150ms ease; } .ds-btn-text:hover { color: #F2B705; border-color: #F2B705; } .ds-btn-text:disabled { color: #B5B5B0; border-color: #DCDCD7; cursor: not-allowed; } .ds-btn-text:focus-visible { outline: 3px solid #0A0A0A; outline-offset: 2px; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Superficie de contenido (tarjeta de métrica, panel de filtro) — sin sombra, jerarquía por fondo y borde.",
+      "html": "<div class=\"ds-card\"><p class=\"ds-card-label\">Ventas del mes</p><p class=\"ds-card-value\">$47,800 MXN</p></div>",
+      "css": ".ds-card { background: #FFFFFF; border: 1px solid #E2E2DE; border-radius: 10px; padding: 24px; } .ds-card-label { font-family: 'Hanken Grotesk', sans-serif; font-weight: 400; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #3A3A38; margin: 0 0 8px; } .ds-card-value { font-family: 'Hanken Grotesk', sans-serif; font-weight: 800; font-size: 30px; color: #0A0A0A; margin: 0; }"
+    },
+    {
+      "name": "Accent Badge",
+      "kind": "chip",
+      "refersTo": "badge-accent",
+      "description": "Estado positivo sobre tarjeta de producto (Nuevo, E-Bike). Máximo dos visibles a la vez.",
+      "html": "<span class=\"ds-badge\">Nuevo</span>",
+      "css": ".ds-badge { display: inline-block; font-family: 'Hanken Grotesk', sans-serif; font-weight: 500; font-size: 9px; line-height: 1.3; letter-spacing: 1px; text-transform: uppercase; padding: 4px 8px; border-radius: 2px; background: #F2B705; color: #0A0A0A; }"
+    },
+    {
+      "name": "Unavailable Badge",
+      "kind": "chip",
+      "refersTo": "badge-unavailable",
+      "description": "Estado inerte de catálogo (Agotado). Usa el neutro secundario, no el par disabled de botón, porque necesita más contraste que un control desactivado. Decidido vía impeccable live el 2026-08-06.",
+      "html": "<span class=\"ds-badge-agotado\">Agotado</span>",
+      "css": ".ds-badge-agotado { display: inline-block; font-family: 'Hanken Grotesk', sans-serif; font-weight: 500; font-size: 9px; line-height: 1.3; letter-spacing: 1px; text-transform: uppercase; padding: 4px 8px; border-radius: 2px; background: #3A3A38; color: #FAFAFA; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "El Rinoceronte Embistiendo",
+    "overview": "Máxima fuerza con el mínimo movimiento necesario. No hay gesto de sobra en una embestida — cada línea de este sistema (tipografía sin adornos, espacio en blanco, un solo acento dorado) es contundente porque es económica, no a pesar de serlo. En el registro product del dashboard, eso se traduce a paneles densos que se leen sin esfuerzo: la información compite consigo misma, no con decoración. El sistema rechaza explícitamente dos direcciones: la plantilla DTC/e-commerce genérica (hero + tarjetas + trust badges + banda CTA, el reflejo de categoría que cualquier generador produce sin criterio) y la estética de deporte extremo/MTB agresivo (naranjas vibrantes, tipografía angular, fotos de salto). Black and White Bikes vende lujo contenido, no plantilla ni adrenalina.",
+    "keyCharacteristics": [
+      "Un solo acento (dorado) al ~10% de cualquier vista; negro y blanco cargan el 60%.",
+      "Jerarquía por espacio y contraste, nunca por sombra.",
+      "Una sola familia tipográfica en tres pesos, sin mezclar.",
+      "Grid de espaciado de 8px sin valores sueltos.",
+      "Componentes precisos y contenidos: cada estado (hover, focus, disabled) es deliberado, no casual."
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "El dorado nunca supera el 10% de una vista y nunca aparece dos veces como CTA primario en la misma pantalla. Su escasez es lo que lo hace leer como decisión, no como paleta.", "section": "colors" },
+      { "name": "The Two-Weight Rule", "body": "Nunca más de dos pesos tipográficos en un mismo bloque de contenido. Si un bloque necesita un tercer nivel de énfasis, se resuelve con tamaño o color, no con un tercer peso.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Ninguna superficie usa sombra para simular elevación, ni en reposo ni en hover. La diferencia de capa se lee por el fondo, punto.", "section": "elevation" },
+      { "name": "The Precise-and-Contained Rule", "body": "Ningún componente tiene un estado \"casual\": hover, focus, pressed, disabled y loading están todos definidos con el mismo rigor que el estado default. Un componente sin sus seis estados no está terminado.", "section": "components" }
+    ],
+    "dos": [
+      "Do usar el dorado (#F2B705) como único acento, máximo un CTA primario dorado por vista.",
+      "Do construir jerarquía con espacio (grid de 8px) y contraste de color, nunca con sombra.",
+      "Do implementar :focus-visible en las cuatro variantes de botón (anillo 3px, offset 2px) — WCAG AA.",
+      "Do mantener una sola familia tipográfica (Hanken Grotesk) en máximo dos pesos por bloque.",
+      "Do conservar el ancho de un botón en estado loading para evitar saltos de layout."
+    ],
+    "donts": [
+      "Don't usar plantilla DTC/e-commerce genérica: hero + 3 tarjetas + trust badges + banda CTA como gramática por defecto de una pantalla de dashboard.",
+      "Don't usar estética de deporte extremo/MTB agresivo: naranjas vibrantes, tipografía angular, fotografía de acción/salto.",
+      "Don't usar box-shadow para simular elevación en ninguna superficie, ni en reposo ni en hover.",
+      "Don't repetir el dorado como color de fondo o como decoración recurrente — es acento, nunca superficie.",
+      "Don't usar un radio de esquina fuera de la escala (2px control / 10px card / 14px card-lg) sin justificar el porqué.",
+      "Don't dejar un botón sin sus seis estados (default, hover, focus, pressed, disabled, loading) al construir un componente nuevo."
+    ]
+  }
+}
