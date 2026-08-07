@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Black and White Bikes — Propuestas de pantalla de carga</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  :root {
+    --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  body {
+    margin: 0;
+    background: var(--surface-base);
+    color: var(--color-negro);
+    font-family: var(--font-family);
+  }
+  .intro {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: var(--space-3xl) var(--space-lg) var(--space-xl);
+  }
+  .intro h1 {
+    font-weight: var(--weight-display);
+    font-size: var(--text-h1);
+    line-height: var(--lh-h1);
+    letter-spacing: var(--track-h1);
+    margin: 0 0 var(--space-sm);
+  }
+  .intro p {
+    font-size: var(--text-body);
+    line-height: var(--lh-body);
+    color: var(--color-grafito);
+    max-width: 65ch;
+    margin: 0 0 var(--space-sm);
+  }
+  .proposal {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: var(--space-xl) var(--space-lg) var(--space-3xl);
+    border-bottom: 1px solid var(--border-color);
+  }
+  .proposal h2 {
+    font-weight: var(--weight-display);
+    font-size: var(--text-h2);
+    line-height: var(--lh-h2);
+    margin: 0 0 var(--space-xs);
+  }
+  .proposal .tagline {
+    font-size: var(--text-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-dorado);
+    margin: 0 0 var(--space-md);
+  }
+  .proposal p.desc {
+    font-size: var(--text-body);
+    line-height: var(--lh-body);
+    color: var(--color-grafito);
+    max-width: 65ch;
+    margin: 0 0 var(--space-md);
+  }
+  .spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 var(--space-lg);
+    font-size: var(--text-caption);
+  }
+  .spec-table th, .spec-table td {
+    text-align: left;
+    padding: var(--space-xs) var(--space-sm);
+    border-bottom: 1px solid var(--border-color);
+  }
+  .spec-table th {
+    color: var(--color-grafito);
+    font-weight: var(--weight-ui);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 10px;
+  }
+  .demo-controls {
+    display: flex;
+    gap: var(--space-sm);
+    margin: 0 0 var(--space-md);
+  }
+  .demo-stage {
+    position: relative;
+    height: 360px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-card-lg);
+    overflow: hidden;
+  }
+  .demo-stage .fake-page {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: var(--space-sm);
+    background: var(--surface-card);
+  }
+  .demo-stage .fake-page h3 {
+    font-weight: var(--weight-display);
+    font-size: var(--text-h2);
+    margin: 0;
+  }
+  .demo-stage .fake-page p {
+    font-size: var(--text-body);
+    color: var(--color-grafito);
+    margin: 0;
+  }
+  .splash {
+    position: absolute;
+    inset: 0;
+    background: var(--surface-overlay);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+  }
+
+  /* ---- Lockup de wordmark, aproximación CSS del logo compartido ---- */
+  .bw-lockup {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+  .bw-word {
+    font-family: var(--font-family);
+    font-weight: var(--weight-display);
+    font-size: 28px;
+    letter-spacing: -0.5px;
+    color: var(--color-blanco);
+    transform: skewX(-6deg);
+  }
+  .bw-word.accent { color: var(--color-dorado); }
+  .bw-lockup img { width: 40px; height: 40px; }
+  .bw-badge {
+    background: var(--color-dorado);
+    color: var(--color-negro);
+    font-weight: var(--weight-ui);
+    font-size: var(--text-caption);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 2px 10px;
+    transform: skewX(-6deg);
+  }
+
+  /* Lockup apilado de 2 líneas, como el logo real compartido: BLACK / AND WHITE BIKES */
+  .bw-lockup-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .bw-lockup-stack .bw-word {
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    transform: skewX(-10deg) scaleX(0.92);
+    text-transform: uppercase;
+  }
+  .bw-lockup-stack .bw-word.line1 {
+    font-size: 38px;
+    line-height: 0.82;
+  }
+  .bw-lockup-stack .bw-line2 {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    margin-top: -4px;
+  }
+  .bw-lockup-stack .bw-word.small {
+    font-size: 17px;
+    letter-spacing: -0.5px;
+  }
+  .bw-lockup-stack .bw-word.line2main {
+    font-size: 38px;
+    line-height: 0.82;
+  }
+  .bw-ticks {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin: 0 5px 0 2px;
+    transform: translateY(6px);
+  }
+  .bw-ticks span {
+    display: block;
+    width: 2px;
+    height: 16px;
+    background: var(--color-dorado);
+  }
+  .bw-lockup-stack .bw-badge {
+    align-self: flex-end;
+    margin-left: 0;
+    transform: translateY(6px) skewX(-10deg);
+  }
+
+  /* ==================== Propuesta A ==================== */
+  .a-mark {
+    opacity: 0;
+    transform: scale(0.96);
+    transition: opacity 140ms var(--ease-out-strong), transform 140ms var(--ease-out-strong);
+  }
+  .splash[data-phase="enter"] .a-mark,
+  .splash[data-phase="hold"] .a-mark,
+  .splash[data-phase="extended"] .a-mark {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .a-progress {
+    width: 120px;
+    height: 2px;
+    background: var(--border-color);
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  .splash[data-phase="extended"] .a-progress { opacity: 1; }
+  .a-progress-fill {
+    height: 100%;
+    width: 100%;
+    background: var(--color-dorado);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 100ms linear;
+  }
+  .splash.a-wipe {
+    transition: clip-path 420ms var(--ease-out-strong);
+    clip-path: inset(0 0 0 0);
+  }
+  .splash.a-wipe[data-phase="exit"] {
+    clip-path: inset(0 0 0 100%);
+  }
+
+  /* ==================== Propuesta B ==================== */
+  .b-rhino {
+    position: relative;
+    width: 72px;
+    height: 72px;
+  }
+  .b-rhino img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .b-rhino .b-fill {
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path 100ms linear;
+  }
+  .b-wordmark {
+    opacity: 0;
+    transition: opacity 300ms ease-out;
+  }
+  .b-wordmark-img {
+    width: 260px;
+    height: auto;
+    display: block;
+  }
+  .splash[data-phase="hold"] .b-wordmark,
+  .splash[data-phase="extended"] .b-wordmark {
+    opacity: 1;
+  }
+  .splash.b-exit {
+    gap: var(--space-sm);
+    transition: opacity 200ms var(--ease-out-strong), transform 200ms var(--ease-out-strong);
+    opacity: 1;
+    transform: scale(1);
+  }
+  .splash.b-exit[data-phase="exit"] {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+
+  /* ==================== Propuesta C ==================== */
+  .splash.c-instant .bw-lockup,
+  .splash.c-instant .bw-badge-row {
+    opacity: 1;
+  }
+  .c-status {
+    font-size: var(--text-caption);
+    color: var(--color-grafito);
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  .splash[data-phase="extended"] .c-status { opacity: 1; }
+  .splash.c-wipe {
+    transition: clip-path 380ms var(--ease-out-strong);
+    clip-path: inset(0 0 0 0);
+  }
+  .splash.c-wipe[data-phase="exit"] {
+    clip-path: inset(0 0 0 100%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .a-mark, .b-wordmark { transition-duration: 200ms; transform: none !important; }
+    .splash.a-wipe, .splash.b-exit, .splash.c-wipe {
+      transition-property: opacity;
+      transition-duration: 200ms;
+    }
+    .splash.a-wipe[data-phase="exit"],
+    .splash.c-wipe[data-phase="exit"] {
+      clip-path: inset(0 0 0 0) !important;
+      opacity: 0;
+    }
+  }
+</style>
+</head>
+<body>
+
+  <div class="intro">
+    <h1>Pantalla de carga — 3 propuestas</h1>
+    <p>Máxima fuerza, mínimo movimiento: la premisa del North Star aplicada a este componente significa que el reposo importa tanto como el movimiento. Ninguna propuesta usa un rinoceronte girando ni un spinner genérico — el sistema ya prohíbe rotar/deformar el rinoceronte (§5) y eso aplica aquí también.</p>
+    <p>Las 3 comparten la misma máquina de estados: aparece al iniciar la carga real, se mantiene visible un mínimo de 350ms (para no parpadear en cargas casi instantáneas), y si la carga pasa de 2.5s evoluciona a una señal de progreso honesta en vez de quedarse congelada. Lo que cambia es qué se anima, cuándo y con qué peso.</p>
+    <p>El logo real que compartiste (rinoceronte dorado + wordmark) todavía no está guardado como archivo en el repo — aquí lo aproximé con CSS + el SVG de silueta que ya existe en <code>brand-assets/</code>. En cuanto tengan el archivo definitivo se sustituye 1:1, la lógica de animación no cambia.</p>
+  </div>
+
+  <!-- ==================== PROPUESTA A ==================== -->
+  <section class="proposal">
+    <p class="tagline">Propuesta A</p>
+    <h2>Aparición confiada</h2>
+    <p class="desc">El logo aparece casi instantáneo y se queda estático — sin pulso, sin respiración — como una decisión ya tomada. Si la carga se extiende, una línea de 2px se llena debajo, sin tocar el logo. La salida es una cortina que se abre de izquierda a derecha, como el embiste: un solo gesto direccional, no un fundido.</p>
+    <table class="spec-table">
+      <tr><th>Fase</th><th>Qué anima</th><th>Duración</th><th>Easing</th></tr>
+      <tr><td>Entrada</td><td>Logo: opacity + scale(0.96→1)</td><td>140ms</td><td>ease-out fuerte</td></tr>
+      <tr><td>Espera &gt;2.5s</td><td>Línea de progreso (fill real o simulado)</td><td>continuo</td><td>linear</td></tr>
+      <tr><td>Salida</td><td>clip-path de todo el splash (cortina)</td><td>420ms</td><td>ease-out fuerte</td></tr>
+    </table>
+    <div class="demo-controls">
+      <button class="btn btn-primary" data-demo="a" data-duration="1800">Simular carga (1.8s)</button>
+      <button class="btn btn-ghost" data-demo="a" data-duration="4200">Simular carga lenta (4.2s)</button>
+    </div>
+    <div class="demo-stage">
+      <div class="fake-page">
+        <h3>Rhino Race</h3>
+        <p>$28,900 MXN — la página real detrás del splash.</p>
+      </div>
+      <div class="splash a-wipe" data-demo-root="a" data-phase="idle" style="display:none">
+        <div class="bw-lockup a-mark">
+          <span class="bw-word">BLACK</span>
+          <img src="./brand-assets/rhino-dorado.svg" alt="" />
+          <span class="bw-word">WHITE</span>
+        </div>
+        <div class="a-progress"><div class="a-progress-fill"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== PROPUESTA B ==================== -->
+  <section class="proposal">
+    <p class="tagline">Propuesta B</p>
+    <h2>El rinoceronte se llena</h2>
+    <p class="desc">No hay barra de progreso separada: el propio rinoceronte, en contorno dorado, se rellena de sólido de izquierda a derecha según el avance real de la carga (fotos + API). La fuerza llega literalmente al asset de marca en vez de a un elemento genérico. El wordmark aparece solo una vez que hay algo de avance visible, nunca antes. Salida rápida y silenciosa: como el relleno ya comunicó la espera, no hace falta un gesto adicional.</p>
+    <table class="spec-table">
+      <tr><th>Fase</th><th>Qué anima</th><th>Duración</th><th>Easing</th></tr>
+      <tr><td>Entrada</td><td>Contorno del rinoceronte visible de inmediato</td><td>0ms</td><td>—</td></tr>
+      <tr><td>Progreso</td><td>Relleno dorado del rinoceronte (clip-path)</td><td>continuo, suavizado 100ms</td><td>linear</td></tr>
+      <tr><td>Hold</td><td>Wordmark fade-in una vez hay avance</td><td>300ms</td><td>ease-out</td></tr>
+      <tr><td>Salida</td><td>opacity + scale(1→1.02) de todo el splash</td><td>200ms</td><td>ease-out fuerte</td></tr>
+    </table>
+    <div class="demo-controls">
+      <button class="btn btn-primary" data-demo="b" data-duration="1800">Simular carga (1.8s)</button>
+      <button class="btn btn-ghost" data-demo="b" data-duration="4200">Simular carga lenta (4.2s)</button>
+    </div>
+    <div class="demo-stage">
+      <div class="fake-page">
+        <h3>Rhino Race</h3>
+        <p>$28,900 MXN — la página real detrás del splash.</p>
+      </div>
+      <div class="splash b-exit" data-demo-root="b" data-phase="idle" style="display:none">
+        <div class="b-rhino">
+          <img src="./brand-assets/rhino-outline-dorado.svg" alt="" />
+          <img class="b-fill" src="./brand-assets/rhino-dorado.svg" alt="" />
+        </div>
+        <img class="b-wordmark-img b-wordmark" src="./brand-assets/wordmark-sin-rinoceronte.png" alt="Black and White Bikes" />
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== PROPUESTA C ==================== -->
+  <section class="proposal">
+    <p class="tagline">Propuesta C</p>
+    <h2>Golpe único</h2>
+    <p class="desc">La versión más literal del North Star: cero movimiento decorativo durante toda la espera. El wordmark está ahí desde el primer frame — no hay nada que ocultar, nada que temporizar — porque no hay retraso perceptible que enmascarar. Toda la personalidad del componente vive en un solo momento: la salida, un corte limpio que revela la página real de un solo golpe. Si la carga se extiende, aparece una línea de texto discreta ("Cargando bicicletas…"), sin animación de por medio.</p>
+    <table class="spec-table">
+      <tr><th>Fase</th><th>Qué anima</th><th>Duración</th><th>Easing</th></tr>
+      <tr><td>Entrada</td><td>Nada — wordmark visible desde el frame 0</td><td>0ms</td><td>—</td></tr>
+      <tr><td>Espera &gt;2.5s</td><td>Texto de estado, solo opacity</td><td>200ms</td><td>ease</td></tr>
+      <tr><td>Salida</td><td>clip-path de todo el splash (corte único)</td><td>380ms</td><td>ease-out fuerte</td></tr>
+    </table>
+    <div class="demo-controls">
+      <button class="btn btn-primary" data-demo="c" data-duration="1800">Simular carga (1.8s)</button>
+      <button class="btn btn-ghost" data-demo="c" data-duration="4200">Simular carga lenta (4.2s)</button>
+    </div>
+    <div class="demo-stage">
+      <div class="fake-page">
+        <h3>Rhino Race</h3>
+        <p>$28,900 MXN — la página real detrás del splash.</p>
+      </div>
+      <div class="splash c-wipe c-instant" data-demo-root="c" data-phase="idle" style="display:none">
+        <div class="bw-lockup">
+          <span class="bw-word">BLACK</span>
+          <img src="./brand-assets/rhino-dorado.svg" alt="" />
+          <span class="bw-word">WHITE</span>
+        </div>
+        <p class="c-status">Cargando bicicletas…</p>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    function runDemo(root, totalMs) {
+      const splash = root;
+      const stage = splash.closest('.demo-stage');
+      const fill = splash.querySelector('.a-progress-fill, .b-fill');
+      const isBFill = splash.classList.contains('b-exit');
+
+      splash.style.display = 'flex';
+      splash.setAttribute('data-phase', 'enter');
+      void splash.offsetWidth;
+
+      const holdMinMs = 350;
+      const thresholdMs = 2500;
+      const start = performance.now();
+      splash.setAttribute('data-phase', 'hold');
+
+      let extendedTriggered = false;
+      let rafId;
+
+      function tick(now) {
+        const elapsed = now - start;
+        const pct = Math.min(100, (elapsed / totalMs) * 100);
+
+        if (isBFill) {
+          fill.style.clipPath = `inset(0 ${100 - pct}% 0 0)`;
+        } else if (fill) {
+          fill.style.width = pct + '%';
+        }
+
+        if (!extendedTriggered && elapsed > thresholdMs) {
+          extendedTriggered = true;
+          splash.setAttribute('data-phase', 'extended');
+        }
+
+        if (elapsed < totalMs) {
+          rafId = requestAnimationFrame(tick);
+        } else {
+          finish();
+        }
+      }
+
+      function finish() {
+        const elapsed = performance.now() - start;
+        const waitForHold = Math.max(0, holdMinMs - elapsed);
+        setTimeout(() => {
+          splash.setAttribute('data-phase', 'exit');
+          setTimeout(() => {
+            splash.style.display = 'none';
+            splash.setAttribute('data-phase', 'idle');
+            if (fill) {
+              if (isBFill) fill.style.clipPath = 'inset(0 100% 0 0)';
+              else fill.style.width = '0%';
+            }
+          }, 450);
+        }, waitForHold);
+      }
+
+      rafId = requestAnimationFrame(tick);
+    }
+
+    document.querySelectorAll('[data-demo]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-demo');
+        const duration = parseInt(btn.getAttribute('data-duration'), 10);
+        const root = document.querySelector(`[data-demo-root="${key}"]`);
+        runDemo(root, duration);
+      });
+    });
+  </script>
+
+</body>
+</html>

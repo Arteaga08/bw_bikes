@@ -53,6 +53,18 @@
   --focus-ring-color-on-dark: var(--color-dorado);
   --focus-ring-color-on-light: var(--color-negro);
 
+  /* ---- Validación de formulario (error/éxito) ----
+     Semántico convencional accesible: reconocible al instante, contraste
+     AA verificado. Decidido 2026-08-07 tras 3 propuestas comparadas en
+     handoff/input-states-proposals.html — no se tiñe hacia la paleta de
+     marca a propósito, porque la prioridad aquí es reconocimiento
+     inmediato, no voz de marca. Siempre va emparejado con ícono, nunca
+     solo color (accesibilidad para daltonismo). */
+  --color-error:   #B42318;
+  --color-success: #15803D;
+  --field-border-width: 1px;
+  --field-border-width-invalid: 1.5px;
+
   /* ---- Tipografía ---- */
   --font-family: 'Hanken Grotesk', sans-serif;
   --weight-display: 800;  /* títulos, hero */
@@ -191,3 +203,65 @@
   background: var(--color-grafito);
   color: var(--color-blanco);
 }
+
+/* ==========================================================================
+   Inputs de formulario — estados default/focus/error/success (hueco §6 de
+   DESIGN_SYSTEM.md, cerrado 2026-08-07).
+   ========================================================================== */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.field-label {
+  font-size: var(--text-eyebrow);
+  line-height: var(--lh-eyebrow);
+  letter-spacing: var(--track-eyebrow);
+  text-transform: uppercase;
+  color: var(--color-grafito);
+}
+.field-input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: var(--control-height);
+  padding: 0 var(--space-md);
+  border-radius: var(--radius-control);
+  border: var(--field-border-width) solid var(--border-color);
+  background: var(--surface-card);
+}
+.field-input-row input {
+  border: none;
+  outline: none;
+  background: transparent;
+  flex: 1;
+  font-family: var(--font-family);
+  font-size: var(--text-body);
+  color: var(--color-negro);
+}
+.field-input-row input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color-on-light);
+  outline-offset: var(--focus-ring-offset);
+}
+.field-input-row svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.field-msg {
+  font-size: var(--text-caption);
+  line-height: var(--lh-caption);
+  color: var(--color-grafito);
+}
+.field.is-error .field-input-row {
+  border-color: var(--color-error);
+  border-width: var(--field-border-width-invalid);
+}
+.field.is-error .field-msg { color: var(--color-error); }
+.field.is-error .field-input-row svg { stroke: var(--color-error); }
+.field.is-success .field-input-row {
+  border-color: var(--color-success);
+}
+.field.is-success .field-msg { color: var(--color-success); }
+.field.is-success .field-input-row svg { stroke: var(--color-success); }

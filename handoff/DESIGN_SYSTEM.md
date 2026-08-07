@@ -181,7 +181,7 @@ define la regla general.
 | Error 404 | 24px | `rhino-dorado.svg` (fondo negro overlay, como ya define el mockup) | Centrado horizontalmente, sobre el número "404", estático — sin rotación ni repetición. |
 | Páginas de contenido — eyebrow de hero editorial | 16px | Según fondo del hero de esa página (dorado sobre oscuro, negro sobre claro) | Inline, antes del eyebrow de la página. |
 | Modal "Agregado al carrito" | 16px | `rhino-dorado.svg` | Inline, antes del mensaje de confirmación (ej. antes de "Agregado al carrito"). |
-| Modal de confirmación de compra | 16px | `rhino-negro.svg` (mismo criterio: modal sobre fondo claro) | Inline, antes del mensaje de confirmación. |
+| Modal de confirmación de compra | 16px | `rhino-dorado.svg` (mismo criterio que "Agregado al carrito" — consistencia entre los dos modales de confirmación) | Inline, antes del mensaje de confirmación. |
 
 **Regla de checkout, explícita:** es la única pantalla del sitio con **cero**
 apariciones del rinoceronte, footer incluido. Todas las demás quedan en 1 o 2
@@ -203,15 +203,25 @@ Estos puntos no están formalizados todavía. Resuélvelos con el mismo criterio
 del sistema (dorado = acento único, negro/blanco = base, grid de 8px) cuando
 aparezcan, y avisa si algo no encaja con lo ya definido:
 
-- **Inputs de formulario** — estados focus/error/success (checkout usa campos
-  básicos en el mockup, sin spec de validación)
 - **Iconografía** — decidido: **Phosphor Icons**, peso `regular` (trazo ~2px,
   equivalente al grosor del rinoceronte). Reemplaza la elección previa de
   Lucide.
 - **Breakpoints responsive** — solo está definido el comportamiento de
-  Display/H1 en mobile
-- **Badges/tags** — "NUEVO", "E-BIKE" aparecen en mockups sin spec de color/
-  tamaño formal (por ahora: fondo dorado, texto negro, 9px, Medium, mayúsculas)
+  Display/H1 en mobile. Sigue pendiente.
+
+**Ya cerrados** (quedan aquí solo como registro, ver `tokens.css` para la
+implementación):
+- **Inputs de formulario** — decidido 2026-08-07: estados `default` /
+  `focus` / `error` / `success`. Error y éxito son semántico convencional
+  accesible (`--color-error: #B42318`, `--color-success: #15803D`), siempre
+  emparejado con ícono, nunca solo color. El estado de error usa borde más
+  grueso (`--field-border-width-invalid: 1.5px` vs `1px` default) para que
+  se note más; éxito se queda en el grosor default — solo el error necesita
+  ese énfasis. Ver `handoff/input-states-proposals.html` para las 3
+  propuestas comparadas.
+- **Badges/tags** — decidido: fondo dorado/texto negro para estados
+  positivos ("Nuevo", "E-Bike"), grafito/blanco para "Agotado" (§ ver
+  `.badge` / `.badge-agotado` en `tokens.css`).
 
 ---
 
@@ -220,3 +230,39 @@ aparezcan, y avisa si algo no encaja con lo ya definido:
 01 Home · 02 Catálogo · 03 Ficha de producto · 04 Carrito · 05 Checkout ·
 06 Error 404 — cada una con notas de diseño explicando decisiones específicas
 de layout.
+
+---
+
+## 8. Pantalla de carga (splash)
+
+Decidida el 2026-08-07 tras 3 propuestas evaluadas con `emil-design-eng` +
+`impeccable craft`. Prototipo completo en `handoff/loading-screen-proposals.html`
+(Propuesta B). Wordmark real en `brand-assets/wordmark-sin-rinoceronte.png`.
+
+**Mecánica:** el propio rinoceronte (contorno dorado → sólido dorado) es la
+barra de progreso — se rellena de izquierda a derecha según el avance real de
+carga (API + fotos de producto), vía `clip-path`, no `width` (evita layout
+thrash). El wordmark aparece con fade-in una vez que hay avance visible, nunca
+antes.
+
+**Máquina de estados** (dispara con evento real, nunca con timer fijo):
+- **Entrada:** contorno del rinoceronte visible de inmediato, 0ms.
+- **Hold mínimo:** 350ms — evita parpadeo en cargas casi instantáneas.
+- **Relleno:** `clip-path` del rinoceronte dorado, suavizado 100ms `linear`
+  por tick (progreso real, no simulado).
+- **Wordmark:** fade-in opacity, 300ms `ease-out`, una vez hay avance.
+- **Umbral extendido (&gt;2.5s):** sin cambio visual adicional en esta
+  propuesta — el relleno del rinoceronte ya comunica que sigue avanzando.
+- **Salida:** `opacity` + `scale(1→1.02)` de todo el splash, 200ms
+  `cubic-bezier(0.23, 1, 0.32, 1)` — rápida y silenciosa, porque el relleno ya
+  cargó el peso de la espera.
+- **`prefers-reduced-motion`:** se respeta — transición se reduce a solo
+  `opacity`, sin `scale`.
+
+**Layout:** rinoceronte y wordmark en columna centrada, gap de 8px
+(`--space-sm`) entre ambos — el wordmark ya viene recortado sin relleno
+interno, así que el gap chico es suficiente para respirar sin separarlos.
+
+**Pendiente:** conectar el evento de progreso real (fetch de API + `decode()`
+de imágenes) en vez de la simulación con `requestAnimationFrame` del
+prototipo — eso es implementación, no diseño.

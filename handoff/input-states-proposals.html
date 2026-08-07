@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Black and White Bikes — Propuestas de color error/éxito</title>
+<link rel="stylesheet" href="./tokens.css" />
+<style>
+  body {
+    margin: 0;
+    background: var(--surface-base);
+    color: var(--color-negro);
+    font-family: var(--font-family);
+  }
+  .intro {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: var(--space-3xl) var(--space-lg) var(--space-xl);
+  }
+  .intro h1 {
+    font-weight: var(--weight-display);
+    font-size: var(--text-h1);
+    line-height: var(--lh-h1);
+    letter-spacing: var(--track-h1);
+    margin: 0 0 var(--space-sm);
+  }
+  .intro p {
+    font-size: var(--text-body);
+    line-height: var(--lh-body);
+    color: var(--color-grafito);
+    max-width: 65ch;
+    margin: 0 0 var(--space-sm);
+  }
+  .grid {
+    max-width: 900px;
+    margin: 0 auto var(--space-3xl);
+    padding: 0 var(--space-lg);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: var(--space-lg);
+  }
+  .proposal-card {
+    background: var(--surface-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-card-lg);
+    padding: var(--space-lg);
+  }
+  .proposal-card .tagline {
+    font-size: var(--text-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-dorado);
+    margin: 0 0 var(--space-xs);
+  }
+  .proposal-card h2 {
+    font-weight: var(--weight-display);
+    font-size: var(--text-h3);
+    line-height: var(--lh-h3);
+    margin: 0 0 var(--space-sm);
+  }
+  .proposal-card .desc {
+    font-size: var(--text-caption);
+    line-height: var(--lh-caption);
+    color: var(--color-grafito);
+    margin: 0 0 var(--space-lg);
+  }
+  .hexes {
+    font-size: var(--text-caption);
+    color: var(--color-grafito);
+    margin: var(--space-md) 0 0;
+    display: flex;
+    gap: var(--space-md);
+  }
+  .hexes code {
+    background: var(--surface-base);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+
+  /* ---- Field base (igual que playground.html) ---- */
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-md);
+  }
+  .field label {
+    font-size: var(--text-eyebrow);
+    line-height: var(--lh-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-grafito);
+  }
+  .field-input-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    height: var(--control-height);
+    padding: 0 var(--space-md);
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border-color);
+    background: var(--surface-card);
+  }
+  .field-input-row input {
+    border: none;
+    outline: none;
+    background: transparent;
+    flex: 1;
+    font-family: var(--font-family);
+    font-size: var(--text-body);
+    color: var(--color-negro);
+  }
+  .field-input-row svg {
+    width: 16px;
+    height: 16px;
+    flex: none;
+  }
+  .field-msg {
+    font-size: var(--text-caption);
+    line-height: var(--lh-caption);
+  }
+
+  /* ==================== Propuesta A — semántico tintado de marca ==================== */
+  .prop-a .field.is-error .field-input-row { border-color: #A6432E; border-width: 1.5px; }
+  .prop-a .field.is-error .field-msg { color: #A6432E; }
+  .prop-a .field.is-error svg { stroke: #A6432E; }
+  .prop-a .field.is-success .field-input-row { border-color: #5B7A4C; }
+  .prop-a .field.is-success .field-msg { color: #5B7A4C; }
+  .prop-a .field.is-success svg { stroke: #5B7A4C; }
+
+  /* ==================== Propuesta B — reutiliza paleta, sin hue nuevo en éxito ==================== */
+  .prop-b .field.is-error .field-input-row { border-color: var(--color-grafito); border-width: 1.5px; }
+  .prop-b .field.is-error .field-msg { color: var(--color-grafito); }
+  .prop-b .field.is-error svg { stroke: #8B3A2E; }
+  .prop-b .field.is-success .field-input-row { border-color: var(--color-dorado); }
+  .prop-b .field.is-success .field-msg { color: var(--color-negro); }
+  .prop-b .field.is-success svg { stroke: var(--color-dorado); }
+
+  /* ==================== Propuesta C — semántico convencional accesible ==================== */
+  .prop-c .field.is-error .field-input-row { border-color: #B42318; border-width: 1.5px; }
+  .prop-c .field.is-error .field-msg { color: #B42318; }
+  .prop-c .field.is-error svg { stroke: #B42318; }
+  .prop-c .field.is-success .field-input-row { border-color: #15803D; }
+  .prop-c .field.is-success .field-msg { color: #15803D; }
+  .prop-c .field.is-success svg { stroke: #15803D; }
+</style>
+</head>
+<body>
+
+  <div class="intro">
+    <h1>Colores de error / éxito — 3 propuestas</h1>
+    <p>Los valores actuales del playground (<code>#C0392B</code> / <code>#2E7D4F</code>) son placeholders genéricos, nunca evaluados con criterio de marca. Las 3 columnas muestran el mismo par de campos (correo con error, teléfono verificado) para comparar lado a lado. Las 3 emparejan color con ícono, no solo color — accesible para daltonismo.</p>
+  </div>
+
+  <div class="grid">
+
+    <div class="proposal-card prop-a">
+      <p class="tagline">Propuesta A</p>
+      <h2>Semántico tintado de marca</h2>
+      <p class="desc">Rojo y verde desaturados, tintados — nunca semáforo puro. Sigue la misma ley de color que ya usa el resto del sistema (reducir croma, tintar hacia la paleta) en vez de importar rojo/verde de librería.</p>
+
+      <div class="field is-error">
+        <label>Correo electrónico</label>
+        <div class="field-input-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <input type="email" value="alejandro@correo" />
+        </div>
+        <span class="field-msg">Contraseña o correo inválido.</span>
+      </div>
+      <div class="field is-success">
+        <label>Teléfono</label>
+        <div class="field-input-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <input type="tel" value="618 123 4567" />
+        </div>
+        <span class="field-msg">Verificado.</span>
+      </div>
+
+      <p class="hexes"><code>#A6432E</code> <code>#5B7A4C</code></p>
+    </div>
+
+    <div class="proposal-card prop-b">
+      <p class="tagline">Propuesta B</p>
+      <h2>Reutiliza la paleta</h2>
+      <p class="desc">Éxito usa el dorado que ya existe (se lee positivo, sin agregar un hue nuevo al sistema). Error mantiene texto/borde en grafito neutro — el color de alerta vive solo en el ícono. Riesgo a decidir: ¿el dorado pierde fuerza como "acento único de CTA" si también significa éxito?</p>
+
+      <div class="field is-error">
+        <label>Correo electrónico</label>
+        <div class="field-input-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <input type="email" value="alejandro@correo" />
+        </div>
+        <span class="field-msg">Contraseña o correo inválido.</span>
+      </div>
+      <div class="field is-success">
+        <label>Teléfono</label>
+        <div class="field-input-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <input type="tel" value="618 123 4567" />
+        </div>
+        <span class="field-msg">Verificado.</span>
+      </div>
+
+      <p class="hexes"><code>#8B3A2E (ícono)</code> <code>#F2B705</code></p>
+    </div>
+
+    <div class="proposal-card prop-c">
+      <p class="tagline">Propuesta C</p>
+      <h2>Semántico convencional accesible</h2>
+      <p class="desc">Rojo/verde reconocibles al instante, valores verificados para contraste AA (no genéricos de framework). Prioriza reconocimiento inmediato sobre pureza de marca — razonable porque es un formulario funcional, no una superficie de marca.</p>
+
+      <div class="field is-error">
+        <label>Correo electrónico</label>
+        <div class="field-input-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <input type="email" value="alejandro@correo" />
+        </div>
+        <span class="field-msg">Contraseña o correo inválido.</span>
+      </div>
+      <div class="field is-success">
+        <label>Teléfono</label>
+        <div class="field-input-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <input type="tel" value="618 123 4567" />
+        </div>
+        <span class="field-msg">Verificado.</span>
+      </div>
+
+      <p class="hexes"><code>#B42318</code> <code>#15803D</code></p>
+    </div>
+
+  </div>
+
+</body>
+</html>

@@ -9,8 +9,17 @@
   "scripts": {
     "build": "pnpm -r --filter=./packages/* --filter=./apps/* build",
     "dev:api": "pnpm --filter @bw-bikes/api dev",
+    "dev:web": "pnpm --filter @bw-bikes/web dev",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r run typecheck"
+  },
+  "pnpm": {
+    "packageExtensions": {
+      "@testing-library/jest-dom": {
+        "peerDependencies": { "vitest": "*" },
+        "peerDependenciesMeta": { "vitest": { "optional": true } }
+      }
+    }
   }
 }

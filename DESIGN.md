@@ -17,6 +17,8 @@ colors:
   surface-card: "#FFFFFF"
   surface-overlay: "#0A0A0A"
   border-neutral: "#E2E2DE"
+  color-error: "#B42318"
+  color-success: "#15803D"
 typography:
   display:
     fontFamily: "Hanken Grotesk, sans-serif"
@@ -183,6 +185,10 @@ Paleta restrained: dos neutros cargan el sistema, un tercero da profundidad de t
 - **Base de superficie** (#F1F1EE): fondo de página.
 - **Tarjeta** (#FFFFFF) con **borde neutral** (#E2E2DE): tarjetas, inputs, modales de contenido.
 
+### Semantic (validación de formulario)
+- **Error** (#B42318): borde y mensaje de campos inválidos. Deliberadamente fuera de la paleta de marca — es semántico convencional accesible, no tintado hacia el sistema, porque aquí el reconocimiento instantáneo importa más que la voz de marca. Siempre emparejado con ícono, nunca solo color. Borde más grueso que el resto de estados (1.5px vs 1px) para que se note antes de leer el mensaje.
+- **Success** (#15803D): borde y mensaje de campos verificados. Mismo criterio que error; borde en el grosor default, no necesita el mismo énfasis visual porque no requiere acción del usuario.
+
 ### Named Rules
 **The One Accent Rule.** El dorado nunca supera el 10% de una vista y nunca aparece dos veces como CTA primario en la misma pantalla. Su escasez es lo que lo hace leer como decisión, no como paleta.
 
@@ -251,6 +257,7 @@ Precisos y contenidos: cada estado se siente deliberado, no casual. Cuatro varia
 - **Do** implementar `:focus-visible` en las cuatro variantes de botón (anillo 3px, offset 2px) — WCAG AA.
 - **Do** mantener una sola familia tipográfica (Hanken Grotesk) en máximo dos pesos por bloque.
 - **Do** conservar el ancho de un botón en estado `loading` para evitar saltos de layout.
+- **Do** emparejar error/success con ícono, nunca depender solo del color (#B42318 / #15803D) para comunicar el estado.
 
 ### Don't:
 - **Don't** usar plantilla DTC/e-commerce genérica: hero + 3 tarjetas + trust badges + banda CTA como gramática por defecto de una pantalla de dashboard.
