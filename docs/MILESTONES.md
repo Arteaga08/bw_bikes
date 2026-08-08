@@ -10,13 +10,13 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M2 — Auth y usuarios | 1 | ✅ Hecho | `feat/m02-auth` (mergeado, tag `m02`) | Ver detalle abajo |
 | M3 — Catálogo | 1 | ✅ Hecho | `feat/m03-catalogo` (mergeado) | Ver detalle abajo |
 | M4 — Inventario y reservas | 1 | ✅ Hecho | `feat/m04-inventario` (mergeado) | Ver detalle abajo |
-| M5 — Carrito, órdenes y pagos | 1 | ✅ Hecho (pendiente de merge) | `feat/m05-ordenes-pagos` | Módulo crítico. Ver detalle abajo |
-| M6 — Envíos, estatus y solicitudes | 1 | ✅ Hecho (pendiente de merge) | `feat/m06-envios-solicitudes` | Cierra la decisión abierta #1. Ver detalle abajo |
+| M5 — Carrito, órdenes y pagos | 1 | ✅ Hecho (mergeado) | `feat/m05-ordenes-pagos` | Módulo crítico. Ver detalle abajo |
+| M6 — Envíos, estatus y solicitudes | 1 | ✅ Hecho (mergeado) | `feat/m06-envios-solicitudes` | Cierra la decisión abierta #1. Ver detalle abajo |
 | M7 — Settings, analítica y adapters | 1 | ✅ Hecho (mergeado) | `feat/m07-settings-analitica` | Cierra la fase 1. Ver detalle abajo |
-| M8 — Shell del dashboard | 2 | ✅ Hecho (pendiente de merge) | `feat/m08-dashboard-shell` | Arranca la fase 2. Ver detalle abajo |
-| M9 — Órdenes y cola de confirmación | 2 | ⏳ Pendiente | — | |
+| M8 — Shell del dashboard | 2 | ✅ Hecho (mergeado) | `feat/m08-dashboard-shell` | Arranca la fase 2. Ver detalle abajo |
+| M9 — Órdenes y cola de confirmación | 2 | ⚠️ Código listo, verificación Stripe pendiente | `feat/m09-ordenes` | Bloqueado por whitelist de IP en Atlas. Ver `docs/DESIGN_REFERENCES.md`. Ver detalle abajo |
 | M10 — Catálogo en admin | 2 | ⏳ Pendiente | — | |
-| M11 — Inventario, solicitudes, settings, analítica, auditoría | 2 | ⏳ Pendiente | — | |
+| M11 — Inventario, solicitudes, settings, analítica, auditoría | 2 | ⏳ Pendiente | — | Ver `docs/DESIGN_REFERENCES.md` |
 | M12 — Catálogo público | 3 | ⏳ Pendiente | — | |
 | M13 — Carrito, checkout y cuenta | 3 | ⏳ Pendiente | — | |
 | M14 — Embajadores, patrocinios y SEO | 3 | ⏳ Pendiente | — | |
@@ -923,3 +923,117 @@ reemplazan. Storefront público (M12–M14). `proxy.ts` de Next (no hace falta �
 layout server-side). Ajuste de `app.set("trust proxy", ...)` a dos saltos para producción con el
 proxy delante — anotado para el momento del despliegue, no aplica en desarrollo. Playwright / pruebas
 contra servicios externos reales (siguen pospuestas al recorrido final de la fase, según lo acordado).
+
+---
+
+## M9 — Órdenes y cola de confirmación de proveedor
+
+**Backend:** sin cambios (M5/M6/M7 ya exponían todo lo necesario). Reemplaza el placeholder de
+`/admin/ordenes` de M8.
+
+**Entregado:**
+- **`SlideOver`** (`apps/web/src/components/ui/SlideOver.tsx`), componente nuevo que
+  DASHBOARD_GUIDELINES.md §5 especificaba por nombre y M8 no había construido. Mismo contrato de
+  accesibilidad que `Modal` (`role="dialog"` + `aria-modal` + `aria-labelledby`, Escape/overlay
+  cierran, foco atrapado con `useFocusTrap` y devuelto al disparador) pero panel lateral (~480px)
+  con body de scroll independiente del header/footer — lo que el detalle de una orden necesita y
+  el `Modal` centrado de 448px no da cómodamente. `Modal` se conserva para los diálogos de
+  confirmar/rechazar, que sí son decisiones cortas de sí/no.
+- **Lógica de dominio pura** (`apps/web/src/lib/orders/`): `status.ts` (labels en español y
+  variante de `Badge` para los 10 `OrderStatus`, ambos como `Record` exhaustivo por tipo — agregar
+  un estatus sin actualizarlos rompe `tsc`, no falla en silencio); `authorization-deadline.ts`
+  (`authorizationDeadline`, proyección pura hacia adelante desde `payment.authorizedAt` de los
+  mismos umbrales que ya usa el job de expiración, con niveles `ok`/`critical`/`expired`);
+  `format.ts` (moneda MXN, fecha/hora `es-MX`).
+- **Capa de acceso a datos** (`apps/web/src/lib/api/admin-orders.ts`): un wrapper por endpoint
+  admin de órdenes, con querystring por whitelist explícita (nunca reenvía el estado de filtros
+  completo) y **tipado honesto**: `confirmSupplierStock`/`rejectSupplierStock`/
+  `recordOrderShipment`/`updateOrderShippingAddress` devuelven `PublicOrder`, no `AdminOrder` —
+  exactamente lo que esos cuatro endpoints serializan de verdad (sin `customer`, `adminAlertedAt`,
+  `cancelReason`, `paymentIntentId`) — así el compilador bloquea un optimistic-update que lea un
+  campo que esa respuesta no trae.
+- **La página** (`apps/web/src/app/admin/(panel)/ordenes/`): `page.tsx` (Server Component) resuelve
+  `GET /admin/settings` una vez para pasar `orderAuthAlertHours`/`orderAuthCancelHours` ya
+  resueltos, sin round-trip de cliente. `OrdersView.tsx` (Client, el orquestador) seis piezas:
+  tabs **Cola de proveedor** (fija `status=awaiting_supplier_confirmation`, `sort=createdAt`
+  ascendente como proxy de urgencia — el whitelist de sort del backend no incluye
+  `payment.authorizedAt`) / **Todas** (filtros libres) → `OrderFilters` (solo lo que el backend
+  soporta: estatus, `orderNumber` exacto, los 3 campos de sort — sin buscador libre, sin filtro de
+  fecha/cliente/monto, porque `listForAdmin` los ignora o no existen) → doble layout con
+  `DataTable` → `Pagination` → `OrderDetailSlideOver` cargado con `next/dynamic` (`ssr:false`,
+  gateado por un latch `everOpenedDetail`, mismo patrón que `CommandPaletteWrapper` de M8).
+- **`ConfirmSupplierDialog`/`RejectSupplierDialog`**: viven en `OrdersView`, no en la fila ni en el
+  detalle, porque ambos disparadores (la fila de la cola y el pie del `SlideOver`) deben abrir la
+  **misma** instancia. El de confirmar advierte en texto explícito que captura el cargo real; el
+  de rechazar valida motivo (5–300 caracteres, trim) en el cliente espejando
+  `rejectSupplierStockSchema`, con contador de caracteres.
+- **`ShipmentForm`/`ShippingAddressForm`**: el primero solo exige `carrierName`/`trackingUrl`
+  cuando `carrier === "otro"` (misma condición que `recordShipmentSchema`); el segundo alimenta su
+  `<select>` de estado con `MEXICAN_STATES` de `@bw-bikes/shared`, nunca una lista duplicada.
+- **`BulkStatusBar`**: solo aparece con selección en la pestaña "Todas", limitado a
+  `processing`/`delivered` (lo único que `PATCH /orders/bulk-status` acepta). Como ese endpoint
+  **siempre responde 200**, el resultado se lee de `summary` y se reporta con un toast que separa
+  actualizadas/sin cambio/rechazadas.
+- **Sin endpoint individual de cambio de estatus**: el backend no lo expone. Los botones "Marcar en
+  preparación"/"Marcar entregada" del `SlideOver` llaman a `bulkUpdateOrderStatus` con un arreglo
+  de un solo id — documentado como comentario en el código para que no se lea como bug.
+- **Refetch, nunca optimistic update**: toda acción (confirmar, rechazar, guía, dirección, estatus)
+  hace `toast` + refetch de la lista y, si el detalle de esa orden está abierto, de su detalle
+  también — consecuencia directa de que las cuatro acciones no devuelven `AdminOrder` completo.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm typecheck   (shared + api + web)  → limpio
+pnpm lint        (api + web)           → limpio
+pnpm build       (shared + api + web, con API_URL en el entorno) → limpio
+pnpm test        → api: 33 archivos, 344/344 (sin regresiones) · web: 14 archivos, 61/61
+pnpm audit --prod                      → sin vulnerabilidades conocidas
+```
+Tests nuevos de `apps/web` (8 archivos): `authorization-deadline.test.ts` (niveles `ok`/`critical`/
+`expired` con los umbrales reales 120h/156h, los dos bordes exactos, `null` sin `authorizedAt`),
+`status.test.ts` (los 10 `OrderStatus` tienen label y variante), `admin-orders.test.ts` (querystring
+solo con params de la whitelist, `ApiError` con `httpStatus` en un `fail`), `SlideOver.test.tsx`
+(abre/cierra, Escape, overlay, foco atrapado y devuelto), `RejectSupplierDialog.test.tsx` (motivo de
+4 caracteres bloquea el envío, uno válido dispara la llamada con el texto recortado),
+`ShipmentForm.test.tsx` (`carrier="otro"` exige `carrierName`+`trackingUrl`, los otros 6 no),
+`OrdersView.test.tsx` (estado vacío de la cola, fila renderizada, y el flujo completo de confirmar:
+POST real → toast → refetch de la lista, con `fetch` mockeado).
+
+**⚠️ Pendiente — verificación manual contra Stripe test, bloqueada:** el criterio de cierre exige
+confirmar/rechazar de verdad contra Stripe en modo test (`stripe listen`), no solo el código. Al
+intentar levantar `apps/api` en este entorno, Mongoose falló con
+`MongooseServerSelectionError: ... IP isn't whitelisted` — la IP pública de esta máquina
+(`177.226.102.252` al momento de esta verificación) no está en la whitelist de red del cluster de
+MongoDB Atlas (`bwbikes.zv5hri4.mongodb.net`). Es una acción de cuenta que solo Manuel puede hacer
+(Atlas → Network Access → Add IP Address). El script de siembra ya está escrito
+(`verify-m9-stripe.ts`, en el scratchpad de esta sesión, no committeado) — crea categoría + bici
+`on_request` vía la API admin real, registra y verifica un cliente, arma el carrito, hace checkout,
+confirma el `PaymentIntent` contra Stripe test con `pm_card_visa`, y espera a que `stripe listen`
+mueva la orden a `awaiting_supplier_confirmation` — pero no se ha podido ejecutar ni una sola vez.
+**Falta correrlo** (y con él, los dos escenarios reales: confirmar captura el cargo, rechazar cancela
+la autorización sin cobro) en cuanto la whitelist de Atlas se actualice.
+
+**Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
+- **`SlideOver` reusa `useFocusTrap` de `Modal`** en vez de un hook de foco propio — misma garantía
+  de accesibilidad, cero código nuevo para mantenerla sincronizada entre los dos.
+- **Patrón "ajustar estado durante el render" para el fetch de la lista**, no `setState` directo al
+  inicio del `useEffect` — `react-hooks/set-state-in-effect` (regla nueva de
+  `eslint-plugin-react-hooks` 6, ya activa desde M8) lo rechaza. Se compara una clave serializada de
+  `effectiveParams` contra la del render anterior (mismo patrón que `MobileNavProvider` de M8) para
+  decidir si resetear a `loading`; un refetch disparado por una acción (confirmar/rechazar/etc.) dejó
+  `requestKey` sin cambios a propósito, así la tabla no parpadea a un skeleton completo después de
+  cada acción — solo se reemplazan las filas en cuanto llega la respuesta.
+- **`OrderRowActions` ofrece "Ver detalle" en las dos pestañas**, no solo en "Todas" — el plan
+  original solo mencionaba confirmar/rechazar para la cola, pero decidir sin ver las líneas, el
+  cliente y el historial de una orden bajo pedido es una decisión a ciegas; el costo de agregarlo
+  es un botón `text` por fila.
+- **`markSingleStatus`/`handleBulkStatus` leen `summary`/`results[0]`, nunca el código HTTP**, para
+  reflejar correctamente que `bulk-status` siempre responde 200 — un `try/catch` a secas habría
+  reportado éxito en una transición rechazada.
+
+**Fuera de este milestone:** catálogo en admin (M10); inventario, solicitudes, settings y analítica
+visuales (M11); gráficos/KPIs de la referencia de Dribbble (M11 — librería de charts sin decidir);
+rediseño del Sidebar a dos columnas (cambio transversal al shell, se decide aparte); reembolsos y
+cancelación de órdenes ya pagadas (el backend no los expone al admin); búsqueda libre, filtro por
+fecha/cliente/monto (el backend no los soporta); correos al cliente (M15).
