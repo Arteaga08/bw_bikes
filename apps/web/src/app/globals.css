@@ -99,6 +99,15 @@
   --spacing-2xl: 48px;
   --spacing-3xl: 64px;
 
+  /* ---- Anchos de contenedor (paneles y diálogos angostos) ----
+     Nombrados por propósito, no por talla (xs/sm/md…), para no colisionar
+     nunca con el namespace --spacing-*: Tailwind v4 resuelve max-w-{key}
+     contra --spacing-{key} cuando existe, antes que contra su propio
+     --container-{key} por defecto. Usar max-w-sm/md directamente aquí
+     produce max-width: 8px/16px en vez de 384px/448px. */
+  --container-card: 24rem;
+  --container-dialog: 28rem;
+
   /* ---- Radios y controles ----
      Casi rectos en controles (precisión); mayores en superficies grandes
      (suavizan sin restar precisión) — nunca box-shadow para elevación. */

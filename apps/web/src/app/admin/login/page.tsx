@@ -16,10 +16,10 @@ export const metadata: Metadata = {
 export default function AdminLoginPage() {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-base p-lg">
-      <div className="w-full max-w-sm rounded-card-lg border border-borde bg-surface p-xl">
+      <div className="w-full max-w-card rounded-card-lg border border-borde bg-surface p-xl">
         <div className="mb-lg flex items-center gap-xs">
           <Image src="/brand/rhino-negro.svg" alt="" width={16} height={16} priority />
-          <span className="font-ui text-eyebrow text-grafito uppercase">Black and White Bikes</span>
+          <span className="font-ui text-eyebrow text-grafito uppercase whitespace-nowrap">Black and White Bikes</span>
         </div>
         <h1 className="mb-lg font-display text-h2 text-negro">Panel de administración</h1>
         <LoginForm />

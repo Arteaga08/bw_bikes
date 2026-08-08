@@ -91,7 +91,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         aria-label="Paleta de comandos"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={handleKeyDown}
-        className="w-full max-w-md rounded-card-lg bg-surface p-md"
+        className="w-full max-w-dialog rounded-card-lg bg-surface p-md"
       >
         <div className="flex items-center gap-sm border-b border-borde pb-sm">
           <MagnifyingGlass size={18} className="text-grafito" aria-hidden="true" />

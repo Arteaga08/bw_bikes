@@ -52,7 +52,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
         aria-labelledby={titleId}
         tabIndex={-1}
         onClick={stopPropagation}
-        className="w-full max-w-md rounded-card-lg bg-surface p-lg focus:outline-none"
+        className="w-full max-w-dialog rounded-card-lg bg-surface p-lg focus:outline-none"
       >
         <h2 id={titleId} className="font-display text-h3 text-negro">
           {title}
