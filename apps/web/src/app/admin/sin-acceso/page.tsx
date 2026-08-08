@@ -17,7 +17,7 @@ export default function SinAccesoPage() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-md bg-base p-lg text-center">
       <h1 className="font-display text-h2 text-negro">Sin acceso</h1>
-      <p className="max-w-sm font-body text-body text-grafito">
+      <p className="max-w-card font-body text-body text-grafito">
         Tu cuenta no tiene permisos para entrar al panel de administración. Si crees que esto es un
         error, contacta al equipo de Black and White Bikes.
       </p>
