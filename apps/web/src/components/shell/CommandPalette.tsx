@@ -6,7 +6,7 @@ import type { KeyboardEvent } from "react";
 import { useMemo, useRef, useState } from "react";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { cn } from "@/lib/cn";
-import { NAV_ITEMS } from "@/lib/nav";
+import { NAV_ITEMS_FLAT } from "@/lib/nav";
 
 export interface CommandPaletteProps {
   open: boolean;
@@ -29,8 +29,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return NAV_ITEMS;
-    return NAV_ITEMS.filter(
+    if (!term) return NAV_ITEMS_FLAT;
+    return NAV_ITEMS_FLAT.filter(
       (item) => item.label.toLowerCase().includes(term) || item.keywords.some((k) => k.includes(term)),
     );
   }, [query]);

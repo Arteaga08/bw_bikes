@@ -1,8 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { cookiesMock } = vi.hoisted(() => ({ cookiesMock: vi.fn() }));
+const { cookiesMock, redirectMock } = vi.hoisted(() => ({
+  cookiesMock: vi.fn(),
+  redirectMock: vi.fn((path: string) => {
+    throw new Error(`REDIRECT:${path}`);
+  }),
+}));
 
 vi.mock("next/headers", () => ({ cookies: cookiesMock }));
+vi.mock("next/navigation", () => ({ redirect: redirectMock }));
 
 const { serverApiFetch } = await import("./server");
 
@@ -15,6 +21,7 @@ describe("serverApiFetch", () => {
     vi.stubEnv("API_URL", "http://api.internal.test");
     cookiesMock.mockResolvedValue({ toString: () => "bw_access=abc123" });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ status: "success", message: "OK", data: { ok: true } })));
+    redirectMock.mockClear();
   });
 
   it("calls the real API URL with cache: no-store and forwards the incoming cookies", async () => {
@@ -58,5 +65,19 @@ describe("serverApiFetch", () => {
       message: "Sesión inválida o expirada.",
       httpStatus: 401,
     });
+  });
+
+  it("does not redirect on a 401 from /auth/* — requireAdminSession needs to catch and handle it itself", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ status: "fail", message: "No autenticado." }, 401)));
+
+    await expect(serverApiFetch("/auth/me")).rejects.toMatchObject({ name: "ApiError", httpStatus: 401 });
+    expect(redirectMock).not.toHaveBeenCalled();
+  });
+
+  it("redirects to login on a 401 outside /auth/* — the access token expired after the layout's own guard already passed", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ status: "fail", message: "No autenticado." }, 401)));
+
+    await expect(serverApiFetch("/admin/bikes/bike-1")).rejects.toThrow("REDIRECT:/admin/login");
+    expect(redirectMock).toHaveBeenCalledWith("/admin/login");
   });
 });

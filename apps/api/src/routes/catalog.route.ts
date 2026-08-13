@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { getPublicAccessoryBySlug, listPublicAccessories } from "../controllers/accessory.controller.js";
 import { getPublicBikeBySlug, listPublicBikes } from "../controllers/bike.controller.js";
+import { getPublicBrandBySlug, listPublicBrands } from "../controllers/brand.controller.js";
 import { createCategoryController } from "../controllers/category.controller.js";
 import { recordProductView } from "../controllers/product-view.controller.js";
 import { productViewRateLimiter, publicReadRateLimiter, validate } from "../middlewares/index.js";
 import { accessoryCategoryService } from "../services/accessory-category.service.js";
 import { bikeCategoryService } from "../services/bike-category.service.js";
 import {
+  brandListQuerySchema,
   categoryListQuerySchema,
   productViewSchema,
   publicProductListQuerySchema,
@@ -26,10 +28,20 @@ const router = Router();
 
 router.use(publicReadRateLimiter);
 
-const bikeCategories = createCategoryController(bikeCategoryService, { plural: "Categorías de bicicletas" });
-const accessoryCategories = createCategoryController(accessoryCategoryService, {
-  plural: "Categorías de accesorios",
-});
+// `folder` is unused on this public, read-only router (none of these routes
+// touch `uploadImage`), but `createCategoryController` requires it — reusing
+// the same values as `admin-catalog.route.ts` keeps the two instantiations
+// in sync rather than passing an arbitrary placeholder.
+const bikeCategories = createCategoryController(
+  bikeCategoryService,
+  { plural: "Categorías de bicicletas" },
+  "bike-categories",
+);
+const accessoryCategories = createCategoryController(
+  accessoryCategoryService,
+  { plural: "Categorías de accesorios" },
+  "accessory-categories",
+);
 
 // Two independent trees, two independent sets of endpoints.
 router.get("/bike-categories", validate(categoryListQuerySchema, "query"), bikeCategories.listPublic);
@@ -47,6 +59,9 @@ router.get(
   validate(slugParamSchema, "params"),
   accessoryCategories.getBySlugPublic,
 );
+
+router.get("/brands", validate(brandListQuerySchema, "query"), listPublicBrands);
+router.get("/brands/:slug", validate(slugParamSchema, "params"), getPublicBrandBySlug);
 
 router.get("/bikes", validate(publicProductListQuerySchema, "query"), listPublicBikes);
 router.get("/bikes/:slug", validate(slugParamSchema, "params"), getPublicBikeBySlug);

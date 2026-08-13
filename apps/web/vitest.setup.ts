@@ -8,3 +8,19 @@ import { afterEach } from "vitest";
 afterEach(() => {
   cleanup();
 });
+
+// jsdom doesn't implement `matchMedia` — `useMediaQuery` (Sidebar's `inert`
+// scoping) needs it present even though no test asserts on a real
+// breakpoint change; without this stub the hook throws on mount.
+if (typeof window !== "undefined" && !window.matchMedia) {
+  window.matchMedia = (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }) as unknown as MediaQueryList;
+}

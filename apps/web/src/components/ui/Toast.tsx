@@ -73,7 +73,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div aria-live="polite" className="fixed top-md right-md z-[60] flex w-80 flex-col gap-sm">
+      <div
+        aria-live="polite"
+        className="fixed top-md right-md left-md z-[60] flex w-auto flex-col gap-sm pt-[env(safe-area-inset-top)] sm:left-auto sm:w-80"
+      >
         {toasts.map((item) => (
           <div
             key={item.id}
@@ -91,7 +94,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 type="button"
                 onClick={() => dismiss(item.id)}
                 aria-label="Cerrar notificación"
-                className="font-ui text-ui text-grafito hover:text-negro"
+                className="rounded-control font-ui text-ui text-grafito transition-colors duration-150 hover:text-negro focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro"
               >
                 ×
               </button>

@@ -100,16 +100,23 @@ async function resolveProductLabels(
   const accessoryIds = rows.filter((row) => row.itemType === "accessory").map((row) => row.itemId);
 
   const [bikes, accessories] = await Promise.all([
-    bikeIds.length > 0 ? Bike.find({ _id: { $in: bikeIds } }, "name brand").exec() : Promise.resolve([]),
+    bikeIds.length > 0
+      ? Bike.find({ _id: { $in: bikeIds } }, "name brand").populate("brand", "name").exec()
+      : Promise.resolve([]),
     accessoryIds.length > 0
-      ? Accessory.find({ _id: { $in: accessoryIds } }, "name brand").exec()
+      ? Accessory.find({ _id: { $in: accessoryIds } }, "name brand").populate("brand", "name").exec()
       : Promise.resolve([]),
   ]);
 
   const labels = new Map<string, { name: string; brand: string }>();
-  for (const bike of bikes) labels.set(`bike:${String(bike._id)}`, { name: bike.name, brand: bike.brand });
+  for (const bike of bikes) {
+    labels.set(`bike:${String(bike._id)}`, { name: bike.name, brand: (bike.brand as unknown as { name: string }).name });
+  }
   for (const accessory of accessories) {
-    labels.set(`accessory:${String(accessory._id)}`, { name: accessory.name, brand: accessory.brand });
+    labels.set(`accessory:${String(accessory._id)}`, {
+      name: accessory.name,
+      brand: (accessory.brand as unknown as { name: string }).name,
+    });
   }
 
   const ranked: PreferenceProductRanking[] = [];

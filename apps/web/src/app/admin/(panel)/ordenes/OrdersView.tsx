@@ -3,11 +3,11 @@
 import type { AdminOrder, OrderStatus, ShippingAddress } from "@bw-bikes/shared";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
-import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { Button } from "@/components/ui/Button";
+import { DataTable, DataTableSkeleton, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { Pagination } from "@/components/ui/Pagination";
-import { TableRowSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   bulkUpdateOrderStatus,
@@ -20,7 +20,9 @@ import {
   type RecordShipmentInput,
 } from "@/lib/api/admin-orders";
 import { ApiError } from "@/lib/api/error";
-import { formatCurrencyCents, formatDateTime } from "@/lib/orders/format";
+import { cn } from "@/lib/cn";
+import { formatCurrencyCents } from "@/lib/format";
+import { formatDateTime } from "@/lib/orders/format";
 import { AuthorizationCountdown } from "./AuthorizationCountdown";
 import { BulkStatusBar } from "./BulkStatusBar";
 import { ConfirmSupplierDialog } from "./ConfirmSupplierDialog";
@@ -300,7 +302,8 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
       ? [
           {
             key: "select",
-            header: "",
+            header: <span className="sr-only">Seleccionar</span>,
+            className: "w-px",
             render: (order: AdminOrder) => (
               <input
                 type="checkbox"
@@ -315,6 +318,7 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
     {
       key: "order",
       header: "Orden",
+      kind: "text",
       render: (order) => (
         <div>
           <p className="font-ui text-ui text-negro">{order.orderNumber}</p>
@@ -325,9 +329,10 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
     {
       key: "customer",
       header: "Cliente",
+      kind: "text",
       render: (order) => (order.customer ? `${order.customer.firstName} ${order.customer.lastName}` : "—"),
     },
-    { key: "status", header: "Estatus", render: (order) => <OrderStatusBadge status={order.status} /> },
+    { key: "status", header: "Estatus", kind: "status", render: (order) => <OrderStatusBadge status={order.status} /> },
     {
       key: "authorization",
       header: "Autorización",
@@ -340,10 +345,12 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
         />
       ),
     },
-    { key: "total", header: "Total", render: (order) => formatCurrencyCents(order.totals.totalCents) },
+    { key: "total", header: "Total", kind: "number", render: (order) => formatCurrencyCents(order.totals.totalCents) },
     {
       key: "actions",
-      header: "",
+      header: "Acciones",
+      kind: "actions",
+      className: "w-px whitespace-nowrap",
       render: (order) => (
         <OrderRowActions
           showSupplierActions={isQueue}
@@ -358,19 +365,29 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
 
   return (
     <>
-      <div className="border-b border-borde px-lg">
+      <div className="border-b border-borde px-md sm:px-lg">
         <nav className="flex gap-lg" aria-label="Vistas de órdenes">
           <button
             type="button"
             onClick={() => switchTab("queue")}
-            className={`border-b-2 py-md font-ui text-ui ${isQueue ? "border-negro text-negro" : "border-transparent text-grafito"}`}
+            aria-current={isQueue ? "true" : undefined}
+            className={cn(
+              "border-b-2 py-md font-ui text-ui transition-colors duration-150",
+              "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro",
+              isQueue ? "border-negro text-negro" : "border-transparent text-grafito hover:text-negro",
+            )}
           >
             Cola de proveedor{tab === "queue" ? ` (${meta.total})` : ""}
           </button>
           <button
             type="button"
             onClick={() => switchTab("all")}
-            className={`border-b-2 py-md font-ui text-ui ${!isQueue ? "border-negro text-negro" : "border-transparent text-grafito"}`}
+            aria-current={!isQueue ? "true" : undefined}
+            className={cn(
+              "border-b-2 py-md font-ui text-ui transition-colors duration-150",
+              "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro",
+              !isQueue ? "border-negro text-negro" : "border-transparent text-grafito hover:text-negro",
+            )}
           >
             Todas
           </button>
@@ -390,25 +407,17 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
       ) : null}
 
       <ErrorBoundary>
-        <div className="p-lg">
+        <div className="p-md sm:p-lg">
           {loading ? (
-            <div className="overflow-x-auto rounded-card border border-borde bg-surface">
-              <table className="w-full min-w-max border-collapse text-left">
-                <tbody>
-                  {Array.from({ length: 5 }, (_, index) => (
-                    <TableRowSkeleton key={index} columns={columns.length} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTableSkeleton columns={columns} />
           ) : loadError ? (
             <EmptyState
               title="No se pudieron cargar las órdenes"
               description="Ocurrió un problema al conectar con el servidor."
               action={
-                <button type="button" onClick={refetch} className="font-ui text-ui text-negro underline">
+                <Button variant="ghost" onClick={refetch}>
                   Reintentar
-                </button>
+                </Button>
               }
             />
           ) : orders.length === 0 ? (
@@ -422,7 +431,7 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
         </div>
       </ErrorBoundary>
 
-      <div className="px-lg">
+      <div className="px-md sm:px-lg">
         <Pagination meta={meta} onPageChange={setPage} />
       </div>
 

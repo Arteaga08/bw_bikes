@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { bikeService, toPublicBike } from "../services/bike.service.js";
+import { bikeService, toAdminBike, toPublicBike } from "../services/bike.service.js";
 import { uploadImages } from "../services/storage/storage.service.js";
 import { asyncHandler, routeParam, sendResponse } from "../utils/index.js";
 import { requireActor } from "./category.controller.js";
@@ -19,32 +19,37 @@ export const getPublicBikeBySlug = asyncHandler(async (req: Request, res: Respon
 
 export const listAdminBikes = asyncHandler(async (req: Request, res: Response) => {
   const { documents, meta } = await bikeService.list(req.query, { publicOnly: false });
-  sendResponse(res, 200, "Bicicletas obtenidas.", { bikes: documents }, meta);
+  sendResponse(res, 200, "Bicicletas obtenidas.", { bikes: documents.map(toAdminBike) }, meta);
 });
 
 export const getAdminBike = asyncHandler(async (req: Request, res: Response) => {
-  const bike = await bikeService.getById(routeParam(req, "id"));
-  sendResponse(res, 200, "Bicicleta obtenida.", { bike });
+  const bike = await bikeService.getAdminById(routeParam(req, "id"));
+  sendResponse(res, 200, "Bicicleta obtenida.", { bike: toAdminBike(bike) });
 });
 
 export const createBike = asyncHandler(async (req: Request, res: Response) => {
   const bike = await bikeService.create(req.body, requireActor(req));
-  sendResponse(res, 201, "Bicicleta creada.", { bike });
+  sendResponse(res, 201, "Bicicleta creada.", { bike: toAdminBike(bike) });
 });
 
 export const updateBike = asyncHandler(async (req: Request, res: Response) => {
   const bike = await bikeService.update(routeParam(req, "id"), req.body, requireActor(req));
-  sendResponse(res, 200, "Bicicleta actualizada.", { bike });
+  sendResponse(res, 200, "Bicicleta actualizada.", { bike: toAdminBike(bike) });
 });
 
 export const archiveBike = asyncHandler(async (req: Request, res: Response) => {
   const bike = await bikeService.archive(routeParam(req, "id"), requireActor(req));
-  sendResponse(res, 200, "Bicicleta archivada.", { bike });
+  sendResponse(res, 200, "Bicicleta archivada.", { bike: toAdminBike(bike) });
 });
 
 export const restoreBike = asyncHandler(async (req: Request, res: Response) => {
   const bike = await bikeService.restore(routeParam(req, "id"), requireActor(req));
-  sendResponse(res, 200, "Bicicleta restaurada.", { bike });
+  sendResponse(res, 200, "Bicicleta restaurada.", { bike: toAdminBike(bike) });
+});
+
+export const deleteBike = asyncHandler(async (req: Request, res: Response) => {
+  await bikeService.remove(routeParam(req, "id"), requireActor(req));
+  sendResponse(res, 200, "Bicicleta eliminada.");
 });
 
 export const replaceBikeSpecGroups = asyncHandler(async (req: Request, res: Response) => {

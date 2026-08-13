@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { accessoryService, toPublicAccessory } from "../services/accessory.service.js";
+import { accessoryService, toAdminAccessory, toPublicAccessory } from "../services/accessory.service.js";
 import { uploadImages } from "../services/storage/storage.service.js";
 import { asyncHandler, routeParam, sendResponse } from "../utils/index.js";
 import { requireActor } from "./category.controller.js";
@@ -19,32 +19,37 @@ export const getPublicAccessoryBySlug = asyncHandler(async (req: Request, res: R
 
 export const listAdminAccessories = asyncHandler(async (req: Request, res: Response) => {
   const { documents, meta } = await accessoryService.list(req.query, { publicOnly: false });
-  sendResponse(res, 200, "Accesorios obtenidos.", { accessories: documents }, meta);
+  sendResponse(res, 200, "Accesorios obtenidos.", { accessories: documents.map(toAdminAccessory) }, meta);
 });
 
 export const getAdminAccessory = asyncHandler(async (req: Request, res: Response) => {
   const accessory = await accessoryService.getById(routeParam(req, "id"));
-  sendResponse(res, 200, "Accesorio obtenido.", { accessory });
+  sendResponse(res, 200, "Accesorio obtenido.", { accessory: toAdminAccessory(accessory) });
 });
 
 export const createAccessory = asyncHandler(async (req: Request, res: Response) => {
   const accessory = await accessoryService.create(req.body, requireActor(req));
-  sendResponse(res, 201, "Accesorio creado.", { accessory });
+  sendResponse(res, 201, "Accesorio creado.", { accessory: toAdminAccessory(accessory) });
 });
 
 export const updateAccessory = asyncHandler(async (req: Request, res: Response) => {
   const accessory = await accessoryService.update(routeParam(req, "id"), req.body, requireActor(req));
-  sendResponse(res, 200, "Accesorio actualizado.", { accessory });
+  sendResponse(res, 200, "Accesorio actualizado.", { accessory: toAdminAccessory(accessory) });
 });
 
 export const archiveAccessory = asyncHandler(async (req: Request, res: Response) => {
   const accessory = await accessoryService.archive(routeParam(req, "id"), requireActor(req));
-  sendResponse(res, 200, "Accesorio archivado.", { accessory });
+  sendResponse(res, 200, "Accesorio archivado.", { accessory: toAdminAccessory(accessory) });
 });
 
 export const restoreAccessory = asyncHandler(async (req: Request, res: Response) => {
   const accessory = await accessoryService.restore(routeParam(req, "id"), requireActor(req));
-  sendResponse(res, 200, "Accesorio restaurado.", { accessory });
+  sendResponse(res, 200, "Accesorio restaurado.", { accessory: toAdminAccessory(accessory) });
+});
+
+export const deleteAccessory = asyncHandler(async (req: Request, res: Response) => {
+  await accessoryService.remove(routeParam(req, "id"), requireActor(req));
+  sendResponse(res, 200, "Accesorio eliminado.");
 });
 
 export const replaceAccessorySpecGroups = asyncHandler(async (req: Request, res: Response) => {

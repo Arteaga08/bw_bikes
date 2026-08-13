@@ -32,6 +32,23 @@ export const categoryListQuerySchema = Joi.object({
   isActive: Joi.boolean().optional(),
 });
 
+/**
+ * A flat, non-hierarchical list scoped only by pagination/search/isActive —
+ * shared by every catalog-adjacent resource that isn't a tree: brands,
+ * badges, spec templates. `brandListQuerySchema`/`badgeListQuerySchema` are
+ * the same object under two names so each route file reads naturally about
+ * the resource it's validating, without three near-identical schemas to keep
+ * in sync.
+ */
+export const flatCatalogListQuerySchema = Joi.object({
+  ...pagination,
+  isActive: Joi.boolean().optional(),
+});
+
+export const brandListQuerySchema = flatCatalogListQuerySchema;
+export const badgeListQuerySchema = flatCatalogListQuerySchema;
+export const specTemplateListQuerySchema = flatCatalogListQuerySchema;
+
 /** Shared by both product catalogs; `isActive` is admin-only (public lists force it to true). */
 const productFilters = {
   ...pagination,

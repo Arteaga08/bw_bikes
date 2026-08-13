@@ -38,3 +38,24 @@ no un dashboard analítico. La tabla/detalle de `/admin/ordenes` (tabs → filtr
 `SlideOver` de detalle) sale directo de la plantilla de página admin de
 `~/.claude/standards/DASHBOARD_GUIDELINES.md` §3, no de esta referencia. Los KPIs + gráficos siguen
 pendientes para M11, que es donde esta referencia sí aplica.
+
+## Casa de Cristal — panel admin de producto (captura propia de Manuel)
+
+Captura de pantalla de otro proyecto de Manuel (`casadecristal.mx`, panadería/repostería) —
+compartida el 2026-08-12 junto con el pase de revisión de M10.4 en navegador.
+
+**Patrón a retomar:** la lista de productos como **rejilla de tarjetas con foto dominante** —
+imagen a sangre en la parte superior, nombre, categoría, chips de estado ("En menú QR", "Del mes"),
+precio destacado, toggle de disponibilidad, y un pie de acciones (Editar/Eliminar). Composición, no
+paleta: esa referencia es crema cálida, esquinas muy redondeadas y con sombra suave — Black and
+White Bikes es negro/blanco/dorado, plano (`DESIGN.md` §4, sin `box-shadow` de elevación) y de radio
+casi recto (`rounded.card-lg` = 14px, no los ~20px+ de la referencia).
+
+**Dónde aplica:** la lista de bicicletas/accesorios en `/admin/catalogo/{bicicletas,accesorios}`
+(**M10.5**, punto 8a) — reemplaza la tabla que `CatalogView.tsx` usa hoy, solo para esas dos listas.
+Las otras cinco (marcas, badges, fichas técnicas, categorías, órdenes) siguen siendo tabla: son las
+que no tienen foto y donde la densidad importa más que lo visual.
+
+**Pendiente al retomar:** tres variantes de tarjeta se maquetaron en `/admin/mockups/tarjetas`
+(andamio temporal, se borra al cerrar M10.5) para elegir la composición exacta antes de tocar
+`CatalogView.tsx`.

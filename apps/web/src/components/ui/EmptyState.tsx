@@ -10,7 +10,7 @@ export interface EmptyStateProps {
 /** Never a blank screen (FRONTEND_GUIDELINES.md §6) — icon + message + optional action. */
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center gap-sm rounded-card border border-borde bg-surface p-3xl text-center">
+    <div className="flex flex-col items-center gap-sm rounded-card border border-borde bg-surface p-xl text-center sm:p-3xl">
       {icon ? (
         <div aria-hidden="true" className="text-grafito">
           {icon}

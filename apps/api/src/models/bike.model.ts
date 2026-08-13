@@ -1,30 +1,33 @@
-import type { BrakeType, ProductImage, ProductVariant, SpecGroup } from "@bw-bikes/shared";
+import type { ProductImage, ProductVariant, SpecGroup } from "@bw-bikes/shared";
 import { type Document, model, Schema, type Types } from "mongoose";
 import { MAX_GALLERY_IMAGES, productImageSchema } from "./schemas/product-image.schema.js";
 import { MAX_PRICE_CENTS, MAX_VARIANTS, productVariantSchema } from "./schemas/product-variant.schema.js";
 import { MAX_SPEC_GROUPS, specGroupSchema } from "./schemas/spec-group.schema.js";
 
 export const MAX_PRODUCT_NAME_LENGTH = 140;
+/** Only used to bound the **snapshot** brand name frozen onto an order line (`order-line.schema.ts`) — `Bike.brand`/`Accessory.brand` themselves are a `Brand` reference, not a string; see `brand.model.ts`'s own `MAX_BRAND_NAME_LENGTH`. */
 export const MAX_BRAND_LENGTH = 60;
 export const MAX_SHORT_DESCRIPTION_LENGTH = 300;
 export const MAX_DESCRIPTION_LENGTH = 5000;
 /** Cross-sell is curated by hand; past a dozen it stops being a curation. */
 export const MAX_RELATED_ACCESSORIES = 12;
+/** More than one merchandising badge stops reading as "highlighted" and starts reading as noise. */
+export const MAX_PRODUCT_BADGES = 1;
 
 export interface IBike extends Document {
   name: string;
   slug: string;
-  brand: string;
+  brand: Types.ObjectId;
   category: Types.ObjectId;
   shortDescription: string;
   description: string;
   price: number;
   compareAtPrice?: number;
-  brakeType: BrakeType;
   variants: ProductVariant[];
   specGroups: SpecGroup[];
   gallery: ProductImage[];
   relatedAccessories: Types.ObjectId[];
+  badges: Types.ObjectId[];
   isActive: boolean;
   archivedAt?: Date | null;
   createdAt: Date;
@@ -38,13 +41,8 @@ const bikeSchema = new Schema<IBike>(
     // First-class filter fields. The free-form spec sheet is display-only, so
     // anything the storefront filters on must be a typed column here — that's
     // the trade-off the client accepted for a template-less ficha técnica.
-    brand: { type: String, required: true, trim: true, maxlength: MAX_BRAND_LENGTH, index: true },
+    brand: { type: Schema.Types.ObjectId, ref: "Brand", required: true, index: true },
     category: { type: Schema.Types.ObjectId, ref: "BikeCategory", required: true },
-    brakeType: {
-      type: String,
-      enum: ["hydraulic_disc", "mechanical_disc", "rim"] satisfies BrakeType[],
-      required: true,
-    },
 
     shortDescription: { type: String, required: true, trim: true, maxlength: MAX_SHORT_DESCRIPTION_LENGTH },
     description: { type: String, required: true, trim: true, maxlength: MAX_DESCRIPTION_LENGTH },
@@ -86,6 +84,16 @@ const bikeSchema = new Schema<IBike>(
       validate: {
         validator: (ids: unknown[]) => ids.length <= MAX_RELATED_ACCESSORIES,
         message: `No se pueden sugerir más de ${MAX_RELATED_ACCESSORIES} accesorios.`,
+      },
+    },
+
+    // Merchandising badges ("Novedad", "Bestseller") — see `badge.model.ts`.
+    badges: {
+      type: [{ type: Schema.Types.ObjectId, ref: "Badge" }],
+      default: [],
+      validate: {
+        validator: (ids: unknown[]) => ids.length <= MAX_PRODUCT_BADGES,
+        message: `Solo se puede asignar ${MAX_PRODUCT_BADGES} badge por producto.`,
       },
     },
 

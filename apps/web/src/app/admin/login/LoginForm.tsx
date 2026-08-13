@@ -36,7 +36,9 @@ interface EnrollmentSetup {
   otpauthUrl: string;
 }
 
-function isTwoFactorRequired(data: LoginResponseData): data is TwoFactorRequiredData {
+function isTwoFactorRequired(
+  data: LoginResponseData,
+): data is TwoFactorRequiredData {
   return "twoFactorRequired" in data;
 }
 
@@ -49,7 +51,9 @@ export function LoginForm() {
   const [totpCode, setTotpCode] = useState("");
   const [enrollment, setEnrollment] = useState<EnrollmentSetup | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [challengeExpiresAt, setChallengeExpiresAt] = useState<number | null>(null);
+  const [challengeExpiresAt, setChallengeExpiresAt] = useState<number | null>(
+    null,
+  );
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,10 +83,15 @@ export function LoginForm() {
     const expiresAt = challengeExpiresAt;
 
     function tick(): void {
-      const remaining = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+      const remaining = Math.max(
+        0,
+        Math.round((expiresAt - Date.now()) / 1000),
+      );
       setRemainingSeconds(remaining);
       if (remaining === 0) {
-        resetToCredentials("Tu sesión de verificación expiró. Inicia sesión de nuevo.");
+        resetToCredentials(
+          "Tu sesión de verificación expiró. Inicia sesión de nuevo.",
+        );
       }
     }
 
@@ -117,11 +126,16 @@ export function LoginForm() {
         return;
       }
 
-      const { data: setup } = await apiFetch<EnrollmentSetup>("/auth/2fa/enroll/start", { method: "POST" });
+      const { data: setup } = await apiFetch<EnrollmentSetup>(
+        "/auth/2fa/enroll/start",
+        { method: "POST" },
+      );
       setEnrollment(setup);
       setStep("enroll");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo iniciar sesión.");
+      setError(
+        err instanceof ApiError ? err.message : "No se pudo iniciar sesión.",
+      );
     } finally {
       setLoading(false);
     }
@@ -138,7 +152,11 @@ export function LoginForm() {
       });
       goToPanel();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo verificar el código.");
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "No se pudo verificar el código.",
+      );
     } finally {
       setLoading(false);
     }
@@ -155,7 +173,11 @@ export function LoginForm() {
       });
       goToPanel();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo activar la autenticación de dos factores.");
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "No se pudo activar la autenticación de dos factores.",
+      );
     } finally {
       setLoading(false);
     }
@@ -182,7 +204,11 @@ export function LoginForm() {
 
   if (step === "credentials") {
     return (
-      <form onSubmit={handleCredentialsSubmit} className="flex flex-col gap-md" noValidate>
+      <form
+        onSubmit={handleCredentialsSubmit}
+        className="flex flex-col gap-md"
+        noValidate
+      >
         <Input
           label="Correo"
           type="email"
@@ -199,8 +225,15 @@ export function LoginForm() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        {error ? <p className="font-body text-caption text-estado-error">{error}</p> : null}
-        <Button type="submit" variant="primary" loading={loading} className="w-full">
+        {error ? (
+          <p className="font-body text-caption text-estado-error">{error}</p>
+        ) : null}
+        <Button
+          type="submit"
+          variant="primary"
+          loading={loading}
+          className="w-full"
+        >
           Iniciar sesión
         </Button>
       </form>
@@ -209,14 +242,25 @@ export function LoginForm() {
 
   if (step === "enroll") {
     return (
-      <form onSubmit={handleEnrollSubmit} className="flex flex-col gap-md" noValidate>
+      <form
+        onSubmit={handleEnrollSubmit}
+        className="flex flex-col gap-md"
+        noValidate
+      >
         <p className="font-body text-body text-grafito">
-          Configura la autenticación de dos factores escaneando este código con tu aplicación de
-          autenticación (Google Authenticator, 1Password, Authy).
+          Configura la autenticación de dos factores escaneando este código con
+          tu aplicación de autenticación (Google Authenticator, 1Password,
+          Authy).
         </p>
         {qrDataUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- a locally generated data: URL, not a remote/optimizable image
-          <img src={qrDataUrl} alt="Código QR para configurar la autenticación de dos factores" width={220} height={220} className="self-center" />
+          <img
+            src={qrDataUrl}
+            alt="Código QR para configurar la autenticación de dos factores"
+            width={220}
+            height={220}
+            className="self-center"
+          />
         ) : null}
         {enrollment ? (
           <p className="break-all rounded-control border border-borde bg-base p-sm font-body text-caption text-grafito">
@@ -231,10 +275,21 @@ export function LoginForm() {
           required
           value={totpCode}
           onChange={(event) => setTotpCode(event.target.value)}
-          helper={remainingSeconds !== null ? `Expira en ${remainingSeconds}s` : undefined}
+          helper={
+            remainingSeconds !== null
+              ? `Expira en ${remainingSeconds}s`
+              : undefined
+          }
         />
-        {error ? <p className="font-body text-caption text-estado-error">{error}</p> : null}
-        <Button type="submit" variant="primary" loading={loading} className="w-full">
+        {error ? (
+          <p className="font-body text-caption text-estado-error">{error}</p>
+        ) : null}
+        <Button
+          type="submit"
+          variant="primary"
+          loading={loading}
+          className="w-full"
+        >
           Activar y entrar
         </Button>
       </form>
@@ -242,7 +297,11 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleTotpSubmit} className="flex flex-col gap-md" noValidate>
+    <form
+      onSubmit={handleTotpSubmit}
+      className="flex flex-col gap-md"
+      noValidate
+    >
       <p className="font-body text-body text-grafito">
         Ingresa el código de 6 dígitos de tu aplicación de autenticación.
       </p>
@@ -254,10 +313,21 @@ export function LoginForm() {
         required
         value={totpCode}
         onChange={(event) => setTotpCode(event.target.value)}
-        helper={remainingSeconds !== null ? `Expira en ${remainingSeconds}s` : undefined}
+        helper={
+          remainingSeconds !== null
+            ? `Expira en ${remainingSeconds}s`
+            : undefined
+        }
       />
-      {error ? <p className="font-body text-caption text-estado-error">{error}</p> : null}
-      <Button type="submit" variant="primary" loading={loading} className="w-full">
+      {error ? (
+        <p className="font-body text-caption text-estado-error">{error}</p>
+      ) : null}
+      <Button
+        type="submit"
+        variant="primary"
+        loading={loading}
+        className="w-full"
+      >
         Verificar
       </Button>
     </form>

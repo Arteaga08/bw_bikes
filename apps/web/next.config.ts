@@ -30,6 +30,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  images: {
+    // The catalog gallery (M10) renders `ProductImage.url` — Cloudinary's
+    // canonical delivery URL — via `next/image`. The hostname is fixed
+    // regardless of account (`buildImageUrl` in packages/shared bakes the
+    // cloud name into the *path*, not the host), so this doesn't depend on
+    // which Cloudinary account is configured.
+    remotePatterns: [{ protocol: "https", hostname: "res.cloudinary.com" }],
+  },
 };
 
 export default nextConfig;

@@ -5,14 +5,33 @@ import {
   AccessoryCategory,
   Bike,
   BikeCategory,
+  Brand,
   type IAccessory,
   type IBike,
+  type IBrand,
   type ICategory,
   type IInventoryItem,
   type IUser,
   InventoryItem,
   User,
 } from "../../src/models/index.js";
+
+/**
+ * Seeds a brand straight against the model — `Bike.brand`/`Accessory.brand`
+ * reference `Brand` by id (M10.3), so every product fixture needs one behind
+ * it. Suffixed by default so a test that seeds several products of the same
+ * nominal brand ("Specialized" twice) doesn't trip the unique `name`/`slug`
+ * index; pass `name` and/or `slug` explicitly when a test asserts on the
+ * brand's own text (e.g. filtering products by a known slug).
+ */
+export function createBrandDoc(overrides: { name?: string; slug?: string } = {}): Promise<IBrand> {
+  const suffix = Math.random().toString(16).slice(2, 8);
+  const name = overrides.name ?? `Marca ${suffix}`;
+  return Brand.create({
+    name,
+    slug: overrides.slug ?? `marca-${suffix}`,
+  });
+}
 
 /**
  * Creates a user directly against the model, bypassing the public API —
@@ -60,15 +79,19 @@ export function createBikeCategoryDoc(overrides: Partial<Pick<ICategory, "name" 
  * can also assert ordering without a second fixture.
  */
 export async function seedBikes(count: number, categoryId: unknown): Promise<IBike[]> {
+  const [specialized, canyon] = await Promise.all([
+    createBrandDoc({ name: "Specialized", slug: "specialized" }),
+    createBrandDoc({ name: "Canyon", slug: "canyon" }),
+  ]);
+
   const docs = Array.from({ length: count }, (_, index) => ({
     name: `Bici ${String(index).padStart(2, "0")}`,
     slug: `bici-${String(index).padStart(2, "0")}`,
-    brand: index % 2 === 0 ? "Specialized" : "Canyon",
+    brand: index % 2 === 0 ? specialized._id : canyon._id,
     category: categoryId,
     shortDescription: "Bici de prueba",
     description: "Descripción de prueba",
     price: 10_000_00 + index * 1_000_00,
-    brakeType: "hydraulic_disc",
     variants: [{ sku: `BK-${String(index).padStart(3, "0")}`, size: "M", fulfillmentMode: "in_stock", isActive: true }],
   }));
 
@@ -114,21 +137,25 @@ export async function seedBikeWithVariant(
     variantActive?: boolean;
     isActive?: boolean;
     withGallery?: boolean;
+    /** Pins the brand's name for a test that asserts on it (e.g. the order-line snapshot) — random otherwise. */
+    brandName?: string;
   } = {},
 ): Promise<{ bike: IBike; itemId: string; sku: string }> {
-  const category = await createBikeCategoryDoc();
+  const [category, brand] = await Promise.all([
+    createBikeCategoryDoc(),
+    createBrandDoc(overrides.brandName ? { name: overrides.brandName } : {}),
+  ]);
   const sku = overrides.sku ?? "BK-STOCK-M";
   const suffix = Math.random().toString(16).slice(2, 8);
 
   const bike = await Bike.create({
     name: `Bici de inventario ${suffix}`,
     slug: `bici-inventario-${suffix}`,
-    brand: "Specialized",
+    brand: brand._id,
     category: category._id,
     shortDescription: "Bici de prueba",
     description: "Descripción de prueba",
     price: overrides.price ?? 19_999_900,
-    brakeType: "hydraulic_disc",
     isActive: overrides.isActive ?? true,
     ...(overrides.isActive === false ? { archivedAt: new Date() } : {}),
     variants: [
@@ -168,16 +195,21 @@ export async function seedAccessoryWithVariant(
     variantPrice?: number;
     variantActive?: boolean;
     isActive?: boolean;
+    /** Pins the brand's name for a test that asserts on it — random otherwise. */
+    brandName?: string;
   } = {},
 ): Promise<{ accessory: IAccessory; itemId: string; sku: string }> {
   const suffix = Math.random().toString(16).slice(2, 8);
-  const category = await AccessoryCategory.create({ name: "Cascos", slug: `cascos-${suffix}`, isActive: true });
+  const [category, brand] = await Promise.all([
+    AccessoryCategory.create({ name: "Cascos", slug: `cascos-${suffix}`, isActive: true }),
+    createBrandDoc(overrides.brandName ? { name: overrides.brandName } : {}),
+  ]);
   const sku = overrides.sku ?? "AC-STOCK-U";
 
   const accessory = await Accessory.create({
     name: `Casco de prueba ${suffix}`,
     slug: `casco-prueba-${suffix}`,
-    brand: "Giro",
+    brand: brand._id,
     category: category._id,
     description: "Descripción de prueba",
     price: overrides.price ?? 4_500_00,

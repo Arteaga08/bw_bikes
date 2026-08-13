@@ -1,9 +1,10 @@
-import type { AuditAction, PublicCategory, PublicCategoryTreeNode } from "@bw-bikes/shared";
+import type { AdminCategory, AuditAction, CategoryImage, PublicCategory } from "@bw-bikes/shared";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
 import type { ICategory } from "../models/index.js";
 import { AppError, buildMeta, escapeRegex, parseListQuery, slugify } from "../utils/index.js";
 import { recordAuditLog } from "./audit-log.service.js";
+import { deleteImage } from "./storage/storage.service.js";
 
 const SORTABLE_FIELDS = ["order", "name", "createdAt"] as const;
 
@@ -38,6 +39,22 @@ export function toPublicCategory(category: ICategory): PublicCategory {
     ...(category.description ? { description: category.description } : {}),
     parent: category.parent ? String(category.parent) : null,
     order: category.order,
+    ...(category.image ? { image: category.image } : {}),
+  };
+}
+
+/**
+ * The admin DTO — same fields as the storefront's, plus `isActive` and
+ * timestamps. The storefront tree never needs `isActive` (it only ever walks
+ * active categories via the `publicOnly` filter), but the admin table has to
+ * tell an active category apart from a disabled one.
+ */
+export function toAdminCategory(category: ICategory): AdminCategory {
+  return {
+    ...toPublicCategory(category),
+    isActive: category.isActive,
+    createdAt: category.createdAt.toISOString(),
+    updatedAt: category.updatedAt.toISOString(),
   };
 }
 
@@ -123,34 +140,35 @@ export function createCategoryService(
       Category.countDocuments(filter).exec(),
     ]);
 
-    return { categories: documents.map(toPublicCategory), meta: buildMeta(total, page, limit) };
+    // Returns the raw documents, not a mapped DTO — the caller (public vs
+    // admin controller) picks `toPublicCategory` or `toAdminCategory`, same
+    // split the product catalog already uses via `product.service.ts`.
+    return { documents, meta: buildMeta(total, page, limit) };
   }
 
   /**
    * The whole tree in one round trip: two levels means one query for roots,
    * one for every child, then a group-by in memory. Not paginated on purpose —
-   * a navigation tree is bounded by design and is consumed as a unit.
+   * a navigation tree is bounded by design and is consumed as a unit. Raw
+   * documents, for the same reason `list()` returns them raw.
    */
-  async function tree(options: { publicOnly: boolean }): Promise<PublicCategoryTreeNode[]> {
+  async function tree(options: { publicOnly: boolean }): Promise<Array<{ root: ICategory; children: ICategory[] }>> {
     const filter: Record<string, unknown> = options.publicOnly ? { isActive: true } : {};
 
     const all = await Category.find(filter).sort({ order: 1, name: 1 }).exec();
 
-    const childrenByParent = new Map<string, PublicCategory[]>();
+    const childrenByParent = new Map<string, ICategory[]>();
     for (const category of all) {
       if (!category.parent) continue;
       const key = String(category.parent);
       const siblings = childrenByParent.get(key) ?? [];
-      siblings.push(toPublicCategory(category));
+      siblings.push(category);
       childrenByParent.set(key, siblings);
     }
 
     return all
       .filter((category) => !category.parent)
-      .map((root) => ({
-        ...toPublicCategory(root),
-        children: childrenByParent.get(String(root._id)) ?? [],
-      }));
+      .map((root) => ({ root, children: childrenByParent.get(String(root._id)) ?? [] }));
   }
 
   async function getBySlug(slug: string, options: { publicOnly: boolean }): Promise<ICategory> {
@@ -286,7 +304,63 @@ export function createCategoryService(
     });
   }
 
-  return { list, tree, getBySlug, findByIdOrFail, create, update, remove };
+  /**
+   * Replaces the category's image, deleting the previous Cloudinary asset (if
+   * any) only **after** the document is saved — same order as
+   * `product.service.ts`'s `removeGalleryImage`: a failed remote delete
+   * orphans an asset (recoverable), the reverse order would leave the
+   * category pointing at a URL that 404s (not recoverable by itself).
+   */
+  async function setImage(id: string, image: CategoryImage, actor: ActorContext): Promise<ICategory> {
+    const category = await findByIdOrFail(id);
+    const previousPublicId = category.image?.publicId;
+
+    category.image = image;
+    await category.save();
+
+    if (previousPublicId) {
+      await deleteImage(previousPublicId);
+    }
+
+    await recordAuditLog({
+      actorId: actor.actorId,
+      actorType: "user",
+      action: "catalog.category_image_updated" satisfies AuditAction,
+      module: moduleName,
+      targetId: id,
+      after: { publicId: image.publicId },
+      ip: actor.ip,
+    });
+
+    return category;
+  }
+
+  async function removeImage(id: string, actor: ActorContext): Promise<ICategory> {
+    const category = await findByIdOrFail(id);
+    if (!category.image) {
+      throw new AppError("La categoría no tiene imagen.", 409);
+    }
+    const publicId = category.image.publicId;
+
+    category.image = undefined;
+    await category.save();
+
+    await deleteImage(publicId);
+
+    await recordAuditLog({
+      actorId: actor.actorId,
+      actorType: "user",
+      action: "catalog.category_image_updated" satisfies AuditAction,
+      module: moduleName,
+      targetId: id,
+      before: { publicId },
+      ip: actor.ip,
+    });
+
+    return category;
+  }
+
+  return { list, tree, getBySlug, findByIdOrFail, create, update, remove, setImage, removeImage };
 }
 
 export type CategoryService = ReturnType<typeof createCategoryService>;

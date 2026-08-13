@@ -6,17 +6,22 @@ import { usePathname } from "next/navigation";
 import { Fragment } from "react";
 import { SEGMENT_LABELS } from "@/lib/nav";
 
-interface Crumb {
+export interface Crumb {
   label: string;
   href: string;
 }
 
-function buildCrumbs(pathname: string): Crumb[] {
+/** A Mongo `ObjectId`: 24 hex chars — an editor route's `[id]` segment, never a label worth showing raw. */
+const OBJECT_ID_PATTERN = /^[0-9a-f]{24}$/i;
+
+/** Exported so `TopBar` can derive its mobile "back to parent" link from the same source of truth. */
+export function buildCrumbs(pathname: string): Crumb[] {
   const segments = pathname.split("/").filter(Boolean);
   let href = "";
   return segments.map((segment) => {
     href += `/${segment}`;
-    return { label: SEGMENT_LABELS[segment] ?? segment, href };
+    const label = SEGMENT_LABELS[segment] ?? (OBJECT_ID_PATTERN.test(segment) ? "Editar" : segment);
+    return { label, href };
   });
 }
 
@@ -28,7 +33,10 @@ export function Breadcrumbs() {
   if (crumbs.length === 0) return null;
 
   return (
-    <nav aria-label="Migas de pan" className="flex items-center gap-xs border-b border-borde px-lg py-sm">
+    <nav
+      aria-label="Migas de pan"
+      className="hidden items-center gap-xs overflow-x-auto border-b border-borde px-lg py-sm whitespace-nowrap md:flex"
+    >
       {crumbs.map((crumb, index) => {
         const isLast = index === crumbs.length - 1;
         return (

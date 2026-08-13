@@ -1,13 +1,12 @@
-import { Bicycle } from "@phosphor-icons/react/ssr";
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { redirect } from "next/navigation";
 
+/**
+ * Bikes and accessories each got their own route in M10.1
+ * (`/admin/catalogo/bicicletas`, `/admin/catalogo/accesorios`), reached from
+ * their own sidebar sections — there's no longer a combined catalog screen to
+ * land on. This keeps `/admin/catalogo` (old bookmarks, the sidebar's own
+ * former destination) from 404ing.
+ */
 export default function CatalogoPage() {
-  return (
-    <PlaceholderPage
-      title="Catálogo"
-      subtitle="Bicicletas y accesorios — árboles de categoría y ficha técnica libre por producto."
-      icon={Bicycle}
-      milestone="M10"
-    />
-  );
+  redirect("/admin/catalogo/bicicletas");
 }

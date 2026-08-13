@@ -5,7 +5,7 @@ import { Bike } from "../src/models/index.js";
 import { MAX_FILE_SIZE_BYTES } from "../src/middlewares/upload-images.js";
 import { createAdminSession } from "./helpers/admin-session.js";
 import { stubCloudinary } from "./helpers/cloudinary.js";
-import { createBikeCategoryDoc } from "./helpers/factories.js";
+import { createBikeCategoryDoc, createBrandDoc } from "./helpers/factories.js";
 import { makeJpegBuffer, makePngBuffer, makeTextBuffer, makeWebpBuffer } from "./helpers/images.js";
 
 const ADMIN = "/api/v1/admin";
@@ -21,17 +21,17 @@ describe("gallery uploads are validated by magic bytes", () => {
     cloudinary = stubCloudinary();
     adminCookie = await createAdminSession(app);
     const category = await createBikeCategoryDoc({ slug: "ruta" });
+    const brand = await createBrandDoc();
 
     const created = await request(app).post(`${ADMIN}/bikes`).set("Cookie", adminCookie).send({
       name: "Tarmac SL8",
-      brand: "Specialized",
+      brand: String(brand._id),
       category: String(category._id),
       shortDescription: "Bici de ruta",
       description: "Descripción",
       price: 19_999_900,
-      brakeType: "hydraulic_disc",
     });
-    bikeId = created.body.data.bike._id as string;
+    bikeId = created.body.data.bike.id as string;
   });
 
   /**
@@ -175,17 +175,17 @@ describe("gallery management", () => {
     cloudinary = stubCloudinary();
     adminCookie = await createAdminSession(app);
     const category = await createBikeCategoryDoc({ slug: "ruta" });
+    const brand = await createBrandDoc();
 
     const created = await request(app).post(`${ADMIN}/bikes`).set("Cookie", adminCookie).send({
       name: "Tarmac SL8",
-      brand: "Specialized",
+      brand: String(brand._id),
       category: String(category._id),
       shortDescription: "Bici de ruta",
       description: "Descripción",
       price: 19_999_900,
-      brakeType: "hydraulic_disc",
     });
-    bikeId = created.body.data.bike._id as string;
+    bikeId = created.body.data.bike.id as string;
 
     await request(app)
       .post(`${ADMIN}/bikes/${bikeId}/gallery`)

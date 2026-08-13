@@ -90,7 +90,7 @@ describe("resolveCaptureMethod", () => {
 
 describe("resolveCartLines", () => {
   it("prices a line from the catalog, ignoring anything the client might send", async () => {
-    const { itemId, sku } = await seedBikeWithVariant({ price: 19_999_900 });
+    const { itemId, sku } = await seedBikeWithVariant({ price: 19_999_900, brandName: "Specialized" });
 
     const [resolution] = await resolveCartLines([{ itemType: "bike", itemId, sku, qty: 2 }]);
 
@@ -121,7 +121,7 @@ describe("resolveCartLines", () => {
   });
 
   it("resolves accessories from their own collection", async () => {
-    const { itemId, sku } = await seedAccessoryWithVariant({ price: 4_500_00 });
+    const { itemId, sku } = await seedAccessoryWithVariant({ price: 4_500_00, brandName: "Giro" });
 
     const [resolution] = await resolveCartLines([{ itemType: "accessory", itemId, sku, qty: 1 }]);
 

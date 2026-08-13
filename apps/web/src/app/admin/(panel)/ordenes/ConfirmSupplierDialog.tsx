@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { formatCurrencyCents } from "@/lib/orders/format";
+import { formatCurrencyCents } from "@/lib/format";
 
 export interface ConfirmSupplierDialogProps {
   open: boolean;

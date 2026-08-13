@@ -1,15 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCurrencyCents, formatDateTime } from "./format";
-
-describe("formatCurrencyCents", () => {
-  it("formats integer cents as MXN currency", () => {
-    expect(formatCurrencyCents(25_000_00)).toBe("$25,000.00");
-  });
-
-  it("handles zero", () => {
-    expect(formatCurrencyCents(0)).toBe("$0.00");
-  });
-});
+import { formatDateTime } from "./format";
 
 describe("formatDateTime", () => {
   it("formats an ISO timestamp without throwing", () => {

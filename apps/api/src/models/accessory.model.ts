@@ -1,10 +1,6 @@
 import type { ProductImage, ProductVariant, SpecGroup } from "@bw-bikes/shared";
 import { type Document, model, Schema, type Types } from "mongoose";
-import {
-  MAX_BRAND_LENGTH,
-  MAX_DESCRIPTION_LENGTH,
-  MAX_PRODUCT_NAME_LENGTH,
-} from "./bike.model.js";
+import { MAX_DESCRIPTION_LENGTH, MAX_PRODUCT_BADGES, MAX_PRODUCT_NAME_LENGTH } from "./bike.model.js";
 import { MAX_GALLERY_IMAGES, productImageSchema } from "./schemas/product-image.schema.js";
 import { MAX_PRICE_CENTS, MAX_VARIANTS, productVariantSchema } from "./schemas/product-variant.schema.js";
 import { MAX_SPEC_GROUPS, specGroupSchema } from "./schemas/spec-group.schema.js";
@@ -12,7 +8,7 @@ import { MAX_SPEC_GROUPS, specGroupSchema } from "./schemas/spec-group.schema.js
 export interface IAccessory extends Document {
   name: string;
   slug: string;
-  brand: string;
+  brand: Types.ObjectId;
   category: Types.ObjectId;
   description: string;
   price: number;
@@ -20,6 +16,7 @@ export interface IAccessory extends Document {
   variants: ProductVariant[];
   specGroups: SpecGroup[];
   gallery: ProductImage[];
+  badges: Types.ObjectId[];
   isActive: boolean;
   archivedAt?: Date | null;
   createdAt: Date;
@@ -29,8 +26,8 @@ export interface IAccessory extends Document {
 /**
  * The second, independent catalog entity. It deliberately does **not** share a
  * base schema with `Bike`: the client asked for two separate entities and they
- * genuinely differ (no `brakeType`, no `shortDescription`, no cross-sell list,
- * and a different category tree). What they share are the embedded
+ * genuinely differ (no `shortDescription`, no cross-sell list, and a
+ * different category tree). What they share are the embedded
  * sub-schemas — variants, spec groups, gallery — which is where duplication
  * would actually have hurt.
  */
@@ -38,7 +35,7 @@ const accessorySchema = new Schema<IAccessory>(
   {
     name: { type: String, required: true, trim: true, maxlength: MAX_PRODUCT_NAME_LENGTH },
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    brand: { type: String, required: true, trim: true, maxlength: MAX_BRAND_LENGTH, index: true },
+    brand: { type: Schema.Types.ObjectId, ref: "Brand", required: true, index: true },
     category: { type: Schema.Types.ObjectId, ref: "AccessoryCategory", required: true },
 
     description: { type: String, required: true, trim: true, maxlength: MAX_DESCRIPTION_LENGTH },
@@ -68,6 +65,16 @@ const accessorySchema = new Schema<IAccessory>(
       validate: {
         validator: (images: unknown[]) => images.length <= MAX_GALLERY_IMAGES,
         message: `La galería no puede tener más de ${MAX_GALLERY_IMAGES} imágenes.`,
+      },
+    },
+
+    // Merchandising badges ("Novedad", "Bestseller") — see `badge.model.ts`.
+    badges: {
+      type: [{ type: Schema.Types.ObjectId, ref: "Badge" }],
+      default: [],
+      validate: {
+        validator: (ids: unknown[]) => ids.length <= MAX_PRODUCT_BADGES,
+        message: `Solo se puede asignar ${MAX_PRODUCT_BADGES} badge por producto.`,
       },
     },
 

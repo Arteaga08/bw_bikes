@@ -8,12 +8,12 @@ export interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-md border-b border-borde px-lg py-lg">
-      <div>
-        <h1 className="font-display text-h2 text-negro">{title}</h1>
+    <div className="flex flex-col gap-md border-b border-borde px-md py-lg sm:flex-row sm:items-start sm:justify-between sm:px-lg">
+      <div className="min-w-0">
+        <h1 className="font-display text-h3 text-negro sm:text-h2">{title}</h1>
         {subtitle ? <p className="mt-xs font-body text-body text-grafito">{subtitle}</p> : null}
       </div>
-      {actions ? <div className="flex items-center gap-sm">{actions}</div> : null}
+      {actions ? <div className="flex w-full flex-col gap-sm sm:w-auto sm:flex-row sm:items-center">{actions}</div> : null}
     </div>
   );
 }

@@ -24,4 +24,13 @@ describe("Breadcrumbs", () => {
     expect(last.tagName).toBe("SPAN");
     expect(screen.queryByRole("link", { name: "Órdenes" })).not.toBeInTheDocument();
   });
+
+  it("labels the M10.1 category-tree route for bikes", () => {
+    usePathnameMock.mockReturnValue("/admin/catalogo/categorias/bicicletas");
+    render(<Breadcrumbs />);
+
+    expect(screen.getByRole("link", { name: "Catálogo" })).toHaveAttribute("href", "/admin/catalogo");
+    expect(screen.getByRole("link", { name: "Categorías" })).toHaveAttribute("href", "/admin/catalogo/categorias");
+    expect(screen.getByText("Bicicletas").tagName).toBe("SPAN");
+  });
 });

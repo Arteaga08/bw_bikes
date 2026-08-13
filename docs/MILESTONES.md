@@ -14,7 +14,7 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M6 — Envíos, estatus y solicitudes | 1 | ✅ Hecho (mergeado) | `feat/m06-envios-solicitudes` | Cierra la decisión abierta #1. Ver detalle abajo |
 | M7 — Settings, analítica y adapters | 1 | ✅ Hecho (mergeado) | `feat/m07-settings-analitica` | Cierra la fase 1. Ver detalle abajo |
 | M8 — Shell del dashboard | 2 | ✅ Hecho (mergeado) | `feat/m08-dashboard-shell` | Arranca la fase 2. Ver detalle abajo |
-| M9 — Órdenes y cola de confirmación | 2 | ⚠️ Código listo, verificación Stripe pendiente | `feat/m09-ordenes` | Bloqueado por whitelist de IP en Atlas. Ver `docs/DESIGN_REFERENCES.md`. Ver detalle abajo |
+| M9 — Órdenes y cola de confirmación | 2 | ✅ Hecho (mergeado); verificación Stripe pospuesta a M10 | `feat/m09-ordenes` (mergeado) | Ver `docs/DESIGN_REFERENCES.md`. Ver detalle abajo |
 | M10 — Catálogo en admin | 2 | ⏳ Pendiente | — | |
 | M11 — Inventario, solicitudes, settings, analítica, auditoría | 2 | ⏳ Pendiente | — | Ver `docs/DESIGN_REFERENCES.md` |
 | M12 — Catálogo público | 3 | ⏳ Pendiente | — | |
@@ -164,7 +164,7 @@ rechazado, que revoca sesiones existentes y permite login con la contraseña nue
 ## M3 — Catálogo
 
 **Entregado:**
-- `packages/shared`: `BrakeType`, `SpecGroup`/`SpecField`, `ProductImage`, `ProductVariant`, DTOs
+- `packages/shared`: `SpecGroup`/`SpecField`, `ProductImage`, `ProductVariant`, DTOs
   públicos (`PublicCategory`, `PublicCategoryTreeNode`, `PublicBike`, `PublicAccessory`), `CURRENCY`
   y `PriceCents` (enteros en centavos), nuevas `AuditAction` de catálogo, y `buildImageUrl` +
   `RESPONSIVE_IMAGE_WIDTHS` — única fuente de verdad para armar URLs derivadas de Cloudinary,
@@ -180,11 +180,17 @@ rechazado, que revoca sesiones existentes y permite login con la contraseña nue
 - `apps/api/src/models/`: sub-esquemas embebidos compartidos (`spec-group`, `product-image`,
   `product-variant`, todos con topes que impiden crecer un documento sin límite); `BikeCategory` y
   `AccessoryCategory` como **dos colecciones independientes** generadas por un mismo motor de
-  esquema; `Bike` y `Accessory` como **dos entidades separadas** (la bici tiene `brakeType`,
-  `shortDescription` y `relatedAccessories`; el accesorio no).
+  esquema; `Bike` y `Accessory` como **dos entidades separadas** (la bici tiene `shortDescription`
+  y `relatedAccessories`; el accesorio no).
 - Campos de primera clase para filtros exactamente los que nombra la spec — categoría, marca,
-  precio, tipo de freno, más talla y color a nivel variante. `specGroups[]` es solo de exhibición y
-  nunca se filtra, que es la consecuencia que el cliente aceptó al pedir ficha libre.
+  precio, más talla y color a nivel variante. `specGroups[]` es solo de exhibición y nunca se
+  filtra, que es la consecuencia que el cliente aceptó al pedir ficha libre.
+
+  > **Corrección (M10.5, 2026-08-12):** `brakeType` se planeó aquí como campo de primera clase por
+  > ser "lo que el storefront va a filtrar", pero el storefront nunca llegó a existir y ningún query
+  > param, índice ni agregación lo usó jamás como filtro — quedó como un enum obligatorio decorativo.
+  > Se eliminó de `Bike`/`packages/shared` en M10.5; el dato, si hace falta, se captura como fila de
+  > la ficha técnica libre (`specGroups`).
 - `apps/api/src/services/`: `category.service` (factory instanciado por árbol: jerarquía de dos
   niveles validada contra el documento padre, slug único, borrado real solo si la categoría está
   vacía), `product.service` (factory: listado paginado, archivado lógico, ficha técnica, galería),
@@ -1000,19 +1006,27 @@ solo con params de la whitelist, `ApiError` con `httpStatus` en un `fail`), `Sli
 `OrdersView.test.tsx` (estado vacío de la cola, fila renderizada, y el flujo completo de confirmar:
 POST real → toast → refetch de la lista, con `fetch` mockeado).
 
-**⚠️ Pendiente — verificación manual contra Stripe test, bloqueada:** el criterio de cierre exige
-confirmar/rechazar de verdad contra Stripe en modo test (`stripe listen`), no solo el código. Al
-intentar levantar `apps/api` en este entorno, Mongoose falló con
-`MongooseServerSelectionError: ... IP isn't whitelisted` — la IP pública de esta máquina
-(`177.226.102.252` al momento de esta verificación) no está en la whitelist de red del cluster de
-MongoDB Atlas (`bwbikes.zv5hri4.mongodb.net`). Es una acción de cuenta que solo Manuel puede hacer
-(Atlas → Network Access → Add IP Address). El script de siembra ya está escrito
-(`verify-m9-stripe.ts`, en el scratchpad de esta sesión, no committeado) — crea categoría + bici
-`on_request` vía la API admin real, registra y verifica un cliente, arma el carrito, hace checkout,
-confirma el `PaymentIntent` contra Stripe test con `pm_card_visa`, y espera a que `stripe listen`
-mueva la orden a `awaiting_supplier_confirmation` — pero no se ha podido ejecutar ni una sola vez.
-**Falta correrlo** (y con él, los dos escenarios reales: confirmar captura el cargo, rechazar cancela
-la autorización sin cobro) en cuanto la whitelist de Atlas se actualice.
+**Mergeado a `main`** (commit `c9e2677`). La whitelist de IP en Atlas, que bloqueaba levantar
+`apps/api` en esta máquina, ya se resolvió (Network Access → Add IP Address con la IP pública
+correcta — la que estaba puesta había quedado desactualizada por IP dinámica).
+
+**⚠️ Verificación manual contra Stripe test — pospuesta a M10, a propósito:** el criterio de cierre
+exige confirmar/rechazar de verdad contra Stripe en modo test (`stripe listen`), no solo el código.
+Existe un script de siembra por API (`verify-m9-stripe.ts`, escrito durante esta sesión, en el
+scratchpad — **no sobrevive entre sesiones**, hay que reescribirlo si se retoma esa vía) que crea
+categoría + bici `on_request` directo contra la API admin, sin pasar por ningún CRUD real. Decisión
+de Manuel: mejor esperar a que M10 exista y sembrar el producto de prueba desde el CRUD real del
+panel — así la verificación de M9 corre sobre datos creados por el propio sistema, no por un script
+sintético, y de paso ejercita M10 de punta a punta. **M10 debe cerrar con esta verificación
+pendiente de M9 resuelta**, no solo con su propio criterio de cierre.
+
+**Incidente de sesión, para quien retome:** durante el cierre de M9 un `git branch <nombre>` sin
+`-f` falló en silencio porque la rama ya existía (de un checkout previo), y el siguiente comando
+(`git branch -f feat/m08-dashboard-shell dde22ca`) dejó los commits de M9 sin ninguna rama
+apuntándolos — recuperados con `git branch -f feat/m09-ordenes <hash>` sobre el commit huérfano
+(`git fsck --dangling` los encontró intactos). Nada se perdió, pero es una lección para el protocolo
+de cierre: **verificar con `git branch -a` que el nombre de rama no exista ya** antes de crearlo,
+sobre todo si el chat anterior lo dejó creado sin usar.
 
 **Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
 - **`SlideOver` reusa `useFocusTrap` de `Modal`** en vez de un hook de foco propio — misma garantía

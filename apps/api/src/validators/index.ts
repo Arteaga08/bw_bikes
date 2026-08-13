@@ -1,6 +1,8 @@
 export * from "./application.validator.js";
 export * from "./auth.validator.js";
+export * from "./badge.validator.js";
 export * from "./billing.validator.js";
+export * from "./brand.validator.js";
 export * from "./cart.validator.js";
 export * from "./category.validator.js";
 export * from "./common.validator.js";
@@ -13,4 +15,5 @@ export * from "./product.validator.js";
 export * from "./settings.validator.js";
 export * from "./shipping.validator.js";
 export * from "./spec-group.validator.js";
+export * from "./spec-template.validator.js";
 export * from "./stats.validator.js";

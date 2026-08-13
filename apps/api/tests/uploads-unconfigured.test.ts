@@ -19,7 +19,7 @@ const { buildApp } = await import("../src/app.js");
 const { Bike } = await import("../src/models/index.js");
 const { createAdminSession } = await import("./helpers/admin-session.js");
 const { stubCloudinary } = await import("./helpers/cloudinary.js");
-const { createBikeCategoryDoc } = await import("./helpers/factories.js");
+const { createBikeCategoryDoc, createBrandDoc } = await import("./helpers/factories.js");
 const { makeJpegBuffer } = await import("./helpers/images.js");
 
 const ADMIN = "/api/v1/admin";
@@ -42,17 +42,17 @@ describe("Cloudinary not configured", () => {
     const cloudinary = stubCloudinary();
     const adminCookie = await createAdminSession(app);
     const category = await createBikeCategoryDoc({ slug: "ruta" });
+    const brand = await createBrandDoc();
 
     const created = await request(app).post(`${ADMIN}/bikes`).set("Cookie", adminCookie).send({
       name: "Tarmac SL8",
-      brand: "Specialized",
+      brand: String(brand._id),
       category: String(category._id),
       shortDescription: "Bici de ruta",
       description: "Descripción",
       price: 19_999_900,
-      brakeType: "hydraulic_disc",
     });
-    const bikeId = created.body.data.bike._id as string;
+    const bikeId = created.body.data.bike.id as string;
 
     const response = await request(app)
       .post(`${ADMIN}/bikes/${bikeId}/gallery`)

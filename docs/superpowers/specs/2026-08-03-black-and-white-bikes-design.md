@@ -48,7 +48,8 @@ commit/merge y el prompt de traspaso.
 1. **Ficha técnica libre → filtros de tienda limitados.** No hay forma confiable de filtrar sobre
    campos que cada producto nombra distinto. La ficha técnica es **solo de exhibición**; los filtros
    del storefront se construyen sobre campos de primera clase (categoría, talla, color, precio,
-   marca, tipo de freno).
+   marca). *(Tipo de freno se planeó aquí también, pero nunca se implementó como filtro real — M10.5
+   lo quitó de `Bike` y pasó a vivir como fila de ficha técnica.)*
 2. **La autorización de Stripe expira a los ~7 días.** El sistema avisa al admin antes y libera de
    forma ordenada (M5).
 3. **Preautorización con captura manual no es compatible con MSI.** Las bicis bajo pedido no pueden

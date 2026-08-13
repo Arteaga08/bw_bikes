@@ -1,10 +1,11 @@
-import type { AuditAction, ProductImage, ProductVariant, SpecGroup } from "@bw-bikes/shared";
+import type { AuditAction, ItemType, ProductImage, ProductVariant, SpecGroup } from "@bw-bikes/shared";
 import type { Document, Model, Types } from "mongoose";
 import { Types as MongooseTypes } from "mongoose";
 import type { ICategory } from "../models/index.js";
-import { MAX_GALLERY_IMAGES } from "../models/index.js";
+import { Badge, Brand, InventoryItem, MAX_GALLERY_IMAGES } from "../models/index.js";
 import { AppError, buildMeta, escapeRegex, parseListQuery, slugify } from "../utils/index.js";
 import { recordAuditLog } from "./audit-log.service.js";
+import { learnSpecTemplates } from "./spec-template.service.js";
 import { deleteImage } from "./storage/storage.service.js";
 
 /**
@@ -18,7 +19,7 @@ import { deleteImage } from "./storage/storage.service.js";
 export interface ProductDocument extends Document {
   name: string;
   slug: string;
-  brand: string;
+  brand: Types.ObjectId;
   category: Types.ObjectId;
   description: string;
   price: number;
@@ -26,6 +27,7 @@ export interface ProductDocument extends Document {
   variants: ProductVariant[];
   specGroups: SpecGroup[];
   gallery: ProductImage[];
+  badges: Types.ObjectId[];
   isActive: boolean;
   archivedAt?: Date | null;
   createdAt: Date;
@@ -44,6 +46,8 @@ export interface ProductServiceOptions {
   categoryModel: Model<ICategory>;
   /** User-facing noun for 404s ("Bicicleta" / "Accesorio"). */
   entityLabel: string;
+  /** `InventoryItem` rows are keyed by `{itemType, itemId, sku}` — `remove()` needs this to check for existing stock. */
+  itemType: ItemType;
 }
 
 const SORTABLE_FIELDS = ["createdAt", "price", "name"] as const;
@@ -55,7 +59,7 @@ export function createProductService<TDoc extends ProductDocument>(
   Product: Model<TDoc>,
   options: ProductServiceOptions,
 ) {
-  const { moduleName, categoryModel, entityLabel } = options;
+  const { moduleName, categoryModel, entityLabel, itemType } = options;
 
   async function findByIdOrFail(id: string): Promise<TDoc> {
     const product = await Product.findById(id).exec();
@@ -79,6 +83,22 @@ export function createProductService<TDoc extends ProductDocument>(
   async function assertCategoryExists(categoryId: string): Promise<void> {
     if (!(await categoryModel.exists({ _id: categoryId }))) {
       throw new AppError("La categoría indicada no existe.", 404);
+    }
+  }
+
+  /** One brand collection shared by both catalogs (see `brand.model.ts`) — no tree to inject, unlike `assertCategoryExists`. */
+  async function assertBrandExists(brandId: string): Promise<void> {
+    if (!(await Brand.exists({ _id: brandId }))) {
+      throw new AppError("La marca indicada no existe.", 404);
+    }
+  }
+
+  /** Badges are curated by hand, same as `relatedAccessories` — a dangling reference would render as a blank chip on the PDP with no clue why. */
+  async function assertBadgesExist(badgeIds: string[]): Promise<void> {
+    if (badgeIds.length === 0) return;
+    const found = await Badge.countDocuments({ _id: { $in: badgeIds } }).exec();
+    if (found !== badgeIds.length) {
+      throw new AppError("Uno o más badges indicados no existen.", 404);
     }
   }
 
@@ -132,8 +152,15 @@ export function createProductService<TDoc extends ProductDocument>(
       filter["category"] = { $in: ids };
     }
 
+    // `brand` travels as its `slug` (never an id — the client never needs to
+    // know Mongo's ids), resolved to the actual reference here. No match
+    // means the filter deliberately matches nothing, same as any other unmet
+    // filter — not "ignore the filter".
     if (typeof query["brand"] === "string" && query["brand"] !== "") {
-      filter["brand"] = { $regex: `^${escapeRegex(query["brand"])}$`, $options: "i" };
+      const brand = await Brand.findOne({ slug: query["brand"].toLowerCase() })
+        .select("_id")
+        .exec();
+      filter["brand"] = brand ? brand._id : { $in: [] };
     }
 
     // Size and color live on variants; a product matches if any variant does.
@@ -157,6 +184,18 @@ export function createProductService<TDoc extends ProductDocument>(
   }
 
   /**
+   * On the storefront, a badge an admin deactivated must stop rendering
+   * immediately, even if it's still assigned on the product — not linger
+   * until someone remembers to unassign it everywhere. The admin editor, by
+   * contrast, needs every assigned badge visible so it can be removed
+   * deliberately (same reasoning as `relatedAccessories`'s admin/public
+   * split in `bike.service.ts`).
+   */
+  function badgesPopulateOption(publicOnly: boolean): { path: "badges"; match?: { isActive: boolean } } {
+    return publicOnly ? { path: "badges", match: { isActive: true } } : { path: "badges" };
+  }
+
+  /**
    * The paginated list every admin table and storefront grid runs on. Uses the
    * cross-cutting `parseListQuery`/`buildMeta` pair so `meta` is identical
    * across modules.
@@ -172,11 +211,26 @@ export function createProductService<TDoc extends ProductDocument>(
     if (search) {
       // Escaped: a search for `.*` matches the literal string, not every row.
       const pattern = { $regex: escapeRegex(search), $options: "i" };
-      filter["$or"] = [{ name: pattern }, { brand: pattern }, { "variants.sku": pattern }];
+      // `brand` is a reference now, not text — resolve which brands match by
+      // name first, then fold their ids into the same `$or` the name/SKU
+      // search already runs.
+      const matchingBrands = await Brand.find({ name: pattern }).select("_id").exec();
+      filter["$or"] = [
+        { name: pattern },
+        { "variants.sku": pattern },
+        ...(matchingBrands.length > 0 ? [{ brand: { $in: matchingBrands.map((b) => b._id) } }] : []),
+      ];
     }
 
     const [documents, total] = await Promise.all([
-      Product.find(filter).sort(sort).skip(skip).limit(limit).populate("category").exec(),
+      Product.find(filter)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate("category")
+        .populate("brand")
+        .populate(badgesPopulateOption(scope.publicOnly))
+        .exec(),
       Product.countDocuments(filter).exec(),
     ]);
 
@@ -187,7 +241,11 @@ export function createProductService<TDoc extends ProductDocument>(
     const filter: Record<string, unknown> = { slug };
     if (scope.publicOnly) Object.assign(filter, PUBLIC_VISIBILITY);
 
-    const product = await Product.findOne(filter).populate("category").exec();
+    const product = await Product.findOne(filter)
+      .populate("category")
+      .populate("brand")
+      .populate(badgesPopulateOption(scope.publicOnly))
+      .exec();
     if (!product) {
       throw new AppError(`${entityLabel} no encontrado.`, 404);
     }
@@ -195,7 +253,7 @@ export function createProductService<TDoc extends ProductDocument>(
   }
 
   async function getById(id: string): Promise<TDoc> {
-    const product = await Product.findById(id).populate("category").exec();
+    const product = await Product.findById(id).populate("category").populate("brand").populate("badges").exec();
     if (!product) {
       throw new AppError(`${entityLabel} no encontrado.`, 404);
     }
@@ -256,6 +314,47 @@ export function createProductService<TDoc extends ProductDocument>(
   }
 
   /**
+   * Real deletion — only reachable once `archive()` already ran, and only
+   * once no `InventoryItem` row still points at this product (M4 keeps
+   * physical stock in its own collection, decoupled from the catalog, so a
+   * product can carry real stock rows even while archived; hard-deleting out
+   * from under them would leave that inventory pointing at nothing). Same
+   * actionable-409 shape as `category.service.ts`'s `remove()`.
+   */
+  async function remove(id: string, actor: ActorContext): Promise<void> {
+    const product = await findByIdOrFail(id);
+
+    if (!product.archivedAt) {
+      throw new AppError(`${entityLabel} debe archivarse antes de poder eliminarse.`, 400);
+    }
+
+    const inventoryCount = await InventoryItem.countDocuments({ itemType, itemId: product._id }).exec();
+    if (inventoryCount > 0) {
+      throw new AppError(
+        `No se puede eliminar: tiene ${inventoryCount} fila(s) de inventario asociadas. Elimina el inventario primero.`,
+        409,
+      );
+    }
+
+    await product.deleteOne();
+
+    // Document first, remote assets second — same order as `removeGalleryImage`:
+    // a failed remote delete just orphans an asset (recoverable), the reverse
+    // order would risk losing the `publicId` if the document delete failed.
+    await Promise.all(product.gallery.map((image) => deleteImage(image.publicId)));
+
+    await recordAuditLog({
+      actorId: actor.actorId,
+      actorType: "user",
+      action: "catalog.product_deleted" satisfies AuditAction,
+      module: moduleName,
+      targetId: id,
+      before: { slug: product.slug },
+      ip: actor.ip,
+    });
+  }
+
+  /**
    * Replaces the entire spec sheet in one write. That single operation is what
    * covers all four editing actions the milestone requires — add, rename,
    * reorder and delete, for groups and for fields alike — and it matches how
@@ -278,6 +377,12 @@ export function createProductService<TDoc extends ProductDocument>(
       after: { groups: groups.length },
       ip: actor.ip,
     });
+
+    // Best-effort, same discipline as `recordAuditLog`: awaited so it
+    // completes before this responds, but its own try/catch (see
+    // `learnSpecTemplates`) swallows any failure rather than letting a
+    // learning error fail a spec sheet that already saved successfully.
+    await learnSpecTemplates(groups);
 
     return product;
   }
@@ -371,6 +476,8 @@ export function createProductService<TDoc extends ProductDocument>(
     findByIdOrFail,
     assertSlugIsFree,
     assertCategoryExists,
+    assertBrandExists,
+    assertBadgesExist,
     assertVariantSkusAreUnique,
     resolveSlug,
     list,
@@ -378,6 +485,7 @@ export function createProductService<TDoc extends ProductDocument>(
     getBySlug,
     archive,
     restore,
+    remove,
     replaceSpecGroups,
     addGalleryImages,
     removeGalleryImage,

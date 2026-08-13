@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { Bike, MAX_SPEC_GROUPS } from "../src/models/index.js";
 import { createAdminSession } from "./helpers/admin-session.js";
-import { createBikeCategoryDoc } from "./helpers/factories.js";
+import { createBikeCategoryDoc, createBrandDoc } from "./helpers/factories.js";
 
 const ADMIN = "/api/v1/admin";
 
@@ -52,17 +52,17 @@ describe("free-form spec sheet", () => {
     app = buildApp();
     adminCookie = await createAdminSession(app);
     const category = await createBikeCategoryDoc({ slug: "ruta" });
+    const brand = await createBrandDoc();
 
     const created = await request(app).post(`${ADMIN}/bikes`).set("Cookie", adminCookie).send({
       name: "Tarmac SL8",
-      brand: "Specialized",
+      brand: String(brand._id),
       category: String(category._id),
       shortDescription: "Bici de ruta",
       description: "Descripción",
       price: 19_999_900,
-      brakeType: "hydraulic_disc",
     });
-    bikeId = created.body.data.bike._id as string;
+    bikeId = created.body.data.bike.id as string;
   });
 
   it("adds groups and fields to an empty sheet", async () => {

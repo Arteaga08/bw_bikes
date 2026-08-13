@@ -3,14 +3,15 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { Accessory, AccessoryCategory, BikeCategory } from "../src/models/index.js";
 import { createAdminSession } from "./helpers/admin-session.js";
+import { createBrandDoc } from "./helpers/factories.js";
 
 const ADMIN = "/api/v1/admin";
 const PUBLIC = "/api/v1/catalog";
 
-function accessoryPayload(categoryId: string, overrides: Record<string, unknown> = {}) {
+function accessoryPayload(categoryId: string, brandId: string, overrides: Record<string, unknown> = {}) {
   return {
     name: "Casco Evade 3",
-    brand: "Specialized",
+    brand: brandId,
     category: categoryId,
     description: "Casco aerodinámico de ruta con ventilación optimizada.",
     price: 899_900,
@@ -26,23 +27,25 @@ describe("accessory CRUD", () => {
   let app: ReturnType<typeof buildApp>;
   let adminCookie: string;
   let categoryId: string;
+  let brandId: string;
 
   beforeEach(async () => {
     app = buildApp();
     adminCookie = await createAdminSession(app);
     const category = await AccessoryCategory.create({ name: "Cascos", slug: "cascos" });
     categoryId = String(category._id);
+    brandId = String((await createBrandDoc())._id);
   });
 
   it("creates, reads, updates and archives an accessory through the API", async () => {
     const created = await request(app)
       .post(`${ADMIN}/accessories`)
       .set("Cookie", adminCookie)
-      .send(accessoryPayload(categoryId));
+      .send(accessoryPayload(categoryId, brandId));
 
     expect(created.status).toBe(201);
     expect(created.body.data.accessory.slug).toBe("casco-evade-3");
-    const id = created.body.data.accessory._id as string;
+    const id = created.body.data.accessory.id as string;
 
     const read = await request(app).get(`${ADMIN}/accessories/${id}`).set("Cookie", adminCookie);
     expect(read.status).toBe(200);
@@ -60,15 +63,14 @@ describe("accessory CRUD", () => {
     expect(await Accessory.countDocuments()).toBe(1);
   });
 
-  it("has no brakeType: a bike-only field is stripped from the payload", async () => {
+  it("has no shortDescription: a bike-only field is stripped from the payload", async () => {
     const response = await request(app)
       .post(`${ADMIN}/accessories`)
       .set("Cookie", adminCookie)
-      .send(accessoryPayload(categoryId, { brakeType: "rim", shortDescription: "no aplica" }));
+      .send(accessoryPayload(categoryId, brandId, { shortDescription: "no aplica" }));
 
     expect(response.status).toBe(201);
-    const stored = await Accessory.findById(response.body.data.accessory._id).lean().exec();
-    expect(stored).not.toHaveProperty("brakeType");
+    const stored = await Accessory.findById(response.body.data.accessory.id).lean().exec();
     expect(stored).not.toHaveProperty("shortDescription");
   });
 
@@ -78,17 +80,27 @@ describe("accessory CRUD", () => {
     const response = await request(app)
       .post(`${ADMIN}/accessories`)
       .set("Cookie", adminCookie)
-      .send(accessoryPayload(String(bikeCategory._id)));
+      .send(accessoryPayload(String(bikeCategory._id), brandId));
 
     expect(response.status).toBe(404);
+  });
+
+  it("rejects a nonexistent brand with 404", async () => {
+    const response = await request(app)
+      .post(`${ADMIN}/accessories`)
+      .set("Cookie", adminCookie)
+      .send(accessoryPayload(categoryId, "507f1f77bcf86cd799439011"));
+
+    expect(response.status).toBe(404);
+    expect(response.body.message).toContain("marca");
   });
 
   it("edits the free-form spec sheet", async () => {
     const created = await request(app)
       .post(`${ADMIN}/accessories`)
       .set("Cookie", adminCookie)
-      .send(accessoryPayload(categoryId));
-    const id = created.body.data.accessory._id as string;
+      .send(accessoryPayload(categoryId, brandId));
+    const id = created.body.data.accessory.id as string;
 
     const response = await request(app)
       .put(`${ADMIN}/accessories/${id}/spec-groups`)
@@ -108,7 +120,10 @@ describe("accessory CRUD", () => {
   });
 
   it("serves the public detail with its own DTO", async () => {
-    await request(app).post(`${ADMIN}/accessories`).set("Cookie", adminCookie).send(accessoryPayload(categoryId));
+    await request(app)
+      .post(`${ADMIN}/accessories`)
+      .set("Cookie", adminCookie)
+      .send(accessoryPayload(categoryId, brandId));
 
     const response = await request(app).get(`${PUBLIC}/accessories/casco-evade-3`);
 

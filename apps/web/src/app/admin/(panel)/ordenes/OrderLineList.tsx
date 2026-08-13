@@ -1,5 +1,5 @@
 import type { OrderLineSnapshot } from "@bw-bikes/shared";
-import { formatCurrencyCents } from "@/lib/orders/format";
+import { formatCurrencyCents } from "@/lib/format";
 
 const FULFILLMENT_LABELS: Record<OrderLineSnapshot["fulfillmentMode"], string> = {
   in_stock: "en stock",

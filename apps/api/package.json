@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "lint": "eslint src",
     "test": "vitest run",
-    "seed:admin": "tsx src/scripts/seed-admin.ts"
+    "seed:admin": "tsx src/scripts/seed-admin.ts",
+    "migrate:brands": "tsx src/scripts/migrate-brands.ts"
   },
   "dependencies": {
     "@bw-bikes/shared": "workspace:*",

@@ -18,9 +18,29 @@
   --color-grafito: #3a3a38;
   --color-dorado: #f2b705;
 
-  /* ---- Superficies (jerarquía de profundidad, sin sombras) ---- */
+  /*
+   * ---- Superficies (jerarquía de profundidad, sin sombras) ----
+   * Escalera de atrás hacia adelante, sin una sola sombra de por medio:
+   *
+   *   overlay #0a0a0a  nav, modal, toast
+   *   base    #f1f1ee  fondo de página
+   *   surface #ffffff  tarjeta sobre la página
+   *   inset   #eaeae6  panel anidado DENTRO de una tarjeta
+   *   borde   #e2e2de  hairlines · hover de control sobre inset o base
+   *
+   * `inset` es la cuarta superficie, agregada al cerrar M10.5. Las tres
+   * originales (base/surface/overlay) no alcanzaban para un panel dentro de
+   * una tarjeta: la única salida era pintarlo `bg-base`, que es el suelo de
+   * la página, así que el panel leía como un agujero en la tarjeta y un
+   * control transparente encima no tenía cuerpo — mostraba el fondo de la
+   * página, idéntico al que ya se ve fuera de la tarjeta. La regla
+   * flat-by-default (DESIGN_SYSTEM.md §3.2) exige resolver profundidad
+   * cambiando de fondo, y para eso hacen falta suficientes fondos a los que
+   * cambiar. Sin sombras sigue siendo la regla; solo hay un escalón más.
+   */
   --color-base: #f1f1ee;
   --color-surface: #ffffff;
+  --color-inset: #eaeae6;
   --color-overlay: #0a0a0a;
   --color-borde: #e2e2de;
 
@@ -145,6 +165,16 @@
   box-sizing: border-box;
 }
 
+/* Browsers don't default `<button>` to a pointer cursor the way they do `<a>`
+   — every clickable button in the panel needs this explicitly, and one global
+   rule covers `Button`, `Toggle`, `Modal`/`SlideOver` close controls, etc.
+   without touching each component. `:disabled` is excluded so a disabled or
+   loading button (`Button` sets the DOM `disabled` attribute for both) keeps
+   its not-allowed affordance instead. */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 body {
   background: var(--color-base);
   color: var(--color-negro);
@@ -168,7 +198,10 @@ body {
   color: var(--color-blanco);
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-control);
-  transition: top var(--ease-fast);
+  /* 150ms literal, como el resto del sistema: `--transition-duration-*` no es
+     un namespace de @theme, así que no existe un token que referenciar aquí
+     (ver el comentario al final del bloque @theme). */
+  transition: top 150ms ease;
 }
 
 .skip-link:focus-visible {

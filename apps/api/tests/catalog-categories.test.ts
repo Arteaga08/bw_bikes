@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { AccessoryCategory, Bike, BikeCategory } from "../src/models/index.js";
 import { createAdminSession } from "./helpers/admin-session.js";
+import { stubCloudinary } from "./helpers/cloudinary.js";
+import { createBrandDoc } from "./helpers/factories.js";
+import { makeJpegBuffer, makePngBuffer } from "./helpers/images.js";
 
 const ADMIN = "/api/v1/admin";
 const PUBLIC = "/api/v1/catalog";
@@ -25,7 +28,7 @@ describe("category CRUD (both trees)", () => {
     expect(created.status).toBe(201);
     // Slug derived from the name, accents folded — see utils/slugify.ts.
     expect(created.body.data.category.slug).toBe("bicicletas-de-montana");
-    const id = created.body.data.category._id as string;
+    const id = created.body.data.category.id as string;
 
     const read = await request(app).get(`${ADMIN}/bike-categories/${id}`).set("Cookie", adminCookie);
     expect(read.status).toBe(200);
@@ -90,14 +93,14 @@ describe("two-level hierarchy", () => {
       .post(`${ADMIN}/bike-categories`)
       .set("Cookie", adminCookie)
       .send({ name: "Montaña" });
-    const rootId = root.body.data.category._id as string;
+    const rootId = root.body.data.category.id as string;
 
     const child = await request(app)
       .post(`${ADMIN}/bike-categories`)
       .set("Cookie", adminCookie)
       .send({ name: "Doble suspensión", parent: rootId });
     expect(child.status).toBe(201);
-    const childId = child.body.data.category._id as string;
+    const childId = child.body.data.category.id as string;
 
     const grandchild = await request(app)
       .post(`${ADMIN}/bike-categories`)
@@ -121,13 +124,13 @@ describe("two-level hierarchy", () => {
     await request(app)
       .post(`${ADMIN}/bike-categories`)
       .set("Cookie", adminCookie)
-      .send({ name: "Enduro", parent: rootA.body.data.category._id });
+      .send({ name: "Enduro", parent: rootA.body.data.category.id });
 
     // Moving A (which has a child) under B would create a third level.
     const moved = await request(app)
-      .patch(`${ADMIN}/bike-categories/${rootA.body.data.category._id}`)
+      .patch(`${ADMIN}/bike-categories/${rootA.body.data.category.id}`)
       .set("Cookie", adminCookie)
-      .send({ parent: rootB.body.data.category._id });
+      .send({ parent: rootB.body.data.category.id });
 
     expect(moved.status).toBe(400);
     expect(moved.body.message).toContain("dos niveles");
@@ -141,11 +144,11 @@ describe("two-level hierarchy", () => {
     await request(app)
       .post(`${ADMIN}/bike-categories`)
       .set("Cookie", adminCookie)
-      .send({ name: "Enduro", parent: root.body.data.category._id, order: 1 });
+      .send({ name: "Enduro", parent: root.body.data.category.id, order: 1 });
     await request(app)
       .post(`${ADMIN}/bike-categories`)
       .set("Cookie", adminCookie)
-      .send({ name: "Cross Country", parent: root.body.data.category._id, order: 0 });
+      .send({ name: "Cross Country", parent: root.body.data.category.id, order: 0 });
 
     const tree = await request(app).get(`${PUBLIC}/bike-categories/tree`);
 
@@ -172,7 +175,7 @@ describe("deleting a category", () => {
       .post(`${ADMIN}/bike-categories`)
       .set("Cookie", adminCookie)
       .send({ name: "Montaña" });
-    const rootId = root.body.data.category._id as string;
+    const rootId = root.body.data.category.id as string;
     await request(app)
       .post(`${ADMIN}/bike-categories`)
       .set("Cookie", adminCookie)
@@ -190,17 +193,16 @@ describe("deleting a category", () => {
       .post(`${ADMIN}/bike-categories`)
       .set("Cookie", adminCookie)
       .send({ name: "Ruta" });
-    const categoryId = category.body.data.category._id as string;
+    const categoryId = category.body.data.category.id as string;
 
     await Bike.create({
       name: "Tarmac SL8",
       slug: "tarmac-sl8",
-      brand: "Specialized",
+      brand: (await createBrandDoc())._id,
       category: categoryId,
       shortDescription: "Bici de ruta",
       description: "Descripción",
       price: 19_999_900,
-      brakeType: "hydraulic_disc",
     });
 
     const removed = await request(app)
@@ -209,6 +211,123 @@ describe("deleting a category", () => {
 
     expect(removed.status).toBe(409);
     expect(removed.body.message).toContain("producto");
+  });
+});
+
+describe("admin DTO shape (M10)", () => {
+  it("exposes isActive and timestamps in the admin list and tree, unlike the public DTO", async () => {
+    const app = buildApp();
+    const adminCookie = await createAdminSession(app);
+
+    const active = await request(app)
+      .post(`${ADMIN}/bike-categories`)
+      .set("Cookie", adminCookie)
+      .send({ name: "Activa" });
+    await request(app)
+      .patch(`${ADMIN}/bike-categories/${active.body.data.category.id}`)
+      .set("Cookie", adminCookie)
+      .send({ isActive: false });
+
+    const list = await request(app).get(`${ADMIN}/bike-categories`).set("Cookie", adminCookie);
+    expect(list.status).toBe(200);
+    expect(list.body.data.categories[0].isActive).toBe(false);
+    expect(list.body.data.categories[0].createdAt).toEqual(expect.any(String));
+
+    const tree = await request(app).get(`${ADMIN}/bike-categories/tree`).set("Cookie", adminCookie);
+    expect(tree.status).toBe(200);
+    // Inactive categories are excluded from the *public* tree but not the admin one.
+    expect(tree.body.data.tree).toHaveLength(1);
+    expect(tree.body.data.tree[0].isActive).toBe(false);
+
+    const publicList = await request(app).get(`${PUBLIC}/bike-categories`);
+    expect(publicList.body.data.categories).toHaveLength(0);
+    expect(publicList.body.data.categories.every((category: object) => !("isActive" in category))).toBe(true);
+  });
+});
+
+describe("category image (M10.2)", () => {
+  let app: ReturnType<typeof buildApp>;
+  let adminCookie: string;
+  let cloudinary: ReturnType<typeof stubCloudinary>;
+  let categoryId: string;
+
+  beforeEach(async () => {
+    app = buildApp();
+    cloudinary = stubCloudinary();
+    adminCookie = await createAdminSession(app);
+
+    const created = await request(app)
+      .post(`${ADMIN}/bike-categories`)
+      .set("Cookie", adminCookie)
+      .send({ name: "Montaña" });
+    categoryId = created.body.data.category.id as string;
+  });
+
+  it("uploads an image and the admin GET brings it back", async () => {
+    const response = await request(app)
+      .post(`${ADMIN}/bike-categories/${categoryId}/image`)
+      .set("Cookie", adminCookie)
+      .attach("images", await makeJpegBuffer(), { filename: "montana.jpg", contentType: "image/jpeg" });
+
+    expect(response.status).toBe(200);
+    expect(cloudinary.uploadSpy).toHaveBeenCalledTimes(1);
+    expect(response.body.data.category.image.publicId).toContain("bw-bikes/bike-categories/");
+
+    const read = await request(app).get(`${ADMIN}/bike-categories/${categoryId}`).set("Cookie", adminCookie);
+    expect(read.body.data.category.image.publicId).toBe(response.body.data.category.image.publicId);
+  });
+
+  it("replacing the image deletes the previous Cloudinary asset", async () => {
+    const first = await request(app)
+      .post(`${ADMIN}/bike-categories/${categoryId}/image`)
+      .set("Cookie", adminCookie)
+      .attach("images", await makeJpegBuffer(), { filename: "primera.jpg", contentType: "image/jpeg" });
+    const firstPublicId = first.body.data.category.image.publicId as string;
+
+    const second = await request(app)
+      .post(`${ADMIN}/bike-categories/${categoryId}/image`)
+      .set("Cookie", adminCookie)
+      .attach("images", await makePngBuffer(), { filename: "segunda.png", contentType: "image/png" });
+
+    expect(second.status).toBe(200);
+    expect(second.body.data.category.image.publicId).not.toBe(firstPublicId);
+    expect(cloudinary.destroySpy).toHaveBeenCalledWith(firstPublicId, { resource_type: "image" });
+  });
+
+  it("rejects more than one file in the same request", async () => {
+    const response = await request(app)
+      .post(`${ADMIN}/bike-categories/${categoryId}/image`)
+      .set("Cookie", adminCookie)
+      .attach("images", await makeJpegBuffer(), { filename: "a.jpg", contentType: "image/jpeg" })
+      .attach("images", await makeJpegBuffer(), { filename: "b.jpg", contentType: "image/jpeg" });
+
+    expect(response.status).toBe(400);
+    expect(cloudinary.uploadSpy).not.toHaveBeenCalled();
+  });
+
+  it("removes the image and deletes the Cloudinary asset", async () => {
+    const uploaded = await request(app)
+      .post(`${ADMIN}/bike-categories/${categoryId}/image`)
+      .set("Cookie", adminCookie)
+      .attach("images", await makeJpegBuffer(), { filename: "montana.jpg", contentType: "image/jpeg" });
+    const publicId = uploaded.body.data.category.image.publicId as string;
+
+    const removed = await request(app)
+      .delete(`${ADMIN}/bike-categories/${categoryId}/image`)
+      .set("Cookie", adminCookie);
+
+    expect(removed.status).toBe(200);
+    expect(removed.body.data.category.image).toBeUndefined();
+    expect(cloudinary.destroySpy).toHaveBeenCalledWith(publicId, { resource_type: "image" });
+  });
+
+  it("rejects removing an image the category doesn't have with 409", async () => {
+    const response = await request(app)
+      .delete(`${ADMIN}/bike-categories/${categoryId}/image`)
+      .set("Cookie", adminCookie);
+
+    expect(response.status).toBe(409);
+    expect(cloudinary.destroySpy).not.toHaveBeenCalled();
   });
 });
 

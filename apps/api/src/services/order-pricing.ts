@@ -10,7 +10,7 @@ import type {
 import { CURRENCY } from "@bw-bikes/shared";
 import { Types } from "mongoose";
 import { DEFAULT_TAX_RATE_BPS } from "../config/settings.defaults.js";
-import type { IAccessory, IBike } from "../models/index.js";
+import type { IAccessory, IBike, IBrand } from "../models/index.js";
 import { Accessory, Bike, MAX_RESERVATION_QTY } from "../models/index.js";
 import { AppError } from "../utils/index.js";
 
@@ -65,6 +65,16 @@ function primaryImagePublicId(product: CatalogProduct): string | undefined {
 }
 
 /**
+ * `brand` is a reference on the product but a **frozen string** on the order
+ * line snapshot — the line has to keep reading correctly even if the brand is
+ * later renamed. `loadProducts` always populates it, so the fallback below is
+ * defensive, not an expected path.
+ */
+function brandName(product: CatalogProduct): string {
+  return product.populated("brand") ? (product.brand as unknown as IBrand).name : "";
+}
+
+/**
  * A variant may override the product price (an XL frame, a limited-edition
  * colour). `?? ` and not `||`: an override of 0 is a real price, and `||` would
  * silently discard it.
@@ -91,8 +101,10 @@ async function loadProducts(lines: CartLineInput[]): Promise<Map<string, Catalog
   }
 
   const [bikes, accessories] = await Promise.all([
-    bikeIds.length > 0 ? Bike.find({ _id: { $in: bikeIds } }).exec() : Promise.resolve([]),
-    accessoryIds.length > 0 ? Accessory.find({ _id: { $in: accessoryIds } }).exec() : Promise.resolve([]),
+    bikeIds.length > 0 ? Bike.find({ _id: { $in: bikeIds } }).populate("brand").exec() : Promise.resolve([]),
+    accessoryIds.length > 0
+      ? Accessory.find({ _id: { $in: accessoryIds } }).populate("brand").exec()
+      : Promise.resolve([]),
   ]);
 
   const byKey = new Map<string, CatalogProduct>();
@@ -149,7 +161,7 @@ async function resolveCartLines(lines: CartLineInput[]): Promise<LineResolution[
           itemId: String(product._id),
           sku: variant.sku,
           name: product.name,
-          brand: product.brand,
+          brand: brandName(product),
           ...(variant.size !== undefined ? { size: variant.size } : {}),
           ...(variant.color !== undefined ? { color: variant.color } : {}),
           ...(primaryImagePublicId(product) !== undefined

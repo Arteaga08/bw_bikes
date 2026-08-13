@@ -1,9 +1,16 @@
 import { Schema } from "mongoose";
 
 /**
- * Free-form technical sheet, embedded in the product document — no collection,
- * no templates (see the design spec §"Ficha técnica libre"). The admin builds
- * whatever groups and fields each product needs.
+ * Free-form technical sheet, embedded in the product document — no
+ * collection of *values* (see the design spec §"Ficha técnica libre"). The
+ * admin builds whatever groups and fields each product needs; the write
+ * itself is still one atomic replace of this embedded array.
+ *
+ * M10.3 revisits "no templates" for the group/field *shape* only: every
+ * title and label written here also feeds `spec-template.model.ts`'s
+ * `SpecTemplate` collection, a separate, label-only memory the editor
+ * autocompletes from — a title or label, never a value, since values are
+ * per-product by definition. See that file's own doc comment.
  *
  * The caps below are the reason this is safe to leave free-form: without them
  * an admin (or a compromised admin session) could grow a single document past

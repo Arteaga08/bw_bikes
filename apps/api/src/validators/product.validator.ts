@@ -1,9 +1,9 @@
-import type { BrakeType, FulfillmentMode } from "@bw-bikes/shared";
+import type { FulfillmentMode } from "@bw-bikes/shared";
 import Joi from "joi";
 import {
-  MAX_BRAND_LENGTH,
   MAX_COLOR_LENGTH,
   MAX_DESCRIPTION_LENGTH,
+  MAX_PRODUCT_BADGES,
   MAX_PRODUCT_NAME_LENGTH,
   MAX_RELATED_ACCESSORIES,
   MAX_SHORT_DESCRIPTION_LENGTH,
@@ -14,7 +14,6 @@ import { objectId, priceCents, sku, slug } from "./common.validator.js";
 import { specGroupSchemaJoi } from "./spec-group.validator.js";
 
 const FULFILLMENT_MODES: FulfillmentMode[] = ["in_stock", "on_request", "preorder"];
-const BRAKE_TYPES: BrakeType[] = ["hydraulic_disc", "mechanical_disc", "rim"];
 
 const name = Joi.string().trim().min(2).max(MAX_PRODUCT_NAME_LENGTH).messages({
   "string.empty": "El nombre es obligatorio.",
@@ -23,9 +22,10 @@ const name = Joi.string().trim().min(2).max(MAX_PRODUCT_NAME_LENGTH).messages({
   "any.required": "El nombre es obligatorio.",
 });
 
-const brand = Joi.string().trim().min(1).max(MAX_BRAND_LENGTH).messages({
+/** A reference to `Brand`, not free text — see `brand.model.ts`. */
+const brand = objectId.messages({
   "string.empty": "La marca es obligatoria.",
-  "string.max": `La marca no puede exceder ${MAX_BRAND_LENGTH} caracteres.`,
+  "string.pattern.base": "La marca es inválida.",
   "any.required": "La marca es obligatoria.",
 });
 
@@ -69,6 +69,15 @@ const specGroups = Joi.array().items(specGroupSchemaJoi).messages({
   "array.base": "La ficha técnica debe ser una lista de grupos.",
 });
 
+const badges = Joi.array()
+  .items(objectId)
+  .max(MAX_PRODUCT_BADGES)
+  .unique()
+  .messages({
+    "array.max": `Solo se puede asignar ${MAX_PRODUCT_BADGES} badge por producto.`,
+    "array.unique": "Hay badges repetidos.",
+  });
+
 /**
  * `compareAtPrice` is the struck-through "precio anterior". It must sit above
  * the real price — a fake discount where the compare price is lower is both a
@@ -89,6 +98,7 @@ const productBase = {
   compareAtPrice: compareAtPrice.optional(),
   variants: variants.optional(),
   specGroups: specGroups.optional(),
+  badges: badges.optional(),
 };
 
 const relatedAccessories = Joi.array()
@@ -108,23 +118,12 @@ export const createBikeSchema = Joi.object({
   description: description.required(),
   shortDescription: shortDescription.required(),
   price: priceCents.required(),
-  brakeType: Joi.string()
-    .valid(...BRAKE_TYPES)
-    .required()
-    .messages({
-      "any.only": "El tipo de freno no es válido.",
-      "any.required": "El tipo de freno es obligatorio.",
-    }),
   relatedAccessories: relatedAccessories.default([]),
 });
 
 export const updateBikeSchema = Joi.object({
   ...productBase,
   shortDescription: shortDescription.optional(),
-  brakeType: Joi.string()
-    .valid(...BRAKE_TYPES)
-    .optional()
-    .messages({ "any.only": "El tipo de freno no es válido." }),
   relatedAccessories: relatedAccessories.optional(),
 })
   .min(1)

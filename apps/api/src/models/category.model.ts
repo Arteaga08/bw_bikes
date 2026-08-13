@@ -1,7 +1,16 @@
 import { type Document, model, Schema, type Types } from "mongoose";
+import { categoryImageSchema } from "./schemas/category-image.schema.js";
 
 export const MAX_CATEGORY_NAME_LENGTH = 80;
 export const MAX_CATEGORY_DESCRIPTION_LENGTH = 400;
+
+export interface ICategoryImage {
+  publicId: string;
+  url: string;
+  width: number;
+  height: number;
+  alt?: string;
+}
 
 export interface ICategory extends Document {
   name: string;
@@ -11,6 +20,8 @@ export interface ICategory extends Document {
   parent: Types.ObjectId | null;
   order: number;
   isActive: boolean;
+  /** Optional, single image (M10.2) — set/replaced/cleared via `category.service.ts`'s `setImage`/`removeImage`, never via the plain create/update payload. */
+  image?: ICategoryImage;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,6 +48,7 @@ function buildCategorySchema(): Schema<ICategory> {
       parent: { type: Schema.Types.ObjectId, default: null },
       order: { type: Number, default: 0, min: 0 },
       isActive: { type: Boolean, default: true },
+      image: { type: categoryImageSchema, required: false },
     },
     { timestamps: true },
   );

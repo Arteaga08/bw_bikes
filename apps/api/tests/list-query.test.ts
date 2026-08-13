@@ -160,8 +160,12 @@ describe("filters are explicit, never a raw query object", () => {
   });
 
   it("filters by brand and by price range", async () => {
+    // `brand` travels as the brand's `slug`, case-insensitively — see
+    // `seedBikes`, which gives the "Canyon" fixture the slug "canyon".
     const byBrand = await request(app).get(`${ADMIN}/bikes?brand=Canyon`).set("Cookie", adminCookie);
-    expect(byBrand.body.data.bikes.every((bike: { brand: string }) => bike.brand === "Canyon")).toBe(true);
+    expect(byBrand.body.data.bikes.every((bike: { brand: { name: string } }) => bike.brand.name === "Canyon")).toBe(
+      true,
+    );
     expect(byBrand.body.meta.total).toBe(3);
 
     // This one is where the Express 5 query fix (utils/express-query.ts) is
