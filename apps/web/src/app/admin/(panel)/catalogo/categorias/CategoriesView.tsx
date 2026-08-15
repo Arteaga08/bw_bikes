@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { DataTable, TableRowActions, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/cn";
 import { adminAccessoryCategoriesApi, adminBikeCategoriesApi, type CategoryTreeNode } from "@/lib/api/admin-catalog";
@@ -99,6 +100,11 @@ export function CategoriesView({ kind, initialTree }: CategoriesViewProps) {
   }
 
   const rows = flattenTree(tree);
+  const title = kind === "bike" ? "Categorías de bicicletas" : "Categorías de accesorios";
+  const subtitle =
+    kind === "bike"
+      ? "Jerarquía de hasta dos niveles, independiente del árbol de accesorios."
+      : "Jerarquía de hasta dos niveles, independiente del árbol de bicicletas.";
 
   const columns: DataTableColumn<CategoryRow>[] = [
     {
@@ -116,7 +122,7 @@ export function CategoriesView({ kind, initialTree }: CategoriesViewProps) {
               className="h-8 w-8 rounded-control object-cover"
             />
           ) : (
-            <div className="h-8 w-8 rounded-control bg-base" aria-hidden />
+            <div className="h-8 w-8 rounded-control bg-inset" aria-hidden />
           )}
           <span className={depth === 0 ? "font-ui text-ui text-negro" : "font-body text-body text-negro"}>{category.name}</span>
         </div>
@@ -128,7 +134,7 @@ export function CategoriesView({ kind, initialTree }: CategoriesViewProps) {
       key: "status",
       header: "Estatus",
       kind: "status",
-      render: ({ category }) => (category.isActive ? <Badge variant="exito">Activa</Badge> : <Badge variant="neutral">Inactiva</Badge>),
+      render: ({ category }) => (category.isActive ? <Badge variant="accent">Activa</Badge> : <Badge variant="neutral">Inactiva</Badge>),
     },
     {
       key: "actions",
@@ -155,11 +161,15 @@ export function CategoriesView({ kind, initialTree }: CategoriesViewProps) {
 
   return (
     <>
-      <div className="flex justify-end px-md py-md sm:px-lg">
-        <Button variant="primary" onClick={() => setFormDialog({ mode: "create" })}>
-          Agregar categoría
-        </Button>
-      </div>
+      <PageHeader
+        title={title}
+        subtitle={subtitle}
+        actions={
+          <Button variant="primary" className="w-full sm:w-auto" onClick={() => setFormDialog({ mode: "create" })}>
+            Agregar categoría
+          </Button>
+        }
+      />
 
       <div className="p-md sm:p-lg">
         {rows.length === 0 ? (

@@ -7,6 +7,7 @@ import { toPublicBadge } from "./badge.service.js";
 import { toPublicBrand } from "./brand.service.js";
 import { toPublicCategory } from "./category.service.js";
 import { type ActorContext, createProductService } from "./product.service.js";
+import { learnSizeTemplates } from "./size-template.service.js";
 import { learnSpecTemplates } from "./spec-template.service.js";
 
 const MODULE_NAME = "catalog.accessories";
@@ -130,6 +131,7 @@ async function create(input: AccessoryInput, actor: ActorContext): Promise<IAcce
   });
 
   if (input.specGroups && input.specGroups.length > 0) await learnSpecTemplates(input.specGroups);
+  if (variants.length > 0) await learnSizeTemplates(variants);
 
   return accessory;
 }
@@ -177,6 +179,11 @@ async function update(id: string, input: AccessoryInput, actor: ActorContext): P
     after: { slug: accessory.slug, price: accessory.price, variants: accessory.variants.length },
     ip: actor.ip,
   });
+
+  // Unlike `specGroups` (a separate `PUT .../spec-groups`), variants are part
+  // of this same PATCH — so, unlike the sheet, learning has to happen here
+  // too, not just on create.
+  if (input.variants !== undefined && input.variants.length > 0) await learnSizeTemplates(input.variants);
 
   return accessory;
 }

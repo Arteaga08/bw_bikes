@@ -2,10 +2,10 @@
 
 import type { AdminAccessory, AdminBike, AdminBrand } from "@bw-bikes/shared";
 import Image from "next/image";
-import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
 import { TableRowActions } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
@@ -170,11 +170,9 @@ export function CatalogView({ kind, categoryTree, brands }: CatalogViewProps) {
   function renderRowActions(row: ProductRow): ReactNode {
     return (
       <TableRowActions>
-        <Link href={`${editBasePath}/${row.id}`}>
-          <Button variant="secondary" size="sm">
-            Editar
-          </Button>
-        </Link>
+        <ButtonLink href={`${editBasePath}/${row.id}`} variant="secondary" size="sm">
+          Editar
+        </ButtonLink>
         {row.isActive ? (
           <Button
             variant="ghost"
@@ -206,14 +204,14 @@ export function CatalogView({ kind, categoryTree, brands }: CatalogViewProps) {
     const thumbnail = row.gallery[0];
     return (
       <div key={row.id} className="flex flex-col overflow-hidden rounded-card-lg border border-borde bg-surface">
-        <div className="relative aspect-4/3 w-full bg-base">
+        <div className="relative aspect-4/3 w-full bg-inset">
           {thumbnail ? (
             <Image src={thumbnail.url} alt={thumbnail.alt ?? row.name} fill sizes="(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 100vw" className="object-cover" />
           ) : (
             <div className="flex h-full items-center justify-center font-body text-caption text-grafito">Sin imagen</div>
           )}
           <div className="absolute top-sm right-sm">
-            {row.isActive ? <Badge variant="exito">Activo</Badge> : <Badge variant="neutral">Archivado</Badge>}
+            {row.isActive ? <Badge variant="accent">Activo</Badge> : <Badge variant="neutral">Archivado</Badge>}
           </div>
         </div>
         <div className="flex flex-1 flex-col gap-sm p-md">

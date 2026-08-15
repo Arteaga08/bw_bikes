@@ -3,6 +3,7 @@
 import type { PublicAccessory } from "@bw-bikes/shared";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { CloseButton } from "@/components/ui/CloseButton";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/hooks/use-toast";
 import { adminAccessoriesApi } from "@/lib/api/admin-catalog";
@@ -100,17 +101,11 @@ export function RelatedAccessoriesPicker({ selected, onChange }: RelatedAccessor
         {selected.map((accessory) => (
           <span
             key={accessory.id}
-            className="inline-flex items-center gap-xs rounded-control bg-base px-sm py-1 font-ui text-caption text-negro"
+            className="inline-flex items-center gap-xs rounded-control bg-inset px-sm py-1 font-ui text-caption text-negro"
           >
             {accessory.name}
-            <button
-              type="button"
-              aria-label={`Quitar ${accessory.name}`}
-              onClick={() => removeAccessory(accessory.id)}
-              className="rounded-control text-grafito transition-colors duration-150 hover:text-negro focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro"
-            >
-              ×
-            </button>
+            {/* `icon-sm` (20px): the default 36px square would set the chip's own height. */}
+            <CloseButton size="icon-sm" aria-label={`Quitar ${accessory.name}`} onClick={() => removeAccessory(accessory.id)} />
           </span>
         ))}
       </div>

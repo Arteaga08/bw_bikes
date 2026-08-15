@@ -6,13 +6,15 @@ import { cn } from "@/lib/cn";
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label: string;
+  /** Keeps the `<label htmlFor>` in the DOM (still announced by a screen reader) but visually hides it — same use as `Input`'s, for a caller composing its own visible label row (e.g. label text plus a `SectionHelp` button) above the field. */
+  labelHidden?: boolean;
   error?: string;
   helper?: string;
 }
 
 /** Same accessibility contract as `Input`/`Select` — label, `aria-describedby`, `aria-invalid`. */
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
-  { label, error, helper, id, className, rows = 4, ...props },
+  { label, labelHidden, error, helper, id, className, rows = 4, ...props },
   ref,
 ) {
   const autoId = useId();
@@ -21,7 +23,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
 
   return (
     <div className="flex flex-col gap-xs">
-      <label htmlFor={textareaId} className="font-ui text-ui text-negro">
+      <label htmlFor={textareaId} className={cn("font-ui text-ui text-negro", labelHidden && "sr-only")}>
         {label}
       </label>
       <textarea
@@ -35,7 +37,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
           "transition-colors duration-150 resize-y",
           "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro",
           error ? "border-estado-error" : "border-borde",
-          "disabled:bg-base disabled:text-negro-disabled-text disabled:cursor-not-allowed",
+          "disabled:bg-inset disabled:text-negro-disabled-text disabled:cursor-not-allowed",
           className,
         )}
         {...props}

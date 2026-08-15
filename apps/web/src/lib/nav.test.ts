@@ -13,8 +13,8 @@ describe("NAV_SECTIONS", () => {
     expect(new Set(hrefs).size).toBe(hrefs.length);
   });
 
-  it("flattens to the thirteen real phase-2 destinations", () => {
-    expect(NAV_ITEMS_FLAT).toHaveLength(13);
+  it("flattens to the fourteen real phase-2 destinations", () => {
+    expect(NAV_ITEMS_FLAT).toHaveLength(14);
     expect(NAV_ITEMS_FLAT.map((item) => item.href)).toEqual([
       "/admin",
       "/admin/ordenes",
@@ -23,6 +23,7 @@ describe("NAV_SECTIONS", () => {
       "/admin/catalogo/marcas",
       "/admin/catalogo/badges",
       "/admin/catalogo/fichas-tecnicas",
+      "/admin/catalogo/tallas",
       "/admin/catalogo/categorias/bicicletas",
       "/admin/catalogo/bicicletas",
       "/admin/catalogo/categorias/accesorios",

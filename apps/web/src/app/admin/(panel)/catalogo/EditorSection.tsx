@@ -11,6 +11,8 @@ export interface EditorSectionProps {
   description?: string;
   /** The section's real limit, shown plainly instead of a control that just goes disabled. Turns amber once `current === max`. */
   count?: { current: number; max: number };
+  /** A `HelpPopover` rendered right next to the title — "¿dónde sale esto en la ficha pública?". Omit it and the section looks exactly like it always has; only the sections M10.7 S5 named actually pass one. */
+  help?: ReactNode;
   children: ReactNode;
   className?: string;
 }
@@ -22,7 +24,7 @@ export interface EditorSectionProps {
  * variant rows) goes one level back *down* instead of stacking another card,
  * so nothing here is ever a card inside a card.
  */
-export function EditorSection({ id, title, description, count, children, className }: EditorSectionProps) {
+export function EditorSection({ id, title, description, count, help, children, className }: EditorSectionProps) {
   const titleId = useId();
   const atLimit = count !== undefined && count.current >= count.max;
 
@@ -34,9 +36,12 @@ export function EditorSection({ id, title, description, count, children, classNa
     >
       <div className="flex flex-wrap items-start justify-between gap-sm border-b border-borde px-lg py-md">
         <div className="flex flex-col gap-xs">
-          <h2 id={titleId} className="font-display text-h3 text-negro">
-            {title}
-          </h2>
+          <div className="flex items-center gap-xs">
+            <h2 id={titleId} className="font-display text-h3 text-negro">
+              {title}
+            </h2>
+            {help}
+          </div>
           {description ? <p className="max-w-[65ch] font-body text-caption text-grafito">{description}</p> : null}
         </div>
         {count ? (

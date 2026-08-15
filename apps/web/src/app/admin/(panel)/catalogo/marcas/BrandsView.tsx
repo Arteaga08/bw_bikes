@@ -2,14 +2,16 @@
 
 import type { AdminBrand } from "@bw-bikes/shared";
 import Image from "next/image";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
+import { BrandCardSkeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
-import { DataTable, DataTableSkeleton, TableRowActions, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { useToast } from "@/hooks/use-toast";
 import { adminBrandsApi, type AdminBrandListParams } from "@/lib/api/admin-catalog";
@@ -121,47 +123,52 @@ export function BrandsView() {
     }
   }
 
-  const columns: DataTableColumn<AdminBrand>[] = [
-    {
-      key: "logo",
-      header: <span className="sr-only">Logo</span>,
-      className: "w-px",
-      render: (row) =>
-        row.logo ? (
-          <Image src={row.logo.url} alt="" width={32} height={32} className="h-8 w-8 rounded-control object-cover" />
-        ) : (
-          <div className="h-8 w-8 rounded-control bg-base" aria-hidden />
-        ),
-    },
-    { key: "name", header: "Nombre", kind: "text", render: (row) => row.name },
-    { key: "slug", header: "Slug", kind: "text", render: (row) => row.slug },
-    {
-      key: "status",
-      header: "Estatus",
-      kind: "status",
-      render: (row) => (row.isActive ? <Badge variant="exito">Activa</Badge> : <Badge variant="neutral">Inactiva</Badge>),
-    },
-    {
-      key: "actions",
-      header: "Acciones",
-      kind: "actions",
-      className: "w-px whitespace-nowrap",
-      render: (row) => (
-        <TableRowActions>
+  // One lightweight card per brand — logo, name, status, actions. No price/
+  // category/badges to carry (a brand doesn't have them), so unlike
+  // `CatalogView`'s product cards this grid starts at 2 columns on mobile
+  // instead of 1.
+  function renderCard(row: AdminBrand): ReactNode {
+    return (
+      <div key={row.id} className="flex flex-col overflow-hidden rounded-card-lg border border-borde bg-surface">
+        <div className="relative aspect-square w-full bg-inset">
+          {row.logo ? (
+            <Image src={row.logo.url} alt={row.logo.alt ?? row.name} fill sizes="(min-width: 1280px) 16vw, (min-width: 640px) 25vw, 50vw" className="object-contain p-md" />
+          ) : (
+            <div className="flex h-full items-center justify-center font-body text-caption text-grafito">Sin imagen</div>
+          )}
+          <div className="absolute top-sm right-sm">
+            {row.isActive ? <Badge variant="accent">Activa</Badge> : <Badge variant="neutral">Inactiva</Badge>}
+          </div>
+        </div>
+        <div className="flex flex-1 flex-col gap-xs p-md">
+          <p className="truncate font-ui text-ui text-negro">{row.name}</p>
+          <p className="truncate font-body text-caption text-grafito">{row.slug}</p>
+        </div>
+        <div className="flex items-center gap-sm border-t border-borde p-md">
           <Button variant="secondary" size="sm" onClick={() => setFormDialog({ mode: "edit", brand: row })}>
             Editar
           </Button>
           <Button variant="ghost" size="sm" tone="danger-strong" onClick={() => setDeleteDialog({ id: row.id, name: row.name })}>
             Eliminar
           </Button>
-        </TableRowActions>
-      ),
-    },
-  ];
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-md px-md py-md sm:px-lg">
+      <PageHeader
+        title="Marcas"
+        subtitle="Una marca por fabricante, compartida entre bicicletas y accesorios — elígela al crear un producto en vez de escribirla cada vez."
+        actions={
+          <Button variant="primary" className="w-full sm:w-auto" onClick={() => setFormDialog({ mode: "create" })}>
+            Nueva marca
+          </Button>
+        }
+      />
+
+      <div className="flex flex-wrap items-end gap-md px-md py-md sm:px-lg">
         <Input
           label="Buscar"
           placeholder="Nombre o slug"
@@ -169,15 +176,16 @@ export function BrandsView() {
           onChange={(event) => updateSearch(event.target.value)}
           wrapperClassName="w-full sm:max-w-[18rem]"
         />
-        <Button variant="primary" onClick={() => setFormDialog({ mode: "create" })}>
-          Nueva marca
-        </Button>
       </div>
 
       <ErrorBoundary>
         <div className="p-md sm:p-lg">
           {loading ? (
-            <DataTableSkeleton columns={columns} />
+            <div className="grid grid-cols-2 gap-md sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+              {Array.from({ length: 8 }, (_, index) => (
+                <BrandCardSkeleton key={index} />
+              ))}
+            </div>
           ) : loadError ? (
             <EmptyState
               title="No se pudieron cargar las marcas"
@@ -191,7 +199,7 @@ export function BrandsView() {
           ) : rows.length === 0 ? (
             <EmptyState title="No hay marcas con estos filtros" description="Ajusta la búsqueda o crea la primera marca." />
           ) : (
-            <DataTable columns={columns} rows={rows} getRowKey={(row) => row.id} />
+            <div className="grid grid-cols-2 gap-md sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{rows.map(renderCard)}</div>
           )}
         </div>
       </ErrorBoundary>

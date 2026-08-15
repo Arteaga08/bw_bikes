@@ -68,12 +68,29 @@ tamaño, contraste de color y espacio, no con elevación falsa.
 ### 3.2 Jerarquía de profundidad (sin sombras)
 | Capa | Color | Uso |
 |---|---|---|
+| Overlay | `#0A0A0A` | Modal de confirmación, dropdown, toast, footer, sidebar |
 | Base | `#F1F1EE` | Fondo de página |
 | Surface | `#FFFFFF` + borde `#E2E2DE` | Tarjetas, inputs, modales de contenido |
-| Overlay | `#0A0A0A` | Modal de confirmación, dropdown, toast, footer |
+| **Inset** | **`#EAEAE6`** | **Panel anidado dentro de una tarjeta** |
+| Borde | `#E2E2DE` | Hairlines · hover de control sobre `inset` o `base` |
 
 No usar `box-shadow` para simular elevación. La diferencia de capa se lee por
 el cambio de fondo, no por sombra.
+
+**`inset` es la cuarta superficie**, agregada al cerrar M10.5. Las tres
+originales no alcanzaban para un panel dentro de una tarjeta y la única salida
+era pintarlo `bg-base`, que es el suelo de la página: el panel leía como un
+agujero en la tarjeta, y un control transparente encima no tenía cuerpo propio
+— mostraba exactamente el mismo fondo que se ve fuera de la tarjeta. Se
+notaron tres síntomas del mismo defecto: los botones de ícono de la ficha
+técnica sin cuerpo, un input deshabilitado invisible (`disabled:bg-base` sobre
+un panel `bg-base`), y el encabezado de tabla con el mismo relleno que el
+hover de fila.
+
+La regla no cambia — sigue prohibido resolver profundidad con sombra — pero
+para cambiar de fondo hacen falta suficientes fondos a los que cambiar. Sigue
+siendo un escalón por nivel real de anidamiento: si un diseño necesita un
+quinto, el problema es el anidamiento, no la paleta.
 
 ### 3.3 Espaciado — grid base 8px
 `xs 4px · sm 8px · md 16px · lg 24px · xl 32px · 2xl 48px · 3xl 64px`
@@ -84,33 +101,167 @@ sueltos (ej. nunca `padding: 18px`, usar `16px` o `24px`).
 
 ---
 
-## 4. Botones — 4 variantes × 6 estados
+## 4. Botones — 5 variantes × 4 tonos × 6 estados
+
+El sistema tiene tres ejes independientes. **Variante** es la forma y el peso,
+**tono** es el color, **tamaño** es la caja.
+
+### 4.1 Variantes (forma)
 
 | Variante | Uso |
 |---|---|
 | **Primario** (dorado) | Una sola acción principal por vista: "Comprar", "Ir a pagar" |
 | **Secundario** (negro) | Acciones de igual peso pero no la principal: "Ver bici" |
-| **Ghost** (contorno) | Acciones terciarias: "Detalles", filtros |
+| **Ghost** (contorno) | Acciones terciarias sueltas: "Editar", "Agregar campo", filtros |
+| **Bare** (sin contorno) | Controles que se repiten en una fila o barra: reordenar ↑↓, eliminar, cerrar |
 | **Texto** (link subrayado) | Navegación inline: "Ver más", "Seguir comprando" |
 
-Estados: `default · hover · focus · pressed · disabled · loading`
+`bare` se agregó al cerrar M10.5 y es la única incorporación al vocabulario
+original. Motivo: `ghost` y `bare` son la misma caja al mismo tamaño y solo se
+distinguen por si dibujan borde en reposo. Un `ghost` suelto necesita el
+contorno para leerse como control; repetido como ícono en cada fila de un
+formulario produce una reja de recuadros negros y le da al control **menos**
+importante el borde **más** fuerte de la fila. `bare` descansa como glifo en
+grafito y solo gana cuerpo bajo el cursor.
+
+**El hover de `bare` levanta a blanco** (`surface`) con hairline `borde`: el
+mismo cuerpo que tienen los inputs de al lado, así que el control se anuncia
+como control en vez de apagarse contra el panel. Decidido el 2026-08-12
+comparando las tres opciones renderizadas.
+
+La regla debajo es **separarse un paso del fondo propio**, y tiene una
+consecuencia: dentro de un `ButtonGroup`, que ya trae cuerpo blanco, blanco
+sobre blanco sería invisible. Ese caso baja a `borde` (#E2E2DE) en vez de
+subir. Vive como regla de CSS en `globals.css`
+(`.btn-group-solid > button.is-bare-neutral:hover`) y no como utilidad de
+Tailwind, porque dos `hover:bg-*` en el mismo elemento se resuelven por orden
+del CSS generado, no del string — un selector descendente gana por
+especificidad, siempre. Solo aplica al tono neutral: un basurero dentro de un
+grupo conserva su rojo.
+
+### 4.2 Tonos (color)
+
+`neutral · danger · danger-strong · inverse`
+
+Aplican a `ghost`, `bare` y `text`; las variantes sólidas definen su color por
+completo y lo ignoran.
+
+- **danger**: tier reversible (Archivar — hay "Restaurar"). Suave en hover,
+  sólido solo al presionar.
+- **danger-strong**: tier irreversible (Eliminar). Hover salta directo a
+  sólido, sin el paso suave. Los dos tiers se leen como severidades distintas
+  sin un segundo token rojo.
+- **inverse**: controles sobre `overlay` (#0A0A0A) — sidebar, footer de la
+  tienda, modal oscuro. `blanco/70` → hover `dorado`, anillo de foco dorado.
+
+El subrayado de `text` toma el color del tono, no el acento: una línea dorada
+bajo un "Eliminar" rojo metería el acento único del sistema dentro de un
+control destructivo, que es el único lugar donde no debe aparecer.
+
+### 4.3 Tamaños (caja)
+
+| Tamaño | Caja | Uso |
+|---|---|---|
+| `md` | 44px alto, padding 24px | Default: formularios y acciones sueltas |
+| `sm` | 36px alto, padding 16px | Acciones de fila en `DataTable` (`md` alarga la fila) |
+| `icon-sm` | 20×20 | Control dentro de algo más chico que él: la × de un chip |
+| `icon` | 36×36 | Ícono solo en fila o barra de herramientas |
+| `icon-lg` | 44×44 | Chrome suelto que necesita el área táctil completa (menú móvil) |
+
+Los tamaños de ícono siempre llevan `aria-label`. El glifo escala con el
+control (16px normal, 20px en `icon-lg`, 12px en `icon-sm`) — nunca se le pasa
+`size` al ícono desde afuera.
+
+### 4.4 Estados
+
+`default · hover · focus · pressed · disabled · loading · success`
 
 - Hover oscurece el fondo ~10%; pressed ~20% (valores exactos en `tokens.css`).
 - Focus: anillo de 3px separado 2px del control — negro sobre el primario
   dorado, dorado sobre fondos oscuros o neutros.
 - Disabled: baja contraste, no cambia tamaño.
 - Loading: conserva el ancho original del botón (evita saltos de layout);
-  agrega un spinner de 10px a la izquierda del texto.
-- Control: altura 44px, radio 2px, padding horizontal 24px, transición 150ms.
+  agrega un spinner de 10px a la izquierda del texto. Solo existe en `Button`,
+  no en `ButtonLink` — un enlace no tiene estado pendiente.
+- Success: ventana corta de confirmación (2 s) tras una acción que salió bien.
+  Cambia la etiqueta por uno en pasado ("Agregado", "Guardado") con un check, y
+  usa `estado-exito` sobre `estado-exito-soft` — no un verde nuevo. **Deshabilita
+  el control**, que es el punto: esa ventana es justo cuando un clic impaciente
+  agregaría una segunda unidad al carrito.
+- Control: radio 2px, transición 150ms.
 
-Implementación base ya lista en `tokens.css` (`.btn-primary`, `.btn-secondary`,
-`.btn-ghost`, `.btn-text`) usando `:hover`, `:active`, `:disabled` y
-`:focus-visible`. El estado `loading` se implementa como modificador de clase
-(`.btn-primary.is-loading` / `.btn-secondary.is-loading` en `tokens.css`):
-deshabilita el click, oculta el texto y muestra un spinner de 10px vía
-`::before`. Radios de control casi rectos (2px) transmiten precisión; radios
-mayores en tarjetas (10–14px) suavizan superficies grandes sin perder esa
-sensación — ver comentario en `tokens.css`.
+**Doble clic.** Un atributo `disabled` no alcanza por sí solo: entre el primer
+clic y el commit de React, un segundo clic rápido todavía se dispara. El hook
+`useAsyncAction` (`apps/web/src/hooks/use-async-action.ts`) cierra el hueco con
+una guardia síncrona por `ref` y libera el candado recién al cerrar la ventana
+de confirmación. Si una acción puede tardar o cobrar, va por ese hook, no por
+un `onClick` suelto.
+
+### 4.5 Mapa de color — qué variante para qué acción
+
+**Panel admin**
+
+| Acción | Variante · tono · tamaño |
+|---|---|
+| Guardar cambios (una por vista) | `primary` `md` — dorado #F2B705 sobre texto negro |
+| Cancelar, acción de igual peso | `secondary` `md` — negro #0A0A0A sobre texto blanco |
+| Editar, Agregar campo, filtros | `ghost` `neutral` |
+| Archivar (reversible) | `ghost` `danger` |
+| Eliminar (irreversible) | `ghost` `danger-strong` |
+| Reordenar ↑↓ en fila | `bare` `neutral` `icon` dentro de `ButtonGroup` |
+| Borrar campo/imagen en fila | `bare` `danger-strong` `icon` |
+| Cerrar panel / toast | `CloseButton` (`bare` `icon`) |
+| Quitar chip | `CloseButton` `icon-sm` |
+| Menú móvil | `bare` `icon-lg` |
+| Cerrar sesión (sidebar negra) | `text` `inverse` |
+| Navegación inline, "Administrar badges" | `ButtonLink` `text` |
+
+**Tienda (M12–M14)** — diseño cerrado, sin componentes propios todavía
+
+| Acción | Variante · tono | Por qué ese color |
+|---|---|---|
+| Ir a pagar / Comprar | `primary` `md` | El único CTA dorado de la vista; el acento se reserva para la conversión. |
+| Agregar al carrito | `secondary` `md` + ícono `ShoppingCart`, vía `useAsyncAction` | Igual peso pero no es la conversión. En una grilla de catálogo hay muchos; en dorado diluirían el CTA. Confirma con `success` + `successLabel="Agregado"` y un toast, y queda bloqueado durante la ventana. |
+| Iniciar sesión (submit) | `primary` `md` ancho completo | Única acción de esa pantalla. |
+| Seguir comprando, Ver más | `text` `neutral` | Navegación inline, sin peso de control. |
+| Filtros de catálogo | `ghost` `neutral` `sm` | Terciario y numeroso: necesita el borde para leerse como control. |
+| Cantidad − / + | `bare` `neutral` `icon` en `ButtonGroup` | Control repetido: debe recederse, igual que reordenar. |
+| Quitar del carrito | `bare` `danger-strong` `icon` | Destructivo de bajo riesgo. |
+| Redes sociales (footer) | `SocialButton` (`bare` `inverse`) | Sobre `overlay`; el hover a dorado es el único acento permitido ahí. |
+
+Carrito, checkout y login **no** tienen componente propio: son `Button` con
+otra etiqueta y otro ícono. Inventarles un nombre antes de que exista el flujo
+sería abstracción prematura. `SocialButton` sí existe, porque carga requisitos
+que la composición no da gratis (`rel="noopener noreferrer"` sobre
+`target="_blank"`, y nombre accesible para un control sin texto).
+
+### 4.6 Implementación
+
+Componentes en `apps/web/src/components/ui/`:
+
+| Componente | Qué resuelve |
+|---|---|
+| `Button` | La matriz completa; `buttonClasses()` es la fuente única de clases |
+| `ButtonLink` | Un `<a>` con la misma forma. Evita `<Link><Button/></Link>`, que anida un `<button>` dentro de un `<a>`: HTML inválido y dos controles anunciados donde el usuario ve uno |
+| `ButtonGroup` | Contenedor segmentado para acciones adyacentes (↑↓, −/+). Cuerpo blanco propio y el único borde; sin `overflow-hidden`, que recortaría el anillo de foco |
+| `CloseButton` | El único cierre del sistema. Antes había tres × distintas, ninguna con el ícono Phosphor |
+| `Tabs` (`TabList`/`Tab`) | Pestañas que cambian el contenido de abajo, con patrón WAI-ARIA completo. No para navegar a otra ruta |
+| `SocialButton` | Enlace externo a perfil con logo, seguridad y nombre accesible |
+| `useAsyncAction` (hook) | Corre una acción asíncrona una sola vez a la vez y sostiene la ventana de confirmación — las dos mitades de "sin doble clic" |
+
+`tokens.css` mantiene el espejo en CSS puro (`.btn-primary`, `.btn-secondary`,
+`.btn-ghost`, `.btn-bare`, `.btn-text` y los modificadores de tono) para
+cualquier contexto sin React.
+
+**Excepción documentada:** los enlaces de "saltar al campo" de `ErrorSummary`
+no usan `Button variant="text"`. Son enlaces dentro de prosa a tamaño
+`caption` (11px) dentro de una alerta roja; el `text` variant es un control a
+tamaño `ui` (13px) fijo. Misma razón por la que `Breadcrumbs` y `SkipLink` son
+enlaces con estilo propio y no botones.
+
+Radios de control casi rectos (2px) transmiten precisión; radios mayores en
+tarjetas (10–14px) suavizan superficies grandes sin perder esa sensación — ver
+comentario en `tokens.css`.
 
 ---
 

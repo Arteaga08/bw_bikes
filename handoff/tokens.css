@@ -27,11 +27,32 @@
   --color-grafito: #3A3A38;  /* secundario · 30% */
   --color-dorado:  #F2B705;  /* acento · 10% — CTAs, precios, focus */
 
-  /* ---- Superficies (jerarquía de profundidad, sin sombras) ---- */
+  /* ---- Superficies (jerarquía de profundidad, sin sombras) ----
+     Escalera de atrás hacia adelante. `--surface-inset` es la cuarta capa,
+     agregada al cerrar M10.5: sin ella, un panel dentro de una tarjeta solo
+     podía pintarse con el fondo de página, así que leía como un agujero en la
+     tarjeta y los controles transparentes encima se quedaban sin cuerpo.
+     Ver DESIGN_SYSTEM.md §3.2. */
   --surface-base:    #F1F1EE;  /* fondo de página */
   --surface-card:    #FFFFFF;  /* tarjetas, inputs */
-  --surface-overlay: #0A0A0A;  /* modal, dropdown, toast */
-  --border-color:    #E2E2DE;
+  --surface-inset:   #EAEAE6;  /* panel anidado dentro de una tarjeta */
+  --surface-overlay: #0A0A0A;  /* modal, dropdown, toast, sidebar */
+  --border-color:    #E2E2DE;  /* hairlines · hover de control bare */
+
+  /* ---- Estados de botón bare (sin borde) ---- */
+  --btn-bare-text:    #3A3A38;
+  --btn-bare-hover:   #E2E2DE;
+  --btn-bare-pressed: #D8D8D3;
+
+  /* ---- Severidad de acción (tonos danger de botón) ----
+     OJO: NO son los mismos valores que `--color-error` de más abajo. Ese es el
+     rojo de validación de formulario (#B42318, semántico convencional, elegido
+     para reconocimiento instantáneo). Estos son los desaturados que se
+     implementaron en M8 para badges y acciones destructivas, para que una
+     tabla llena de estados no compita con el único dorado de la vista. Fuente
+     de verdad de estos: `apps/web/src/app/globals.css`. */
+  --action-danger:      #7A3B32;
+  --action-danger-soft: #F1E0DC;
 
   /* ---- Estados de botón primario (dorado) ---- */
   --btn-pri-default: #F2B705;
@@ -154,6 +175,92 @@
   outline-offset: var(--focus-ring-offset);
 }
 
+/* ---- Bare — quinta variante, agregada al cerrar M10.5 ----
+   Misma caja que ghost, sin borde en reposo. Para controles que se repiten en
+   una fila o barra (reordenar, eliminar, cerrar), donde un contorno por ícono
+   produce una reja y le da al control menos importante el borde más fuerte.
+
+   El hover LEVANTA a blanco (--surface-card) con hairline --border-color: el
+   mismo cuerpo que tienen los inputs de al lado, así que el control se anuncia
+   como control en vez de apagarse contra el panel. Decidido el 2026-08-12
+   comparando tres propuestas renderizadas (hundirse en gris / levantar a
+   blanco / solo cambiar el color del glifo) — ver DESIGN_SYSTEM.md §4.1. */
+.btn-bare {
+  background: transparent;
+  color: var(--btn-bare-text);
+  border: 1px solid transparent;  /* reserva la misma caja que .btn-ghost */
+}
+.btn-bare:hover { background: var(--surface-card); border-color: var(--border-color); color: var(--color-negro); }
+.btn-bare:active { background: var(--border-color); }
+.btn-bare:disabled { color: var(--btn-sec-disabled-text); background: transparent; cursor: not-allowed; }
+.btn-bare:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-negro);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Dentro de un .btn-group (ver más abajo), el grupo ya trae cuerpo blanco:
+   blanco sobre blanco sería invisible. Un bare de tono neutral dentro del
+   grupo baja a --border-color en vez de subir a blanco — la misma regla de
+   "un paso del fondo propio", aplicada al fondo que realmente tiene debajo.
+   No toca los tonos danger: esos conservan su propio hover rojo. */
+.btn-group-solid > .btn-bare:not(.is-danger):not(.is-danger-strong):hover {
+  background: var(--border-color);
+  border-color: transparent;
+}
+
+/* ---- Tonos danger — aplican sobre .btn-ghost y .btn-bare ----
+   `danger` es el tier reversible (Archivar): suave en hover, sólido solo al
+   presionar. `danger-strong` es el irreversible (Eliminar): hover salta
+   directo a sólido. Dos severidades sin un segundo token rojo. */
+.btn-ghost.is-danger:hover,
+.btn-bare.is-danger:hover { background: var(--action-danger-soft); color: var(--action-danger); border-color: var(--action-danger); }
+.btn-ghost.is-danger:active,
+.btn-bare.is-danger:active { background: var(--action-danger); color: var(--color-blanco); }
+
+.btn-ghost.is-danger-strong:hover,
+.btn-ghost.is-danger-strong:active,
+.btn-bare.is-danger-strong:hover,
+.btn-bare.is-danger-strong:active { background: var(--action-danger); color: var(--color-blanco); border-color: var(--action-danger); }
+
+.btn-ghost.is-danger:focus-visible,
+.btn-ghost.is-danger-strong:focus-visible,
+.btn-bare.is-danger:focus-visible,
+.btn-bare.is-danger-strong:focus-visible { outline-color: var(--action-danger); }
+
+/* ---- Tono inverse — controles sobre --surface-overlay (#0A0A0A) ----
+   Sidebar, footer de la tienda, modal oscuro. El hover a dorado es el único
+   lugar donde el acento aparece en un control terciario, porque sobre negro
+   no hay otro color del sistema con contraste suficiente. */
+.btn-bare.is-inverse,
+.btn-text.is-inverse { color: rgba(250, 250, 250, 0.7); border-color: transparent; }
+.btn-bare.is-inverse:hover { background: rgba(250, 250, 250, 0.1); color: var(--color-dorado); }
+.btn-text.is-inverse:hover { color: var(--color-dorado); border-color: var(--color-dorado); }
+.btn-bare.is-inverse:disabled,
+.btn-text.is-inverse:disabled { color: rgba(250, 250, 250, 0.3); }
+.btn-bare.is-inverse:focus-visible,
+.btn-text.is-inverse:focus-visible { outline-color: var(--color-dorado); }
+
+/* ---- Tamaños de ícono — cuadrados, siempre con aria-label ---- */
+.btn-icon-sm { width: 20px; height: 20px; padding: 0; }  /* dentro de un chip */
+.btn-icon    { width: 36px; height: 36px; padding: 0; }  /* fila o barra */
+.btn-icon-lg { width: 44px; height: 44px; padding: 0; }  /* chrome suelto, área táctil completa */
+
+/* ---- Grupo segmentado — flechas ↑↓, stepper −/+ ----
+   Cuerpo blanco propio (--surface-card) y el único borde del conjunto; el par
+   lee como un control sólido sobre el panel, no como un marco vacío alrededor
+   de dos glifos. Los hijos van .btn-bare — ver la clase .btn-group-solid
+   arriba para cómo se resuelve su hover contra este mismo blanco. Sin
+   `overflow: hidden`: el anillo de foco se dibuja 2px por fuera del hijo y
+   recortarlo dejaría a un usuario de teclado sin foco visible. */
+.btn-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-control);
+}
+.btn-group > *:not(:last-child) { border-right: 1px solid var(--border-color); }
+
 /* ---- Loading (btn-primary / btn-secondary) ----
    Conserva el ancho, bloquea el click, spinner de 10px a la izquierda. */
 .btn-primary.is-loading,
@@ -181,6 +288,29 @@
 @keyframes btn-spin {
   to { transform: rotate(360deg); }
 }
+
+/* ---- Success — ventana de confirmación de 2s tras una acción que salió bien ----
+   Reemplaza el color del botón por completo (no lo superpone: dos `background`
+   en la misma regla se pisarían) y agrega un check antes de la etiqueta en
+   pasado ("Agregado", "Guardado"). Deshabilita el control — la ventana de
+   confirmación es justo cuando un clic impaciente agregaría una segunda
+   unidad. El candado de doble clic en sí vive en JS (`useAsyncAction` en
+   `apps/web/src/hooks/use-async-action.ts`): un `ref` síncrono, porque un
+   segundo clic puede llegar antes de que React confirme el `disabled`.
+
+   OJO: usa el verde desaturado de la app (#4A5D3A / #E8ECE3), no
+   `--color-success` (#15803D) de más arriba — mismo caso que
+   `--action-danger` vs `--color-error`. Fuente de verdad:
+   `apps/web/src/app/globals.css`. */
+.btn-primary.is-success,
+.btn-secondary.is-success {
+  background: #E8ECE3;
+  color: #4A5D3A;
+  border: 1px solid #4A5D3A;
+  cursor: default;
+}
+.btn-primary.is-success:focus-visible,
+.btn-secondary.is-success:focus-visible { outline-color: #4A5D3A; }
 
 /* ==========================================================================
    Badges/tags — decidido vía impeccable live (hueco §6 de DESIGN_SYSTEM.md).

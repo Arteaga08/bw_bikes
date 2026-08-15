@@ -1,12 +1,17 @@
 "use client";
 
 import type { CategoryImage } from "@bw-bikes/shared";
+import { ImagesSquare } from "@phosphor-icons/react";
 import Image from "next/image";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, DragEvent } from "react";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/lib/api/error";
+import { cn } from "@/lib/cn";
+
+/** Mirrors the formats `image-pipeline.ts` accepts by magic bytes — the `accept` attribute is a UX hint, the real check is server-side. */
+const ACCEPTED_MIME_TYPES = "image/jpeg,image/png,image/webp,image/avif";
 
 interface CategoryImageFieldImmediateProps {
   mode: "immediate";
@@ -42,11 +47,9 @@ export function CategoryImageField(props: CategoryImageFieldProps) {
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
-  async function handleFileSelected(event: ChangeEvent<HTMLInputElement>): Promise<void> {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  async function processFile(file: File): Promise<void> {
     if (props.mode === "deferred") {
       props.onSelect(file);
       return;
@@ -66,6 +69,20 @@ export function CategoryImageField(props: CategoryImageFieldProps) {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";
     }
+  }
+
+  async function handleFileSelected(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await processFile(file);
+  }
+
+  async function handleDrop(event: DragEvent<HTMLLabelElement>): Promise<void> {
+    event.preventDefault();
+    setDragOver(false);
+    if (busy) return;
+    const file = event.dataTransfer.files[0];
+    if (file) await processFile(file);
   }
 
   async function handleRemove(): Promise<void> {
@@ -95,9 +112,31 @@ export function CategoryImageField(props: CategoryImageFieldProps) {
   return (
     <div className="flex flex-col gap-sm">
       <span className="font-ui text-ui text-negro">Imagen</span>
-      {hasPreview ? (
-        <div className="flex items-center gap-md">
-          {props.mode === "deferred" ? (
+      <label
+        className={cn(
+          "flex flex-col items-center gap-xs rounded-card border border-dashed p-lg text-center transition-colors duration-150",
+          dragOver ? "border-negro bg-surface" : "border-borde bg-inset",
+          busy ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+        )}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          if (!busy) setDragOver(true);
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(event) => void handleDrop(event)}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPTED_MIME_TYPES}
+          disabled={busy}
+          onChange={(event) => void handleFileSelected(event)}
+          aria-label={hasPreview ? "Reemplazar imagen" : "Subir imagen"}
+          className="sr-only"
+        />
+        {hasPreview ? (
+          props.mode === "deferred" ? (
             // Local blob: URL from a file the admin just picked — next/image can't optimize a client-only object URL.
             // eslint-disable-next-line @next/next/no-img-element
             <img src={props.previewUrl ?? undefined} alt="" className="h-16 w-16 rounded-control object-cover" />
@@ -109,23 +148,18 @@ export function CategoryImageField(props: CategoryImageFieldProps) {
               height={props.image?.height ?? 64}
               className="h-16 w-16 rounded-control object-cover"
             />
-          )}
-          <Button variant="ghost" disabled={busy} onClick={() => void handleRemove()}>
-            {props.mode === "deferred" ? "Quitar" : "Eliminar"}
-          </Button>
-        </div>
-      ) : (
-        <p className="font-body text-caption text-grafito">Sin imagen todavía.</p>
-      )}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,image/avif"
-        disabled={busy}
-        onChange={(event) => void handleFileSelected(event)}
-        aria-label={hasPreview ? "Reemplazar imagen" : "Subir imagen"}
-        className="font-body text-body text-negro"
-      />
+          )
+        ) : (
+          <ImagesSquare aria-hidden="true" size={28} className="text-grafito" />
+        )}
+        <p className="font-ui text-ui text-negro">{hasPreview ? "Cambiar imagen" : "Arrastra una imagen aquí o elige un archivo"}</p>
+        <p className="font-body text-caption text-grafito">JPG, PNG, WebP o AVIF</p>
+      </label>
+      {hasPreview ? (
+        <Button variant="ghost" className="self-start" disabled={busy} onClick={() => void handleRemove()}>
+          {props.mode === "deferred" ? "Quitar" : "Eliminar"}
+        </Button>
+      ) : null}
     </div>
   );
 }

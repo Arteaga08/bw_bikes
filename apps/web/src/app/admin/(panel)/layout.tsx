@@ -30,12 +30,16 @@ export default async function AdminPanelLayout({ children }: { children: ReactNo
     <ToastProvider>
       <MobileNavProvider>
         <SkipLink />
-        <div className="flex h-dvh bg-base">
+        <div className="flex h-dvh overflow-hidden bg-base">
           <Sidebar user={user} />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <TopBar />
             <Breadcrumbs />
-            <main id="panel-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto focus:outline-none">
+            <main
+              id="panel-content"
+              tabIndex={-1}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain focus:outline-none"
+            >
               {children}
             </main>
           </div>

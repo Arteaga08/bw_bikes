@@ -181,6 +181,26 @@ body {
   font-family: var(--font-body);
 }
 
+/* Hover de un botón `bare` dentro de un `ButtonGroup`.
+   Un `bare` suelto sube a blanco al pasar el mouse (se separa un paso de su
+   fondo: panel gris o página). Dentro de un grupo, el cuerpo blanco ya lo pone
+   el grupo, así que blanco sobre blanco sería invisible — ahí baja a `borde`.
+   La regla de fondo es la misma: separarse un paso del fondo propio.
+
+   Va aquí y no como utilidad de Tailwind a propósito: dos `hover:bg-*` en el
+   mismo elemento se resuelven por orden del CSS generado, no por orden del
+   string (ver `lib/cn.ts`), así que el override sería silenciosamente aleatorio.
+   Un selector descendente gana por especificidad (0,3,1 contra 0,2,0), siempre.
+
+   Apunta solo al tono neutral (`is-bare-neutral`, que emite `buttonClasses`):
+   los tonos destructivos ya definen su propio hover rojo y no deben perderlo
+   por estar dentro de un grupo. `:not(:disabled)` deja que un control
+   deshabilitado se quede sin cuerpo. */
+.btn-group-solid > button.is-bare-neutral:hover:not(:disabled) {
+  background-color: var(--color-borde);
+  border-color: transparent;
+}
+
 /* Foco visible global (WCAG AA) — cada componente interactivo hereda esto a
    menos que defina su propio color de anillo (dorado sobre fondo oscuro). */
 :focus-visible {

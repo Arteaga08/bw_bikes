@@ -1,11 +1,13 @@
 import type { Request, Response } from "express";
 import { bikeService, toAdminBike, toPublicBike } from "../services/bike.service.js";
 import { uploadImages } from "../services/storage/storage.service.js";
-import { asyncHandler, routeParam, sendResponse } from "../utils/index.js";
+import { AppError, asyncHandler, routeParam, sendResponse } from "../utils/index.js";
 import { requireActor } from "./category.controller.js";
 import { readUploadedFiles, sanitizeMultipartBody } from "./upload.helpers.js";
 
 const CLOUDINARY_FOLDER = "bikes";
+/** Its own folder, not `bikes/`: a geometry chart is a diagram, never a carousel shot, and keeping them apart makes the commercial gallery browsable in Cloudinary. */
+const CLOUDINARY_GEOMETRY_FOLDER = "bike-geometry";
 
 export const listPublicBikes = asyncHandler(async (req: Request, res: Response) => {
   const { documents, meta } = await bikeService.list(req.query, { publicOnly: true });
@@ -89,4 +91,28 @@ export const reorderBikeGallery = asyncHandler(async (req: Request, res: Respons
   const { publicIds } = req.body as { publicIds: string[] };
   const bike = await bikeService.reorderGallery(routeParam(req, "id"), publicIds, requireActor(req));
   sendResponse(res, 200, "Galería reordenada.", { gallery: bike.gallery });
+});
+
+/** A bike carries at most one geometry chart — same "exactly one file" narrowing as `brand.controller.ts`'s `uploadBrandLogo`. Uploading again replaces it. */
+export const uploadBikeGeometryImage = asyncHandler(async (req: Request, res: Response) => {
+  sanitizeMultipartBody(req);
+  const files = readUploadedFiles(req);
+  if (files.length > 1) {
+    throw new AppError("Envía una sola imagen de geometría.", 400);
+  }
+  const { alt } = req.body as { alt?: string };
+
+  const [uploaded] = await uploadImages(files, CLOUDINARY_GEOMETRY_FOLDER);
+  const bike = await bikeService.setGeometryImage(
+    routeParam(req, "id"),
+    { ...uploaded!, ...(alt ? { alt } : {}) },
+    requireActor(req),
+  );
+
+  sendResponse(res, 200, "Imagen de geometría actualizada.", { geometryImage: bike.geometryImage });
+});
+
+export const deleteBikeGeometryImage = asyncHandler(async (req: Request, res: Response) => {
+  await bikeService.removeGeometryImage(routeParam(req, "id"), requireActor(req));
+  sendResponse(res, 200, "Imagen de geometría eliminada.", { geometryImage: null });
 });

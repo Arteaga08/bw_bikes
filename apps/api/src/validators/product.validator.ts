@@ -8,6 +8,9 @@ import {
   MAX_RELATED_ACCESSORIES,
   MAX_SHORT_DESCRIPTION_LENGTH,
   MAX_SIZE_LENGTH,
+  MAX_SPEC_LABEL_LENGTH,
+  MAX_SPEC_VALUE_LENGTH,
+  MAX_SUMMARY_ROWS,
   MAX_VARIANTS,
 } from "../models/index.js";
 import { objectId, priceCents, sku, slug } from "./common.validator.js";
@@ -69,6 +72,36 @@ const specGroups = Joi.array().items(specGroupSchemaJoi).messages({
   "array.base": "La ficha técnica debe ser una lista de grupos.",
 });
 
+/**
+ * The bike-only "En pocas palabras" card (M10.6). Six bounded rows don't
+ * justify an endpoint of their own, so unlike `specGroups` — whose editor
+ * needs the atomic `PUT /spec-groups` — this rides in the product's own body.
+ *
+ * Attached to the bike schemas below rather than to `productBase`: that's
+ * what keeps accessories, which have no overview block, from accepting it.
+ */
+const summaryRow = Joi.object({
+  label: Joi.string().trim().min(1).max(MAX_SPEC_LABEL_LENGTH).required().messages({
+    "string.empty": "La etiqueta del resumen es obligatoria.",
+    "string.max": `La etiqueta no puede exceder ${MAX_SPEC_LABEL_LENGTH} caracteres.`,
+    "any.required": "La etiqueta del resumen es obligatoria.",
+  }),
+  value: Joi.string().trim().min(1).max(MAX_SPEC_VALUE_LENGTH).required().messages({
+    "string.empty": "El valor del resumen es obligatorio.",
+    "string.max": `El valor no puede exceder ${MAX_SPEC_VALUE_LENGTH} caracteres.`,
+    "any.required": "El valor del resumen es obligatorio.",
+  }),
+  order: Joi.number().integer().min(0).max(999).required().messages({
+    "number.base": "El orden debe ser un número.",
+    "any.required": "El orden es obligatorio.",
+  }),
+});
+
+const summary = Joi.array().items(summaryRow).max(MAX_SUMMARY_ROWS).messages({
+  "array.base": "El resumen debe ser una lista de renglones.",
+  "array.max": `El resumen no puede tener más de ${MAX_SUMMARY_ROWS} renglones.`,
+});
+
 const badges = Joi.array()
   .items(objectId)
   .max(MAX_PRODUCT_BADGES)
@@ -118,12 +151,14 @@ export const createBikeSchema = Joi.object({
   description: description.required(),
   shortDescription: shortDescription.required(),
   price: priceCents.required(),
+  summary: summary.default([]),
   relatedAccessories: relatedAccessories.default([]),
 });
 
 export const updateBikeSchema = Joi.object({
   ...productBase,
   shortDescription: shortDescription.optional(),
+  summary: summary.optional(),
   relatedAccessories: relatedAccessories.optional(),
 })
   .min(1)

@@ -2,30 +2,19 @@
 
 import type { AdminBadge } from "@bw-bikes/shared";
 import { Check } from "@phosphor-icons/react";
-import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
+import { ButtonLink } from "@/components/ui/ButtonLink";
 import { cn } from "@/lib/cn";
 
 /** Mirrors `MAX_PRODUCT_BADGES` in `apps/api/src/models/bike.model.ts`. */
 export const MAX_PRODUCT_BADGES = 1;
 
-/**
- * Hand-copies `Button`'s `text` variant (relative + group + a hover-grown
- * underline instead of a static one) — a `<Link>`, not a `<button>`, so it
- * can't render `<Button>` itself. Keep in sync if that variant changes.
- */
+/** `ButtonLink` renders `Button`'s `text` variant on an `<a>`, so this no longer hand-copies the variant's classes and can't drift from it. */
 function ManageBadgesLink() {
   return (
-    <Link
-      href="/admin/catalogo/badges"
-      className="group relative self-start font-ui text-ui text-negro transition-colors duration-150 hover:text-dorado focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro"
-    >
+    <ButtonLink href="/admin/catalogo/badges" variant="text" className="self-start">
       Administrar badges
-      <span
-        aria-hidden="true"
-        className="absolute inset-x-0 bottom-0 h-px origin-center scale-x-0 bg-dorado transition-transform duration-150 group-hover:scale-x-100"
-      />
-    </Link>
+    </ButtonLink>
   );
 }
 
@@ -75,7 +64,7 @@ export function BadgesPicker({ available, selected, onChange }: BadgesPickerProp
                 "inline-flex items-center gap-xs rounded-control border p-xs",
                 "transition-colors duration-150",
                 "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro",
-                isSelected ? "border-negro bg-base" : "border-borde hover:border-grafito",
+                isSelected ? "border-negro bg-inset" : "border-borde hover:border-grafito",
                 disabled && "cursor-not-allowed opacity-40",
               )}
             >

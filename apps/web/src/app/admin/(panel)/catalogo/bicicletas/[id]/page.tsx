@@ -1,4 +1,4 @@
-import type { AdminBadge, AdminBike, AdminBrand, SpecTemplate } from "@bw-bikes/shared";
+import type { AdminBadge, AdminBike, AdminBrand, SizeTemplate, SpecTemplate } from "@bw-bikes/shared";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { serverApiFetch } from "@/lib/api/server";
@@ -13,9 +13,10 @@ export default async function EditarBicicletaPage({ params }: { params: Promise<
   let brandsResult: Awaited<ReturnType<typeof serverApiFetch<{ brands: AdminBrand[] }>>>;
   let badgesResult: Awaited<ReturnType<typeof serverApiFetch<{ badges: AdminBadge[] }>>>;
   let templatesResult: Awaited<ReturnType<typeof serverApiFetch<{ templates: SpecTemplate[] }>>>;
+  let sizeTemplatesResult: Awaited<ReturnType<typeof serverApiFetch<{ sizeTemplates: SizeTemplate[] }>>>;
   let bikeResult: Awaited<ReturnType<typeof serverApiFetch<{ bike: AdminBike }>>>;
   try {
-    [treeResult, brandsResult, badgesResult, templatesResult, bikeResult] = await Promise.all([
+    [treeResult, brandsResult, badgesResult, templatesResult, sizeTemplatesResult, bikeResult] = await Promise.all([
       serverApiFetch<{ tree: CategoryTreeNode[] }>("/admin/bike-categories/tree"),
       serverApiFetch<{ brands: AdminBrand[] }>("/admin/brands?limit=100&sort=name"),
       // Unfiltered, unlike the create page: an already-assigned badge that's
@@ -23,6 +24,11 @@ export default async function EditarBicicletaPage({ params }: { params: Promise<
       // deliberately instead of just vanishing from the picker.
       serverApiFetch<{ badges: AdminBadge[] }>("/admin/badges?limit=100&sort=order"),
       serverApiFetch<{ templates: SpecTemplate[] }>("/admin/spec-templates?isActive=true&limit=100&sort=title"),
+      // `isActive=true` even on edit, same as spec templates: unlike a badge,
+      // an already-used-but-deactivated size still shows fine — `SizePicker`
+      // falls back to rendering any size already on a variant as its own
+      // chip regardless of whether it came back in this list.
+      serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/size-templates?isActive=true&limit=100&sort=order"),
       serverApiFetch<{ bike: AdminBike }>(`/admin/bikes/${id}`),
     ]);
   } catch (error) {
@@ -44,6 +50,7 @@ export default async function EditarBicicletaPage({ params }: { params: Promise<
         brands={brandsResult.data.brands}
         availableBadges={badgesResult.data.badges}
         specTemplates={templatesResult.data.templates}
+        sizeTemplates={sizeTemplatesResult.data.sizeTemplates}
         listPath="/admin/catalogo/bicicletas"
       />
     </>

@@ -7,6 +7,8 @@ export interface ErrorSummaryEntry {
   /** The id of the field (or section, when the error has no single field — e.g. duplicate SKUs) this entry jumps to. */
   targetId: string;
   message: string;
+  /** Runs before the jump — `ProductEditor` uses it to switch to the step that owns `targetId`, since a field on another step isn't in the DOM yet. */
+  beforeJump?: () => void;
 }
 
 export interface ErrorSummaryProps {
@@ -22,11 +24,16 @@ export interface ErrorSummaryProps {
 export const ErrorSummary = forwardRef<HTMLDivElement, ErrorSummaryProps>(function ErrorSummary({ entries }, ref) {
   if (entries.length === 0) return null;
 
-  function jumpTo(targetId: string): void {
-    const target = document.getElementById(targetId);
-    if (!target) return;
-    target.scrollIntoView({ block: "center" });
-    target.focus();
+  function jumpTo(entry: ErrorSummaryEntry): void {
+    entry.beforeJump?.();
+    // `beforeJump` may switch steps, which is a state update — give it a
+    // paint to land before looking up `targetId`, or it won't be in the DOM yet.
+    requestAnimationFrame(() => {
+      const target = document.getElementById(entry.targetId);
+      if (!target) return;
+      target.scrollIntoView({ block: "center" });
+      target.focus();
+    });
   }
 
   return (
@@ -45,7 +52,7 @@ export const ErrorSummary = forwardRef<HTMLDivElement, ErrorSummaryProps>(functi
           <li key={entry.targetId} className="list-disc font-body text-caption text-estado-error marker:text-estado-error">
             <button
               type="button"
-              onClick={() => jumpTo(entry.targetId)}
+              onClick={() => jumpTo(entry)}
               className="text-left underline-offset-2 hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro"
             >
               {entry.message}

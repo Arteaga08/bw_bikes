@@ -17,6 +17,7 @@ import {
   createBike,
   deleteBike,
   deleteBikeGalleryImage,
+  deleteBikeGeometryImage,
   getAdminBike,
   listAdminBikes,
   reorderBikeGallery,
@@ -24,6 +25,7 @@ import {
   restoreBike,
   updateBike,
   uploadBikeGallery,
+  uploadBikeGeometryImage,
 } from "../controllers/bike.controller.js";
 import { createBadge, deleteBadge, getAdminBadge, listAdminBadges, updateBadge } from "../controllers/badge.controller.js";
 import {
@@ -36,6 +38,13 @@ import {
   uploadBrandLogo,
 } from "../controllers/brand.controller.js";
 import { createCategoryController } from "../controllers/category.controller.js";
+import {
+  createSizeTemplate,
+  deleteSizeTemplate,
+  getAdminSizeTemplate,
+  listAdminSizeTemplates,
+  updateSizeTemplate,
+} from "../controllers/size-template.controller.js";
 import {
   createSpecTemplate,
   deleteSpecTemplate,
@@ -56,17 +65,20 @@ import {
   createBikeSchema,
   createBrandSchema,
   createCategorySchema,
+  createSizeTemplateSchema,
   createSpecTemplateSchema,
   deleteGalleryImageSchema,
   idParamSchema,
   reorderGallerySchema,
   replaceSpecGroupsSchema,
+  sizeTemplateListQuerySchema,
   specTemplateListQuerySchema,
   updateAccessorySchema,
   updateBadgeSchema,
   updateBikeSchema,
   updateBrandSchema,
   updateCategorySchema,
+  updateSizeTemplateSchema,
   updateSpecTemplateSchema,
   uploadGalleryImagesSchema,
 } from "../validators/index.js";
@@ -170,6 +182,21 @@ router.patch(
 );
 router.delete("/spec-templates/:id", validate(idParamSchema, "params"), deleteSpecTemplate);
 
+// --- Size templates ------------------------------------------------------
+// Also shared, also admin-only — feeds the "Tallas y variantes" step's chip
+// picker, never a public endpoint.
+
+router.get("/size-templates", validate(sizeTemplateListQuerySchema, "query"), listAdminSizeTemplates);
+router.post("/size-templates", validate(createSizeTemplateSchema), createSizeTemplate);
+router.get("/size-templates/:id", validate(idParamSchema, "params"), getAdminSizeTemplate);
+router.patch(
+  "/size-templates/:id",
+  validate(idParamSchema, "params"),
+  validate(updateSizeTemplateSchema),
+  updateSizeTemplate,
+);
+router.delete("/size-templates/:id", validate(idParamSchema, "params"), deleteSizeTemplate);
+
 // --- Bikes ---------------------------------------------------------------
 
 router.get("/bikes", validate(adminProductListQuerySchema, "query"), listAdminBikes);
@@ -214,6 +241,19 @@ router.patch(
   validate(reorderGallerySchema),
   reorderBikeGallery,
 );
+
+// The geometry chart is a single image, so it has no delete-by-publicId and no
+// reorder — POST replaces, DELETE clears. `uploadGalleryImagesSchema` is
+// reused because the body is the same lone optional `alt`, same as the brand
+// logo's routes below.
+router.post(
+  "/bikes/:id/geometry-image",
+  validate(idParamSchema, "params"),
+  uploadImages,
+  validate(uploadGalleryImagesSchema),
+  uploadBikeGeometryImage,
+);
+router.delete("/bikes/:id/geometry-image", validate(idParamSchema, "params"), deleteBikeGeometryImage);
 
 // --- Accessories ---------------------------------------------------------
 

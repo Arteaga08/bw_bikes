@@ -17,6 +17,7 @@ function makeBike(overrides: Partial<AdminBike> = {}): AdminBike {
     brand: { id: "brand-1", name: "Specialized", slug: "specialized", order: 0 },
     category: { id: "cat-1", name: "Ruta", slug: "ruta", parent: null, order: 0 },
     shortDescription: "Bici de ruta",
+    summary: [],
     description: "Descripción",
     price: 19_999_900,
     currency: "MXN",

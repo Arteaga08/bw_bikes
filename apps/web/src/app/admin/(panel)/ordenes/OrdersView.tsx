@@ -8,6 +8,7 @@ import { DataTable, DataTableSkeleton, type DataTableColumn } from "@/components
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { Pagination } from "@/components/ui/Pagination";
+import { Tab, TabList } from "@/components/ui/Tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   bulkUpdateOrderStatus,
@@ -20,7 +21,6 @@ import {
   type RecordShipmentInput,
 } from "@/lib/api/admin-orders";
 import { ApiError } from "@/lib/api/error";
-import { cn } from "@/lib/cn";
 import { formatCurrencyCents } from "@/lib/format";
 import { formatDateTime } from "@/lib/orders/format";
 import { AuthorizationCountdown } from "./AuthorizationCountdown";
@@ -36,9 +36,14 @@ const OrderDetailSlideOver = dynamic(
   { ssr: false },
 );
 
+// Ids that wire each tab to the region it controls (WAI-ARIA tabs pattern).
+const QUEUE_TAB_ID = "orders-tab-queue";
+const ALL_TAB_ID = "orders-tab-all";
+const ORDERS_PANEL_ID = "orders-tabpanel";
+
 const PAGE_SIZE = 20;
 
-type Tab = "queue" | "all";
+type OrdersTab = "queue" | "all";
 
 interface ConfirmDialogState {
   id: string;
@@ -69,7 +74,7 @@ export interface OrdersViewProps {
 export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: OrdersViewProps) {
   const { toast } = useToast();
 
-  const [tab, setTab] = useState<Tab>("queue");
+  const [tab, setTab] = useState<OrdersTab>("queue");
   const [filters, setFilters] = useState<OrderFiltersValue>({ status: "", orderNumber: "", sort: "-createdAt" });
   const [page, setPage] = useState(1);
 
@@ -150,7 +155,7 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
     setRefetchToken((token) => token + 1);
   }
 
-  function switchTab(next: Tab): void {
+  function switchTab(next: OrdersTab): void {
     setTab(next);
     setPage(1);
     setSelectedIds(new Set());
@@ -365,35 +370,27 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
 
   return (
     <>
-      <div className="border-b border-borde px-md sm:px-lg">
-        <nav className="flex gap-lg" aria-label="Vistas de órdenes">
-          <button
-            type="button"
-            onClick={() => switchTab("queue")}
-            aria-current={isQueue ? "true" : undefined}
-            className={cn(
-              "border-b-2 py-md font-ui text-ui transition-colors duration-150",
-              "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro",
-              isQueue ? "border-negro text-negro" : "border-transparent text-grafito hover:text-negro",
-            )}
-          >
-            Cola de proveedor{tab === "queue" ? ` (${meta.total})` : ""}
-          </button>
-          <button
-            type="button"
-            onClick={() => switchTab("all")}
-            aria-current={!isQueue ? "true" : undefined}
-            className={cn(
-              "border-b-2 py-md font-ui text-ui transition-colors duration-150",
-              "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro",
-              !isQueue ? "border-negro text-negro" : "border-transparent text-grafito hover:text-negro",
-            )}
-          >
-            Todas
-          </button>
-        </nav>
-      </div>
+      {/* Real tab semantics, not `aria-current`: these swap the table in place,
+          they don't navigate — a screen reader used to announce "current page"
+          for a control that changes nothing about the page it's on. */}
+      <TabList label="Vistas de órdenes" className="px-md sm:px-lg">
+        <Tab
+          id={QUEUE_TAB_ID}
+          panelId={ORDERS_PANEL_ID}
+          selected={isQueue}
+          onSelect={() => switchTab("queue")}
+          badge={tab === "queue" ? `(${meta.total})` : undefined}
+        >
+          Cola de proveedor
+        </Tab>
+        <Tab id={ALL_TAB_ID} panelId={ORDERS_PANEL_ID} selected={!isQueue} onSelect={() => switchTab("all")}>
+          Todas
+        </Tab>
+      </TabList>
 
+      {/* One panel for both tabs — they show the same table under different
+          filters, so there is nothing to swap besides its contents. */}
+      <div role="tabpanel" id={ORDERS_PANEL_ID} aria-labelledby={isQueue ? QUEUE_TAB_ID : ALL_TAB_ID}>
       {!isQueue ? <OrderFilters value={filters} onChange={updateFilters} /> : null}
 
       {!isQueue ? (
@@ -433,6 +430,7 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
 
       <div className="px-md sm:px-lg">
         <Pagination meta={meta} onPageChange={setPage} />
+      </div>
       </div>
 
       {everOpenedDetail ? (

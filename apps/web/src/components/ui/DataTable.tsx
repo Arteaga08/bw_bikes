@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import { Skeleton } from "./Skeleton";
+import { MobileRowSkeleton, Skeleton } from "./Skeleton";
 
 /**
  * What a column actually holds — drives its default alignment so that
@@ -137,7 +137,10 @@ export function DataTable<TRow>({
 export function TableHead<TRow>({ columns }: { columns: ReadonlyArray<DataTableColumn<TRow>> }) {
   return (
     <thead>
-      <tr className="border-b border-borde bg-base">
+      {/* `bg-inset`, not `bg-base`: the table sits on a `bg-surface` card, and
+          `base` is also the row hover color — a hovered row and the header
+          used to land on the exact same fill. */}
+      <tr className="border-b border-borde bg-inset">
         {columns.map((column, index) => (
           <th
             key={column.key}
@@ -166,45 +169,59 @@ export function DataTableSkeleton<TRow>({
   columns,
   rows = 5,
   minWidthClassName = "min-w-[46rem]",
+  mobile = false,
 }: {
   columns: ReadonlyArray<DataTableColumn<TRow>>;
   rows?: number;
   minWidthClassName?: string;
+  /** Mirrors `DataTable`'s `mobileRow` — pass when the real table will render one, so the loading state doesn't briefly show the wide table on a phone before flipping to cards. */
+  mobile?: boolean;
 }) {
   return (
-    <div className="overflow-x-auto rounded-card border border-borde bg-surface">
-      <table className={cn("w-full table-auto border-collapse text-left", minWidthClassName)}>
-        <TableHead columns={columns} />
-        <tbody>
+    <>
+      {mobile ? (
+        <div className="rounded-card border border-borde bg-surface md:hidden">
           {Array.from({ length: rows }, (_, rowIndex) => (
-            <tr key={rowIndex} className="border-b border-borde last:border-b-0">
-              {columns.map((column, index) => {
-                const align = resolveAlign(column);
-                return (
-                  <td
-                    key={column.key}
-                    className={cn(
-                      "px-md py-sm",
-                      ALIGN_CLASSES[align],
-                      index < columns.length - 1 && "border-r border-borde/50",
-                      column.className,
-                    )}
-                  >
-                    <Skeleton
-                      className={cn(
-                        "h-4",
-                        align === "right" ? "ml-auto" : align === "center" ? "mx-auto" : "",
-                        column.kind ? KIND_SKELETON_WIDTH[column.kind] : "w-24",
-                      )}
-                    />
-                  </td>
-                );
-              })}
-            </tr>
+            <div key={rowIndex} className="border-b border-borde last:border-b-0">
+              <MobileRowSkeleton />
+            </div>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </div>
+      ) : null}
+      <div className={cn("overflow-x-auto rounded-card border border-borde bg-surface", mobile && "hidden md:block")}>
+        <table className={cn("w-full table-auto border-collapse text-left", minWidthClassName)}>
+          <TableHead columns={columns} />
+          <tbody>
+            {Array.from({ length: rows }, (_, rowIndex) => (
+              <tr key={rowIndex} className="border-b border-borde last:border-b-0">
+                {columns.map((column, index) => {
+                  const align = resolveAlign(column);
+                  return (
+                    <td
+                      key={column.key}
+                      className={cn(
+                        "px-md py-sm",
+                        ALIGN_CLASSES[align],
+                        index < columns.length - 1 && "border-r border-borde/50",
+                        column.className,
+                      )}
+                    >
+                      <Skeleton
+                        className={cn(
+                          "h-4",
+                          align === "right" ? "ml-auto" : align === "center" ? "mx-auto" : "",
+                          column.kind ? KIND_SKELETON_WIDTH[column.kind] : "w-24",
+                        )}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

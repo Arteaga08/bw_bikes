@@ -30,16 +30,19 @@ export function TableRowSkeleton({ columns = 4 }: { columns?: number }) {
  * The `mobileRow` counterpart to `TableRowSkeleton` — same list-item shell a
  * real `DataTable` mobile row renders into, so the loading state doesn't
  * shift layout once data lands (`DASHBOARD_GUIDELINES.md` §7's "skeletons
- * que reservan el slot").
+ * que reservan el slot"). One dense line — status dot, title, status word,
+ * two icon actions — matching the single-line row `BadgesView` and
+ * `SpecTemplatesView` both render.
  */
 export function MobileRowSkeleton() {
   return (
-    <div className="flex flex-col gap-sm p-md">
-      <Skeleton className="h-4 w-2/3" />
-      <Skeleton className="h-3 w-1/3" />
-      <div className="flex items-center justify-between gap-sm">
-        <Skeleton className="h-4 w-16" />
-        <Skeleton className="h-8 w-20" />
+    <div className="flex items-center gap-sm px-md py-xs">
+      <Skeleton className="h-2 w-2 shrink-0 rounded-full" />
+      <Skeleton className="h-4 w-2/5" />
+      <Skeleton className="ml-auto h-3 w-12 shrink-0" />
+      <div className="flex shrink-0 gap-xs">
+        <Skeleton className="h-9 w-9" />
+        <Skeleton className="h-9 w-9" />
       </div>
     </div>
   );
@@ -54,6 +57,23 @@ export function ProductCardSkeleton() {
         <Skeleton className="h-4 w-3/4" />
         <Skeleton className="h-3 w-1/2" />
         <Skeleton className="h-4 w-1/3" />
+      </div>
+      <div className="flex items-center gap-sm border-t border-borde p-md">
+        <Skeleton className="h-9 w-20" />
+        <Skeleton className="h-9 w-20" />
+      </div>
+    </div>
+  );
+}
+
+/** Loading counterpart to a brand card (`BrandsView`'s grid) — lighter than `ProductCardSkeleton`: no price/category lines, just logo-then-name-then-footer. */
+export function BrandCardSkeleton() {
+  return (
+    <div className="flex flex-col overflow-hidden rounded-card-lg border border-borde bg-surface">
+      <Skeleton className="aspect-square w-full rounded-none" />
+      <div className="flex flex-col gap-sm p-md">
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-3 w-1/2" />
       </div>
       <div className="flex items-center gap-sm border-t border-borde p-md">
         <Skeleton className="h-9 w-20" />

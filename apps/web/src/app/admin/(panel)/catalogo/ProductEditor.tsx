@@ -5,30 +5,50 @@ import type {
   AdminBadge,
   AdminBike,
   AdminBrand,
+  CategoryImage,
   ProductImage,
   PublicAccessory,
+  SizeTemplate,
   SpecGroup,
   SpecTemplate,
+  SummaryRow,
 } from "@bw-bikes/shared";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { AccessoryInput, BikeInput } from "@/lib/api/admin-catalog";
 import { adminAccessoriesApi, adminBikesApi } from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
 import { MAX_SPEC_GROUPS } from "@/lib/catalog/spec-groups";
+import { MAX_SUMMARY_ROWS } from "@/lib/catalog/summary";
 import { centsToPriceInput, parsePriceToCents } from "@/lib/catalog/price";
 import { BadgesPicker, MAX_PRODUCT_BADGES } from "./BadgesPicker";
 import { BikeBasicsFields, type BikeBasicsValue } from "./BikeBasicsFields";
+import { CategoryImageField } from "./categorias/CategoryImageField";
+import {
+  EDITOR_STEPS,
+  type EditorStepId,
+  firstStepWithErrors,
+  type FormErrors,
+  stepForErrorKey,
+  stepHasErrors,
+  stepIdAt,
+  stepIndex,
+} from "./editor-steps";
+import { EditorFooter } from "./EditorFooter";
 import { EditorSection } from "./EditorSection";
+import { EditorStepper } from "./EditorStepper";
 import { ErrorSummary, type ErrorSummaryEntry } from "./ErrorSummary";
 import { PRODUCT_FIELD_IDS } from "./field-ids";
-import { GallerySection, MAX_GALLERY_IMAGES } from "./GallerySection";
+import { GallerySection, MAX_GALLERY_IMAGES, type StagedGalleryFile } from "./GallerySection";
 import { ProductBasicsSection, type ProductBasicsValue } from "./ProductBasicsSection";
 import { ProductOrganizationFields, type CategoryTreeNode } from "./ProductOrganizationFields";
 import { MAX_RELATED_ACCESSORIES, RelatedAccessoriesPicker } from "./RelatedAccessoriesPicker";
+import { SectionHelp } from "./SectionHelp";
+import { SizePicker } from "./SizePicker";
 import { SpecSheetEditor } from "./SpecSheetEditor";
+import { SummaryEditor } from "./SummaryEditor";
 import { findDuplicateSkuIndices, MAX_VARIANTS, VariantsEditor, type VariantRow } from "./VariantsEditor";
 
 export type ProductEditorKind = "bike" | "accessory";
@@ -50,13 +70,11 @@ export interface ProductEditorProps {
   availableBadges: AdminBadge[];
   /** Active saved spec shapes (M10.3) — feeds the ficha técnica's "Aplicar plantilla" and autocomplete. */
   specTemplates: SpecTemplate[];
+  /** Saved sizes (M10.7 S1) — feeds "Tallas y variantes"' chip picker (`SizePicker`). */
+  sizeTemplates: SizeTemplate[];
   /** This catalog's own list route (`/admin/catalogo/bicicletas` or `/admin/catalogo/accesorios`) — where Cancel goes and where a create redirects to (`${listPath}/${savedId}`). */
   listPath: string;
 }
-
-type FormErrors = Partial<
-  Record<keyof ProductBasicsValue | keyof BikeBasicsValue | "variants", string>
->;
 
 /** Where the error summary jumps to for each key `validate()` can report — "slug" is never validated, so it's absent on purpose. */
 const ERROR_TARGET_IDS: Partial<Record<keyof FormErrors, string>> = {
@@ -70,11 +88,19 @@ const ERROR_TARGET_IDS: Partial<Record<keyof FormErrors, string>> = {
   variants: "section-variants",
 };
 
-function buildErrorEntries(errors: FormErrors): ErrorSummaryEntry[] {
+/**
+ * Each entry's `beforeJump` switches to the step that owns the field before
+ * `ErrorSummary` looks it up by id — a field from a step other than the one
+ * on screen simply isn't in the DOM yet otherwise.
+ */
+function buildErrorEntries(errors: FormErrors, onJumpToStep: (stepId: EditorStepId) => void): ErrorSummaryEntry[] {
   const entries: ErrorSummaryEntry[] = [];
   for (const [key, message] of Object.entries(errors)) {
-    const targetId = ERROR_TARGET_IDS[key as keyof FormErrors];
-    if (message && targetId) entries.push({ targetId, message });
+    const typedKey = key as keyof FormErrors;
+    const targetId = ERROR_TARGET_IDS[typedKey];
+    if (!message || !targetId) continue;
+    const ownerStepId = stepForErrorKey(typedKey);
+    entries.push({ targetId, message, beforeJump: ownerStepId ? () => onJumpToStep(ownerStepId) : undefined });
   }
   return entries;
 }
@@ -107,6 +133,27 @@ function variantsFromProduct(product?: AdminBike | AdminAccessory): VariantRow[]
   }));
 }
 
+/** Reads `?paso=N` (1-indexed, matching what the stepper displays) off the URL, clamped to a real step — absent or garbage both fall back to the first step. */
+function initialStepIdFrom(searchParams: URLSearchParams): EditorStepId {
+  const raw = searchParams.get("paso");
+  const n = raw ? Number.parseInt(raw, 10) : 1;
+  return stepIdAt(Number.isFinite(n) ? n - 1 : 0);
+}
+
+/**
+ * `useSearchParams` requires a `Suspense` ancestor — this boundary exists
+ * purely for that; nothing here actually suspends; both `page.tsx` call
+ * sites already force this route dynamic via `serverApiFetch`'s `cookies()`
+ * read, so no loading flash ever shows in practice.
+ */
+export function ProductEditor(props: ProductEditorProps) {
+  return (
+    <Suspense fallback={null}>
+      <ProductEditorContent {...props} />
+    </Suspense>
+  );
+}
+
 /**
  * The single orchestrator both `/catalogo/bicicletas/*` and
  * `/catalogo/accesorios/*` mount — the two catalogs share their entire
@@ -114,6 +161,12 @@ function variantsFromProduct(product?: AdminBike | AdminAccessory): VariantRow[]
  * fields (short description, brake type, cross-sell), gated by `kind` right
  * where they'd otherwise appear. Same reasoning as `createProductService` on
  * the backend: one engine, two independent catalogs.
+ *
+ * Presented as a 5-step flow (`editor-steps.ts`) instead of one long page:
+ * `create` gates "Siguiente" on each step's own errors so a half-empty
+ * basics step can't be skipped past; `edit` unlocks every step immediately
+ * (the product already has all its data) and keeps "Guardar cambios"
+ * available from any of them.
  *
  * Two save flows coexist because the backend genuinely has two independent
  * endpoints (there's no id to `PUT /spec-groups` against until the product
@@ -124,7 +177,7 @@ function variantsFromProduct(product?: AdminBike | AdminAccessory): VariantRow[]
  * endpoints immediately per action (`GallerySection`), never bundled into a
  * save, because there's no undo for an upload already sitting in Cloudinary.
  */
-export function ProductEditor({
+function ProductEditorContent({
   kind,
   mode,
   productId,
@@ -133,9 +186,12 @@ export function ProductEditor({
   brands,
   availableBadges,
   specTemplates,
+  sizeTemplates,
   listPath,
 }: ProductEditorProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
 
   // Safe by construction (see `initialProduct`'s doc comment above) — the two
@@ -148,9 +204,44 @@ export function ProductEditor({
   const [relatedAccessories, setRelatedAccessories] = useState<PublicAccessory[]>(
     () => initialBike?.relatedAccessories ?? [],
   );
+  const [summary, setSummary] = useState<SummaryRow[]>(() => initialBike?.summary ?? []);
   const [specGroups, setSpecGroups] = useState<SpecGroup[]>(() => initialProduct?.specGroups ?? []);
   const [gallery, setGallery] = useState<ProductImage[]>(() => initialProduct?.gallery ?? []);
   const [badgeIds, setBadgeIds] = useState<string[]>(() => initialProduct?.badges.map((badge) => badge.id) ?? []);
+
+  const [currentStepId, setCurrentStepId] = useState<EditorStepId>(() => initialStepIdFrom(searchParams));
+  // Which steps the admin can jump straight to from the stepper. `edit`
+  // starts with all five unlocked; `create` only unlocks what the URL
+  // already pointed at (a reload mid-flow) plus whatever "Siguiente" passes
+  // from here on.
+  const [visitedSteps, setVisitedSteps] = useState<ReadonlySet<EditorStepId>>(() => {
+    if (mode === "edit") return new Set(EDITOR_STEPS.map((step) => step.id));
+    const upToCurrent = EDITOR_STEPS.slice(0, stepIndex(currentStepId) + 1).map((step) => step.id);
+    return new Set(upToCurrent);
+  });
+
+  // The geometry chart, in the two modes `CategoryImageField` already knows
+  // how to be. On edit the bike exists, so a pick uploads straight away; on
+  // create there's no id to POST against, so the `File` is staged here and
+  // `handleSubmit` uploads it right after the bike is created — the admin
+  // picks it once, up front, instead of saving twice.
+  const [geometryImage, setGeometryImage] = useState<CategoryImage | undefined>(() => initialBike?.geometryImage);
+  const [pendingGeometryFile, setPendingGeometryFile] = useState<File | null>(null);
+  const [pendingGeometryUrl, setPendingGeometryUrl] = useState<string | null>(null);
+
+  // The gallery, staged the same way on create — `GallerySection`'s own
+  // `deferred` mode creates each object URL as files are dropped/picked;
+  // `persistPendingGallery` uploads the lot once the product has an id.
+  const [pendingGallery, setPendingGallery] = useState<StagedGalleryFile[]>([]);
+  // Read by the unmount-only cleanup effect below — a ref instead of a
+  // dependency because that effect must NOT re-run every time this array
+  // changes (see its own comment). Synced in its own effect, not during
+  // render: writing a ref mid-render is a React footgun the lint rule
+  // (rightly) rejects.
+  const pendingGalleryRef = useRef<StagedGalleryFile[]>(pendingGallery);
+  useEffect(() => {
+    pendingGalleryRef.current = pendingGallery;
+  }, [pendingGallery]);
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -158,17 +249,61 @@ export function ProductEditor({
 
   const productApi = kind === "bike" ? adminBikesApi : adminAccessoriesApi;
   const entityLabel = kind === "bike" ? "Bicicleta" : "Accesorio";
-  const errorEntries = buildErrorEntries(errors);
 
-  // Only fires right after a failed `validate()` (the only place `errors` is
-  // ever set) — lands the admin on the summary instead of making them hunt
-  // six sections for the one red border.
+  function goToStep(stepId: EditorStepId): void {
+    setCurrentStepId(stepId);
+    setVisitedSteps((prev) => (prev.has(stepId) ? prev : new Set(prev).add(stepId)));
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("paso", String(stepIndex(stepId) + 1));
+    // A history entry per step, not a replace: the browser's own back button
+    // should step back through the form instead of leaving it entirely.
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  const errorEntries = buildErrorEntries(errors, goToStep);
+
+  // Only fires right after a failed `validate()`/"Siguiente" check (the only
+  // places `errors` is ever set) — lands the admin on the summary instead of
+  // making them hunt for the one red border.
   useEffect(() => {
     if (errorEntries.length > 0) errorSummaryRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only `errors` should re-trigger the focus jump
   }, [errors]);
 
-  function validate(): { priceCents: number; compareAtPriceCents: number | null } | null {
+  // Object URLs are held by the document until revoked, so a staged file the
+  // admin never saved would leak its blob for the life of the tab.
+  useEffect(() => {
+    return () => {
+      if (pendingGeometryUrl) URL.revokeObjectURL(pendingGeometryUrl);
+    };
+  }, [pendingGeometryUrl]);
+
+  // Same leak, extended to the gallery — but deliberately unmount-only
+  // (empty deps), unlike the single-file effect above: the gallery is an
+  // array whose identity changes on every add/remove/reorder, so an effect
+  // keyed to it would revoke every URL — including ones for images still on
+  // screen — on each of those changes, not just when the form goes away.
+  // `pendingGalleryRef` keeps the cleanup reading the latest list anyway.
+  useEffect(() => {
+    return () => {
+      for (const item of pendingGalleryRef.current) URL.revokeObjectURL(item.previewUrl);
+    };
+  }, []);
+
+  function stageGeometryFile(file: File): void {
+    if (pendingGeometryUrl) URL.revokeObjectURL(pendingGeometryUrl);
+    setPendingGeometryFile(file);
+    setPendingGeometryUrl(URL.createObjectURL(file));
+  }
+
+  function clearStagedGeometryFile(): void {
+    if (pendingGeometryUrl) URL.revokeObjectURL(pendingGeometryUrl);
+    setPendingGeometryFile(null);
+    setPendingGeometryUrl(null);
+  }
+
+  /** Every field `validate()` covers, independent of whether the whole form ends up valid — `validate()` and "Siguiente"'s per-step gate both read from this. */
+  function computeErrors(): { errors: FormErrors; priceCents: number | null; compareAtPriceCents: number | null } {
     const nextErrors: FormErrors = {};
 
     if (!basics.name.trim()) nextErrors.name = "El nombre es obligatorio.";
@@ -197,9 +332,44 @@ export function ProductEditor({
       nextErrors.variants = "Hay SKU repetidos entre variantes — corrígelos antes de guardar.";
     }
 
+    return { errors: nextErrors, priceCents, compareAtPriceCents };
+  }
+
+  type ValidationResult =
+    | { ok: true; priceCents: number; compareAtPriceCents: number | null }
+    | { ok: false; errors: FormErrors };
+
+  function validate(): ValidationResult {
+    const { errors: nextErrors, priceCents, compareAtPriceCents } = computeErrors();
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0 || priceCents === null) return null;
-    return { priceCents, compareAtPriceCents };
+    if (Object.keys(nextErrors).length > 0 || priceCents === null) return { ok: false, errors: nextErrors };
+    return { ok: true, priceCents, compareAtPriceCents };
+  }
+
+  /**
+   * `create` only: validates and, if the *current* step owns no errors,
+   * advances — errors belonging to other steps don't block leaving this one
+   * (they'll gate their own step when its turn comes). Steps that own no
+   * validated field (specs, images, review) skip validation entirely and
+   * just move on. `edit` never gates; every step is already unlocked.
+   */
+  function handleNext(): void {
+    const nextStepId = stepIdAt(stepIndex(currentStepId) + 1);
+    if (mode === "edit") {
+      goToStep(nextStepId);
+      return;
+    }
+    const currentStepDef = EDITOR_STEPS[stepIndex(currentStepId)];
+    if (currentStepDef && currentStepDef.errorKeys.length > 0) {
+      const { errors: nextErrors } = computeErrors();
+      setErrors(nextErrors);
+      if (stepHasErrors(nextErrors, currentStepId)) return;
+    }
+    goToStep(nextStepId);
+  }
+
+  function handleBack(): void {
+    goToStep(stepIdAt(stepIndex(currentStepId) - 1));
   }
 
   /**
@@ -225,7 +395,11 @@ export function ProductEditor({
 
   async function handleSubmit(): Promise<void> {
     const validated = validate();
-    if (!validated) return;
+    if (!validated.ok) {
+      const failingStep = firstStepWithErrors(validated.errors);
+      if (failingStep) goToStep(failingStep);
+      return;
+    }
     const { priceCents, compareAtPriceCents } = validated;
 
     const resolvedVariants = variants.map((row) => {
@@ -258,17 +432,70 @@ export function ProductEditor({
       ...(mode === "create" ? { specGroups } : {}),
     };
 
+    /**
+     * The staged chart, uploaded once the bike has an id. Failing here must
+     * not read as "nothing saved": the bike itself is already committed, so
+     * this reports its own partial failure the same way `persistSpecSheet`
+     * does and lets the save go through.
+     */
+    async function persistPendingGeometry(savedId: string): Promise<void> {
+      if (!pendingGeometryFile) return;
+      try {
+        await adminBikesApi.uploadGeometryImage(savedId, pendingGeometryFile);
+        clearStagedGeometryFile();
+      } catch (error) {
+        toast({
+          variant: "error",
+          title: "Se guardó la bicicleta, pero no la imagen de geometría",
+          description: error instanceof ApiError ? error.message : "Vuelve a subirla desde la edición.",
+        });
+      }
+    }
+
+    /**
+     * The staged gallery, uploaded once the product has an id — same
+     * partial-failure discipline as `persistPendingGeometry`: the product is
+     * already committed by the time this runs, so a failure here has to say
+     * so instead of falling into the generic "no se pudo guardar" below,
+     * which would wrongly imply nothing was saved at all. "el producto", not
+     * `entityLabel`, on purpose — this runs for both kinds, and `entityLabel`
+     * has no built-in gender agreement to interpolate safely into a sentence.
+     */
+    async function persistPendingGallery(savedId: string): Promise<void> {
+      if (pendingGallery.length === 0) return;
+      try {
+        const uploaded = await productApi.uploadGallery(
+          savedId,
+          pendingGallery.map((item) => item.file),
+        );
+        for (const item of pendingGallery) URL.revokeObjectURL(item.previewUrl);
+        setPendingGallery([]);
+        setGallery(uploaded);
+      } catch (error) {
+        toast({
+          variant: "error",
+          title: "Se guardó el producto, pero no las imágenes",
+          description: error instanceof ApiError ? error.message : "Vuelve a subirlas desde la edición.",
+        });
+      }
+    }
+
     setSubmitting(true);
     try {
       if (kind === "bike") {
         const payload: BikeInput = {
           ...sharedPayload,
           shortDescription: bike.shortDescription.trim(),
+          // Six bounded rows, so unlike the sheet this rides in the body on
+          // create *and* on edit — no second write to fail on its own.
+          summary,
           relatedAccessories: relatedAccessories.map((accessory) => accessory.id),
         };
         const saved =
           mode === "create" ? await adminBikesApi.create(payload) : await adminBikesApi.update(productId!, payload);
         if (mode === "edit" && !(await persistSpecSheet(productId!))) return;
+        await persistPendingGeometry(saved.id);
+        await persistPendingGallery(saved.id);
         afterSave(saved.id);
       } else {
         const payload: AccessoryInput = sharedPayload;
@@ -277,6 +504,7 @@ export function ProductEditor({
             ? await adminAccessoriesApi.create(payload)
             : await adminAccessoriesApi.update(productId!, payload);
         if (mode === "edit" && !(await persistSpecSheet(productId!))) return;
+        await persistPendingGallery(saved.id);
         afterSave(saved.id);
       }
     } catch (error) {
@@ -292,7 +520,7 @@ export function ProductEditor({
 
   function afterSave(savedId: string): void {
     if (mode === "create") {
-      toast({ variant: "success", title: `${entityLabel} creada`, description: "Ahora puedes agregar galería." });
+      toast({ variant: "success", title: `${entityLabel} creada` });
       // `listPath` is already this catalog's list route
       // (`/admin/catalogo/bicicletas` or `/admin/catalogo/accesorios`) since
       // M10.1 gave each catalog its own route — the edit route is a direct
@@ -304,13 +532,11 @@ export function ProductEditor({
     }
   }
 
-  return (
-    <div className="flex flex-col">
-      <div className="flex flex-col gap-lg p-md sm:p-lg">
-        {errorEntries.length > 0 ? <ErrorSummary ref={errorSummaryRef} entries={errorEntries} /> : null}
-
-        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-lg">
-          <div className="flex flex-col gap-lg">
+  function renderStepContent(): ReactNode {
+    switch (currentStepId) {
+      case "basics":
+        return (
+          <>
             <EditorSection
               id="section-basics"
               title="Datos generales"
@@ -320,43 +546,6 @@ export function ProductEditor({
               {kind === "bike" ? <BikeBasicsFields value={bike} onChange={setBike} errors={errors} /> : null}
             </EditorSection>
 
-            <EditorSection
-              id="section-variants"
-              title="Variantes"
-              description="Tallas, colores y SKUs que se pueden comprar por separado."
-              count={{ current: variants.length, max: MAX_VARIANTS }}
-            >
-              {errors.variants ? <p className="font-body text-caption text-estado-error">{errors.variants}</p> : null}
-              <VariantsEditor variants={variants} onChange={setVariants} />
-            </EditorSection>
-
-            <EditorSection
-              id="section-specs"
-              title="Ficha técnica"
-              description="La etiqueta se repite entre productos, p. ej. «Peso»; el valor es el de este producto, p. ej. «8.2 kg»."
-              count={{ current: specGroups.length, max: MAX_SPEC_GROUPS }}
-            >
-              <SpecSheetEditor groups={specGroups} onChange={setSpecGroups} templates={specTemplates} />
-            </EditorSection>
-
-            <EditorSection
-              id="section-gallery"
-              title="Galería"
-              description="La primera imagen es la portada del producto en el storefront."
-              count={{ current: gallery.length, max: MAX_GALLERY_IMAGES }}
-            >
-              <GallerySection
-                productId={productId}
-                gallery={gallery}
-                onChange={setGallery}
-                onUpload={(files) => productApi.uploadGallery(productId as string, files)}
-                onRemove={(publicId) => productApi.removeGalleryImage(productId as string, publicId)}
-                onReorder={(publicIds) => productApi.reorderGallery(productId as string, publicIds)}
-              />
-            </EditorSection>
-          </div>
-
-          <div className="flex flex-col gap-lg lg:sticky lg:top-lg">
             <EditorSection id="section-organization" title="Organización">
               <ProductOrganizationFields
                 value={basics}
@@ -374,38 +563,194 @@ export function ProductEditor({
             >
               <BadgesPicker available={availableBadges} selected={badgeIds} onChange={setBadgeIds} />
             </EditorSection>
+          </>
+        );
 
+      case "variants":
+        return (
+          <EditorSection
+            id="section-variants"
+            title="Tallas y variantes"
+            description="Elige las tallas que aplican y captura el SKU, color y disponibilidad de cada una."
+            count={{ current: variants.length, max: MAX_VARIANTS }}
+          >
+            {errors.variants ? <p className="font-body text-caption text-estado-error">{errors.variants}</p> : null}
+            <SizePicker sizeTemplates={sizeTemplates} variants={variants} onChange={setVariants} />
+            <VariantsEditor variants={variants} onChange={setVariants} />
+          </EditorSection>
+        );
+
+      case "specs":
+        return (
+          <>
+            {kind === "bike" ? (
+              <EditorSection
+                id="section-summary"
+                title="Resumen"
+                description="Lo esencial, junto a la descripción en la ficha pública. Se captura aparte de la ficha técnica, así que un dato que aparezca en las dos se corrige en las dos."
+                count={{ current: summary.length, max: MAX_SUMMARY_ROWS }}
+                help={<SectionHelp zone="resumen" />}
+              >
+                <SummaryEditor rows={summary} onChange={setSummary} />
+              </EditorSection>
+            ) : null}
+
+            <EditorSection
+              id="section-specs"
+              title="Ficha técnica"
+              description="Cada apartado agrupa sus especificaciones. La etiqueta se repite entre productos, p. ej. «Peso»; el valor es el de este producto, p. ej. «8.2 kg»."
+              count={{ current: specGroups.length, max: MAX_SPEC_GROUPS }}
+              help={<SectionHelp zone="fichaTecnica" />}
+            >
+              <SpecSheetEditor groups={specGroups} onChange={setSpecGroups} templates={specTemplates} />
+            </EditorSection>
+          </>
+        );
+
+      case "images":
+        return (
+          <>
+            {kind === "bike" ? (
+              <EditorSection
+                id="section-geometry"
+                title="Geometría"
+                description="El diagrama de geometría de esta bicicleta. Solo imagen: las medidas van dentro del propio diagrama."
+                help={<SectionHelp zone="geometria" />}
+              >
+                {mode === "edit" && productId ? (
+                  <CategoryImageField
+                    mode="immediate"
+                    image={geometryImage}
+                    onUpload={async (file) => {
+                      setGeometryImage(await adminBikesApi.uploadGeometryImage(productId, file));
+                    }}
+                    onRemove={async () => {
+                      await adminBikesApi.removeGeometryImage(productId);
+                      setGeometryImage(undefined);
+                    }}
+                  />
+                ) : (
+                  <CategoryImageField
+                    mode="deferred"
+                    previewUrl={pendingGeometryUrl}
+                    onSelect={stageGeometryFile}
+                    onClear={clearStagedGeometryFile}
+                  />
+                )}
+              </EditorSection>
+            ) : null}
+
+            <EditorSection
+              id="section-gallery"
+              title="Galería"
+              description="La primera imagen es la portada del producto en el storefront."
+              count={{
+                current: mode === "edit" && productId ? gallery.length : pendingGallery.length,
+                max: MAX_GALLERY_IMAGES,
+              }}
+              help={<SectionHelp zone="galeria" />}
+            >
+              {mode === "edit" && productId ? (
+                <GallerySection
+                  mode="immediate"
+                  gallery={gallery}
+                  onChange={setGallery}
+                  onUpload={(files) => productApi.uploadGallery(productId, files)}
+                  onRemove={(publicId) => productApi.removeGalleryImage(productId, publicId)}
+                  onReorder={(publicIds) => productApi.reorderGallery(productId, publicIds)}
+                />
+              ) : (
+                <GallerySection mode="deferred" staged={pendingGallery} onChange={setPendingGallery} />
+              )}
+            </EditorSection>
+          </>
+        );
+
+      case "review":
+        return (
+          <>
             {kind === "bike" ? (
               <EditorSection
                 id="section-related"
                 title="Accesorios sugeridos"
                 description="Cross-sell curado a mano para la ficha de esta bicicleta."
                 count={{ current: relatedAccessories.length, max: MAX_RELATED_ACCESSORIES }}
+                help={<SectionHelp zone="accesorios" />}
               >
                 <RelatedAccessoriesPicker selected={relatedAccessories} onChange={setRelatedAccessories} />
               </EditorSection>
             ) : null}
-          </div>
-        </div>
+
+            <EditorSection
+              id="section-review"
+              title="Resumen antes de guardar"
+              description="Repasa lo capturado en los pasos anteriores."
+            >
+              <dl className="flex flex-col gap-xs font-body text-body text-negro">
+                <div className="flex justify-between">
+                  <dt className="text-grafito">Nombre</dt>
+                  <dd>{basics.name.trim() || "—"}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-grafito">Precio</dt>
+                  <dd>{basics.priceInput.trim() ? `$${basics.priceInput}` : "—"}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-grafito">Variantes</dt>
+                  <dd>{variants.length}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-grafito">Ficha técnica</dt>
+                  <dd>{specGroups.length === 1 ? "1 apartado" : `${specGroups.length} apartados`}</dd>
+                </div>
+                {kind === "bike" ? (
+                  <div className="flex justify-between">
+                    <dt className="text-grafito">Resumen</dt>
+                    <dd>{summary.length === 1 ? "1 fila" : `${summary.length} filas`}</dd>
+                  </div>
+                ) : null}
+                <div className="flex justify-between">
+                  <dt className="text-grafito">Galería</dt>
+                  <dd>{gallery.length === 1 ? "1 imagen" : `${gallery.length} imágenes`}</dd>
+                </div>
+              </dl>
+            </EditorSection>
+          </>
+        );
+
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex flex-col gap-lg p-md sm:p-lg">
+        {errorEntries.length > 0 ? <ErrorSummary ref={errorSummaryRef} entries={errorEntries} /> : null}
+
+        <EditorStepper
+          currentStepId={currentStepId}
+          errors={errors}
+          visitedSteps={visitedSteps}
+          mode={mode}
+          onSelect={goToStep}
+        />
+
+        <div className="flex flex-col gap-lg">{renderStepContent()}</div>
       </div>
 
-      <div className="sticky bottom-0 flex items-center justify-between gap-md border-t border-borde bg-base p-md sm:p-lg">
-        {errorEntries.length > 0 ? (
-          <p className="font-ui text-caption text-estado-error">
-            {errorEntries.length === 1 ? "1 campo por corregir" : `${errorEntries.length} campos por corregir`}
-          </p>
-        ) : (
-          <span />
-        )}
-        <div className="flex gap-sm">
-          <Button variant="ghost" onClick={() => router.push(listPath)}>
-            Cancelar
-          </Button>
-          <Button variant="primary" loading={submitting} onClick={() => void handleSubmit()}>
-            {mode === "create" ? `Crear ${entityLabel.toLowerCase()}` : "Guardar cambios"}
-          </Button>
-        </div>
-      </div>
+      <EditorFooter
+        mode={mode}
+        entityLabel={entityLabel}
+        isFirstStep={stepIndex(currentStepId) === 0}
+        isLastStep={stepIndex(currentStepId) === EDITOR_STEPS.length - 1}
+        submitting={submitting}
+        errorCount={errorEntries.length}
+        onCancel={() => router.push(listPath)}
+        onBack={handleBack}
+        onNext={handleNext}
+        onSubmit={() => void handleSubmit()}
+      />
     </div>
   );
 }

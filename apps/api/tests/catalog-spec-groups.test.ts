@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
@@ -173,5 +174,98 @@ describe("free-form spec sheet", () => {
 
     expect(response.status).toBe(400);
     expect(response.body.message).toContain("título");
+  });
+
+  /**
+   * M10.6. A saved template is a superset — "Eléctrica" carries every row an
+   * e-bike could need — so a non-electric bike has to be able to turn rows off
+   * *without deleting them*, and a row applied from a template but not filled
+   * in yet must not block the save. That's what makes `visible` worth storing
+   * instead of just deleting the row, and what forced `value` to accept blank.
+   */
+  describe("visibility (M10.6)", () => {
+    const MIXED_GROUPS = [
+      {
+        title: "Frenos",
+        order: 0,
+        visible: true,
+        fields: [
+          { label: "Delantero", value: "SRAM RED E1", order: 0, visible: true },
+          { label: "Trasero", value: "SRAM RED E1", order: 1, visible: false },
+          { label: "Sin llenar", value: "", order: 2, visible: true },
+        ],
+      },
+      {
+        title: "Eléctrica",
+        order: 1,
+        visible: false,
+        fields: [{ label: "Batería", value: "720 Wh", order: 0, visible: true }],
+      },
+    ];
+
+    it("stores a hidden group, a hidden field and a blank value", async () => {
+      const response = await putGroups(MIXED_GROUPS);
+      expect(response.status).toBe(200);
+
+      // Re-read through the admin DTO, which must keep everything so the
+      // editor can turn it back on.
+      const groups = (await readSpecGroups()) as unknown as typeof MIXED_GROUPS;
+      expect(groups).toHaveLength(2);
+      expect(groups[1]?.visible).toBe(false);
+      expect(groups[0]?.fields[1]?.visible).toBe(false);
+      expect(groups[0]?.fields[2]?.value).toBe("");
+    });
+
+    it("hides all of it from the storefront DTO", async () => {
+      await putGroups(MIXED_GROUPS);
+
+      const stored = await Bike.findById(bikeId).exec();
+      const response = await request(app).get(`/api/v1/catalog/bikes/${stored!.slug}`);
+
+      expect(response.status).toBe(200);
+      const groups = response.body.data.bike.specGroups as typeof MIXED_GROUPS;
+      // "Eléctrica" is gone entirely; "Frenos" keeps only the row that is both
+      // visible and filled in.
+      expect(groups).toHaveLength(1);
+      expect(groups[0]?.title).toBe("Frenos");
+      expect(groups[0]?.fields).toHaveLength(1);
+      expect(groups[0]?.fields[0]?.label).toBe("Delantero");
+    });
+
+    it("drops a group whose every row is hidden or blank", async () => {
+      await putGroups([
+        {
+          title: "Eléctrica",
+          order: 0,
+          visible: true,
+          fields: [{ label: "Batería", value: "", order: 0, visible: true }],
+        },
+      ]);
+
+      const stored = await Bike.findById(bikeId).exec();
+      const response = await request(app).get(`/api/v1/catalog/bikes/${stored!.slug}`);
+
+      // A heading with nothing under it is worse than no heading at all.
+      expect(response.body.data.bike.specGroups).toHaveLength(0);
+    });
+
+    /**
+     * The no-migration guarantee: documents written before `visible` existed
+     * carry no such key, and must read back as visible rather than vanish
+     * from the storefront. Written through the raw collection because the
+     * model would apply the schema default and hide the regression.
+     */
+    it("treats a pre-M10.6 document with no `visible` key as visible", async () => {
+      await Bike.collection.updateOne(
+        { _id: new Types.ObjectId(bikeId) },
+        { $set: { specGroups: [{ title: "Cuadro", order: 0, fields: [{ label: "Material", value: "Carbono", order: 0 }] }] } },
+      );
+
+      const stored = await Bike.findById(bikeId).exec();
+      const response = await request(app).get(`/api/v1/catalog/bikes/${stored!.slug}`);
+
+      expect(response.body.data.bike.specGroups).toHaveLength(1);
+      expect(response.body.data.bike.specGroups[0].fields).toHaveLength(1);
+    });
   });
 });

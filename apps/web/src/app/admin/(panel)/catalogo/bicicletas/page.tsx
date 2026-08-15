@@ -1,6 +1,5 @@
 import type { AdminBrand } from "@bw-bikes/shared";
-import Link from "next/link";
-import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { serverApiFetch } from "@/lib/api/server";
 import type { CategoryTreeNode } from "@/lib/api/admin-catalog";
@@ -18,11 +17,9 @@ export default async function BicicletasPage() {
         title="Bicicletas"
         subtitle="Catálogo de bicicletas — ficha técnica libre, variantes y galería por producto."
         actions={
-          <Link href="/admin/catalogo/bicicletas/nueva" className="w-full sm:w-auto">
-            <Button variant="primary" className="w-full sm:w-auto">
-              Nueva bicicleta
-            </Button>
-          </Link>
+          <ButtonLink href="/admin/catalogo/bicicletas/nueva" variant="primary" className="w-full sm:w-auto">
+            Nueva bicicleta
+          </ButtonLink>
         }
       />
       <CatalogView kind="bike" categoryTree={treeResult.data.tree} brands={brandsResult.data.brands} />

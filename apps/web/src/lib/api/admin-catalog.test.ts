@@ -106,7 +106,7 @@ describe("adminBikesApi mutations", () => {
   });
 
   it("replaceSpecGroups PUTs the whole array and returns { specGroups }", async () => {
-    const groups = [{ title: "Cuadro", order: 0, fields: [] }];
+    const groups = [{ title: "Cuadro", order: 0, visible: true, fields: [] }];
     const fetchSpy = vi
       .fn()
       .mockResolvedValue(jsonResponse({ status: "success", message: "OK", data: { specGroups: groups } }));

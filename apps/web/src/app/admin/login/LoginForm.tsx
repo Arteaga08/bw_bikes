@@ -263,7 +263,7 @@ export function LoginForm() {
           />
         ) : null}
         {enrollment ? (
-          <p className="break-all rounded-control border border-borde bg-base p-sm font-body text-caption text-grafito">
+          <p className="break-all rounded-control border border-borde bg-inset p-sm font-body text-caption text-grafito">
             Clave manual: {enrollment.secret}
           </p>
         ) : null}

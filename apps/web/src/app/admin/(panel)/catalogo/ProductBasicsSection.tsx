@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { slugify } from "@/lib/catalog/slugify";
 import { PRODUCT_FIELD_IDS } from "./field-ids";
+import { SectionHelp } from "./SectionHelp";
 
 export interface ProductBasicsValue {
   name: string;
@@ -66,16 +67,24 @@ export function ProductBasicsSection({ value, onChange, errors = {} }: ProductBa
         />
       </div>
 
-      <Textarea
-        id={PRODUCT_FIELD_IDS.description}
-        label="Descripción"
-        required
-        rows={5}
-        placeholder="Describe el producto para la ficha pública: materiales, uso recomendado, qué lo distingue."
-        value={value.description}
-        onChange={(event) => set("description", event.target.value)}
-        error={errors.description}
-      />
+      <div className="flex flex-col gap-xs">
+        <div className="flex items-center gap-xs">
+          {/* A `<span>`, not a second `<label htmlFor>` — the `Textarea` below already carries the real (visually hidden) label via `labelHidden`; a second label targeting the same id would concatenate into the accessible name instead of replacing it. */}
+          <span className="font-ui text-ui text-negro">Descripción</span>
+          <SectionHelp zone="descripcion" />
+        </div>
+        <Textarea
+          id={PRODUCT_FIELD_IDS.description}
+          label="Descripción"
+          labelHidden
+          required
+          rows={5}
+          placeholder="Describe el producto para la ficha pública: materiales, uso recomendado, qué lo distingue."
+          value={value.description}
+          onChange={(event) => set("description", event.target.value)}
+          error={errors.description}
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
         <Input

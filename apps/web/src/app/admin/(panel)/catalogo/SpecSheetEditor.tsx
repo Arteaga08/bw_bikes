@@ -1,24 +1,32 @@
 "use client";
 
 import type { SpecGroup, SpecTemplate } from "@bw-bikes/shared";
-import { CaretDown, CaretUp, Trash } from "@phosphor-icons/react";
-import { useState } from "react";
+import { CaretRight, DotsSixVertical, Eye, EyeSlash, Trash } from "@phosphor-icons/react";
+import type { ReactNode } from "react";
+import { useId, useState } from "react";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { Toggle } from "@/components/ui/Toggle";
+import type { DragHandleProps } from "@/hooks/use-drag-reorder";
+import { useDragReorder } from "@/hooks/use-drag-reorder";
 import {
   MAX_SPEC_FIELDS_PER_GROUP,
   MAX_SPEC_GROUPS,
   addField,
   addGroup,
   applyTemplate,
-  moveField,
-  moveGroup,
+  moveFieldTo,
+  moveGroupTo,
   removeField,
   removeGroup,
   renameGroup,
+  toggleFieldVisible,
+  toggleGroupVisible,
   updateField,
 } from "@/lib/catalog/spec-groups";
+import { cn } from "@/lib/cn";
 
 export interface SpecSheetEditorProps {
   groups: SpecGroup[];
@@ -29,6 +37,182 @@ export interface SpecSheetEditorProps {
 
 const TITLES_DATALIST_ID = "spec-template-titles";
 const TEMPLATE_HELPER = "Autocompleta con tus plantillas guardadas.";
+
+/**
+ * Replaces the raw `<input type="checkbox">` M10.6 used for per-field
+ * visibility — the one control in the editor that didn't go through a
+ * primitive. `bare`/`icon` is DESIGN.md §5's own rule for "any control that
+ * repeats down a row", which a field-visibility toggle is. `aria-pressed`
+ * (not a checkbox role) because this is a button that performs an action,
+ * not a form field of its own.
+ */
+function EyeToggleButton({ visible, onToggle, label }: { visible: boolean; onToggle: () => void; label: string }) {
+  return (
+    <Button variant="bare" size="icon" aria-label={label} aria-pressed={visible} onClick={onToggle} iconLeft={visible ? <Eye /> : <EyeSlash />} />
+  );
+}
+
+/**
+ * The drag handle for an apartado or an especificación row — spread
+ * `useDragReorder`'s `getHandleProps(index)` onto it. `cursor-grab`/
+ * `touch-none` match `fichas-tecnicas/SpecTemplateFormModal.tsx`'s handle
+ * exactly: `touch-none` stops the browser's own scroll/pan gesture from
+ * competing with the pointer drag on a phone. M10.6.1 replaces the old
+ * up/down `ButtonGroup` pair with this single handle — pointer-based
+ * (`useDragReorder`, not native HTML5 drag) so it also works on touch, with
+ * the same Arrow-key fallback for keyboard users the old buttons gave.
+ */
+function DragHandle({ label, className, ...handleProps }: { label: string; className?: string } & DragHandleProps) {
+  return <Button variant="bare" size="icon" aria-label={label} className={cn("cursor-grab touch-none", className)} iconLeft={<DotsSixVertical />} {...handleProps} />;
+}
+
+function DeleteButton({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
+  return <Button variant="bare" size="icon" tone="danger-strong" aria-label={label} onClick={onClick} iconLeft={<Trash />} className={className} />;
+}
+
+/**
+ * Vertically aligns an arbitrary control with a labeled `Input` beside it.
+ * A bare `items-center` row can't do this on its own: it centers each
+ * child's *whole wrapper*, and `Input`'s wrapper is taller (it stacks a
+ * label above the box) than a plain control's, so their wrappers' centers
+ * don't land on the input box's own center — the control reads as pinned
+ * near the top instead of level with the field. Mirroring `Input`'s own
+ * shape (an invisible label-height spacer, `gap-xs`, then an `h-11` band
+ * matching the input's own height) makes both the same total height with
+ * the same internal offset, so their centers coincide under any `items-*`
+ * on the parent row.
+ */
+function AlignedWithInputLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-xs">
+      <span aria-hidden="true" className="invisible font-ui text-ui">
+        {" "}
+      </span>
+      <div className="flex h-11 items-center">{children}</div>
+    </div>
+  );
+}
+
+/** "Mostrar en la ficha pública" placed beside the "Título del apartado" input — see `AlignedWithInputLabel` for why it can't just sit in the row as a bare `Toggle`. */
+function GroupVisibilityToggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <AlignedWithInputLabel>
+      <Toggle label="Mostrar en la ficha pública" checked={checked} onChange={onChange} />
+    </AlignedWithInputLabel>
+  );
+}
+
+/** Fixed-width spacer matching the icon buttons either side of it, so the "Etiqueta"/"Valor" column header lines up with the row below without a shared grid template. */
+function HeaderIconSpacer() {
+  return <span aria-hidden="true" className="h-9 w-9 shrink-0" />;
+}
+
+/**
+ * One apartado's especificación list — a labels-once table (a single
+ * "Etiqueta"/"Valor" column header instead of repeating both labels, and the
+ * old "El dato de este producto en particular." helper, on every row) whose
+ * rows reorder by drag. Its own component, not inlined in the outer
+ * `groups.map`, because it needs its own `useDragReorder` instance: the hook
+ * has to run at a stable position in a component's own render, and each
+ * apartado's field list has a different item count.
+ *
+ * Rows are `flex`, not a fixed `grid-cols-[...]` template: on a narrow phone
+ * a rigid grid overflowed past the card and clipped the trailing delete
+ * button. Flex lets the Etiqueta/Valor pair stack vertically below `sm` and
+ * sit side by side above it, while the icon buttons stay fixed-size on every
+ * width.
+ */
+function SpecFieldsList({
+  groups,
+  onChange,
+  groupIndex,
+  fieldLabels,
+  fieldLabelsDatalistId,
+  groupVisible,
+}: {
+  groups: SpecGroup[];
+  onChange: (groups: SpecGroup[]) => void;
+  groupIndex: number;
+  fieldLabels: string[];
+  fieldLabelsDatalistId: string;
+  groupVisible: boolean;
+}) {
+  const group = groups[groupIndex];
+  const fieldCount = group?.fields.length ?? 0;
+  const { draggingIndex, dropTargetIndex, registerRow, getHandleProps } = useDragReorder({
+    itemCount: fieldCount,
+    onReorder: (from, to) => onChange(moveFieldTo(groups, groupIndex, from, to)),
+  });
+
+  if (!group) return null;
+  const atFieldLimit = fieldCount >= MAX_SPEC_FIELDS_PER_GROUP;
+
+  return (
+    <div className={cn("flex flex-col gap-xs", !groupVisible && "opacity-60")}>
+      {group.fields.length > 0 ? (
+        <div className="hidden items-center gap-sm px-xs sm:flex">
+          <HeaderIconSpacer />
+          <HeaderIconSpacer />
+          <div className="flex min-w-0 flex-1 gap-sm">
+            <span className="min-w-0 flex-1 font-ui text-caption text-grafito sm:max-w-[16rem]">Etiqueta</span>
+            <span className="min-w-0 flex-1 font-ui text-caption text-grafito">Valor</span>
+          </div>
+          <HeaderIconSpacer />
+        </div>
+      ) : (
+        <p className="px-xs font-body text-caption text-grafito">Sin especificaciones todavía.</p>
+      )}
+      {group.fields.length > 1 ? <p className="px-xs font-body text-caption text-grafito">Arrastra para reordenar.</p> : null}
+
+      {group.fields.map((field, fieldIndex) => {
+        const fieldVisible = field.visible !== false;
+
+        return (
+          <div
+            key={fieldIndex}
+            ref={registerRow(fieldIndex)}
+            className={cn(
+              "flex items-center gap-sm rounded-control px-xs py-1 transition-colors duration-150 hover:bg-surface",
+              draggingIndex === fieldIndex && "opacity-50",
+              dropTargetIndex === fieldIndex && draggingIndex !== fieldIndex && "outline-2 outline-offset-2 outline-negro",
+            )}
+          >
+            <DragHandle label={`Reordenar la especificación ${field.label || fieldIndex + 1}`} {...getHandleProps(fieldIndex)} />
+            <EyeToggleButton
+              visible={fieldVisible}
+              onToggle={() => onChange(toggleFieldVisible(groups, groupIndex, fieldIndex))}
+              label={`Mostrar la especificación ${field.label || fieldIndex + 1}`}
+            />
+            <div className="flex min-w-0 flex-1 flex-col gap-xs sm:flex-row sm:gap-sm">
+              <Input
+                label="Etiqueta"
+                labelHidden
+                placeholder="p. ej. Peso"
+                list={fieldLabels.length > 0 ? fieldLabelsDatalistId : undefined}
+                value={field.label}
+                onChange={(event) => onChange(updateField(groups, groupIndex, fieldIndex, { label: event.target.value }))}
+                wrapperClassName="min-w-0 flex-1 sm:max-w-[16rem]"
+              />
+              <Input
+                label="Valor"
+                labelHidden
+                placeholder="p. ej. 8.2 kg"
+                value={field.value}
+                onChange={(event) => onChange(updateField(groups, groupIndex, fieldIndex, { value: event.target.value }))}
+                wrapperClassName="min-w-0 flex-1"
+              />
+            </div>
+            <DeleteButton label="Eliminar especificación" onClick={() => onChange(removeField(groups, groupIndex, fieldIndex))} />
+          </div>
+        );
+      })}
+
+      <Button variant="ghost" disabled={atFieldLimit} onClick={() => onChange(addField(groups, groupIndex, "", ""))} className="self-start">
+        Agregar especificación
+      </Button>
+    </div>
+  );
+}
 
 /**
  * The free-form technical sheet editor: add/rename/reorder/delete for groups
@@ -44,16 +228,41 @@ const TEMPLATE_HELPER = "Autocompleta con tus plantillas guardadas.";
  * see `SpecTemplate`'s own doc comment), and `<datalist>` autocompletes what
  * the admin types either way. Nothing here stops an admin from typing a
  * brand-new title or label the templates have never seen.
+ *
+ * M10.6 adds the visibility toggles and renames the copy. The Spanish UI now
+ * says **apartado** and **especificación** where it used to say "grupo" and
+ * "campo": the panel already has screens called *Categorías* for the bike
+ * taxonomy (Ruta › Endurance), so the words the admin had in mind for these
+ * two levels were taken. The data names (`SpecGroup`, `fields`, `label`) are
+ * untouched — logic stays in English, UI in Spanish.
+ *
+ * M10.6.1 replaces the original stacked layout (every apartado expanded at
+ * once, up/down button pairs, both labels repeated on every row) with a
+ * collapsible accordion: apartados collapse to a one-line bar and only one
+ * opens at a time, so a product with many apartados (the real cap is 20)
+ * doesn't turn into a page-long scroll before the first one is even read.
+ * Reordering — apartados and especificaciones alike — is drag-only via
+ * `useDragReorder`, the same pointer-based (works on touch) pattern
+ * `fichas-tecnicas/SpecTemplateFormModal.tsx` already established, with its
+ * Arrow-key fallback covering keyboard users.
  */
 export function SpecSheetEditor({ groups, onChange, templates }: SpecSheetEditorProps) {
   const [newGroupTitle, setNewGroupTitle] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [openIndex, setOpenIndex] = useState<number | null>(groups.length > 0 ? 0 : null);
+  const panelIdBase = useId();
+
+  const { draggingIndex, dropTargetIndex, registerRow, getHandleProps } = useDragReorder({
+    itemCount: groups.length,
+    onReorder: (from, to) => onChange(moveGroupTo(groups, from, to)),
+  });
 
   function handleAddGroup(): void {
     const title = newGroupTitle.trim();
     if (!title || groups.length >= MAX_SPEC_GROUPS) return;
     onChange(addGroup(groups, title));
     setNewGroupTitle("");
+    setOpenIndex(groups.length);
   }
 
   function handleApplyTemplate(): void {
@@ -61,6 +270,7 @@ export function SpecSheetEditor({ groups, onChange, templates }: SpecSheetEditor
     if (!template) return;
     onChange(applyTemplate(groups, template));
     setSelectedTemplateId("");
+    setOpenIndex(groups.length);
   }
 
   /** The template whose title matches this group's, if any — drives both the field datalist and the "suggested by" note. */
@@ -71,7 +281,7 @@ export function SpecSheetEditor({ groups, onChange, templates }: SpecSheetEditor
   }
 
   return (
-    <div className="flex flex-col gap-lg">
+    <div className="flex flex-col gap-md">
       <datalist id={TITLES_DATALIST_ID}>
         {templates.map((template) => (
           <option key={template.id} value={template.title} />
@@ -79,12 +289,12 @@ export function SpecSheetEditor({ groups, onChange, templates }: SpecSheetEditor
       </datalist>
 
       {templates.length > 0 ? (
-        <div className="flex items-end gap-sm">
+        <div className="flex flex-wrap items-end gap-sm">
           <Select
             label="Aplicar plantilla"
             value={selectedTemplateId}
             onChange={(event) => setSelectedTemplateId(event.target.value)}
-            wrapperClassName="flex-1"
+            wrapperClassName="min-w-[16rem] flex-1"
           >
             <option value="">Selecciona una plantilla</option>
             {templates.map((template) => (
@@ -94,20 +304,38 @@ export function SpecSheetEditor({ groups, onChange, templates }: SpecSheetEditor
             ))}
           </Select>
           <Button variant="secondary" disabled={!selectedTemplateId || groups.length >= MAX_SPEC_GROUPS} onClick={handleApplyTemplate}>
-            Agregar grupo desde plantilla
+            Agregar apartado desde plantilla
           </Button>
         </div>
       ) : null}
 
-      {groups.length === 0 ? <p className="font-body text-caption text-grafito">Sin grupos todavía.</p> : null}
+      {groups.length === 0 ? <p className="font-body text-caption text-grafito">Sin apartados todavía.</p> : null}
+      {groups.length > 1 ? <p className="font-body text-caption text-grafito">Arrastra un apartado para reordenarlo.</p> : null}
 
       {groups.map((group, groupIndex) => {
         const fieldLabelsDatalistId = `spec-template-fields-${groupIndex}`;
         const template = templateFor(group.title);
         const fieldLabels = template?.fields.map((field) => field.label) ?? [];
+        // `!== false`, not a plain negation: a sheet saved before M10.6 carries
+        // no flag at all and has to read as visible.
+        const groupVisible = group.visible !== false;
+        const isOpen = openIndex === groupIndex;
+        const panelId = `${panelIdBase}-panel-${groupIndex}`;
 
         return (
-          <div key={groupIndex} className="flex flex-col gap-sm rounded-control border border-borde bg-base p-md">
+          // `bg-inset`, not `bg-base`: this panel lives inside an
+          // `EditorSection` card (`bg-surface`), and `base` is the page's own
+          // ground — painting it here made the panel read as a hole in the
+          // card and left borderless controls with no body of their own.
+          <div
+            key={groupIndex}
+            ref={registerRow(groupIndex)}
+            className={cn(
+              "flex flex-col rounded-card border border-borde bg-inset transition-opacity duration-150",
+              draggingIndex === groupIndex && "opacity-50",
+              dropTargetIndex === groupIndex && draggingIndex !== groupIndex && "outline-2 outline-offset-2 outline-negro",
+            )}
+          >
             {fieldLabels.length > 0 ? (
               <datalist id={fieldLabelsDatalistId}>
                 {fieldLabels.map((label) => (
@@ -116,113 +344,70 @@ export function SpecSheetEditor({ groups, onChange, templates }: SpecSheetEditor
               </datalist>
             ) : null}
 
-            <div className="flex items-end gap-sm">
-              <Input
-                label="Título del grupo"
-                list={TITLES_DATALIST_ID}
-                helper={templates.length > 0 ? TEMPLATE_HELPER : undefined}
-                value={group.title}
-                onChange={(event) => onChange(renameGroup(groups, groupIndex, event.target.value))}
-                wrapperClassName="flex-1"
-              />
-              <span className="shrink-0 pb-xs font-ui text-caption text-grafito">
-                {group.fields.length}/{MAX_SPEC_FIELDS_PER_GROUP} campos
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Subir grupo"
-                disabled={groupIndex === 0}
-                onClick={() => onChange(moveGroup(groups, groupIndex, -1))}
+            <div className="flex items-center gap-sm p-md">
+              <DragHandle label={`Reordenar el apartado ${group.title || groupIndex + 1}`} className="shrink-0" {...getHandleProps(groupIndex)} />
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                aria-controls={panelId}
+                onClick={() => setOpenIndex(isOpen ? null : groupIndex)}
+                className="flex min-w-0 flex-1 items-center gap-sm rounded-control text-left transition-colors duration-150 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro"
               >
-                <CaretUp aria-hidden="true" size={16} />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Bajar grupo"
-                disabled={groupIndex === groups.length - 1}
-                onClick={() => onChange(moveGroup(groups, groupIndex, 1))}
-              >
-                <CaretDown aria-hidden="true" size={16} />
-              </Button>
-              <Button variant="ghost" size="icon" aria-label="Eliminar grupo" onClick={() => onChange(removeGroup(groups, groupIndex))}>
-                <Trash aria-hidden="true" size={16} />
-              </Button>
+                <CaretRight aria-hidden="true" weight="bold" className={cn("h-4 w-4 shrink-0 text-grafito transition-transform duration-150", isOpen && "rotate-90")} />
+                <span className="min-w-0 flex-1 truncate font-ui text-ui text-negro">{group.title || "Apartado sin título"}</span>
+                <span className="shrink-0 font-ui text-caption text-grafito">
+                  {group.fields.length} especificaci{group.fields.length === 1 ? "ón" : "ones"}
+                </span>
+                {!groupVisible ? <Badge variant="neutral" className="shrink-0">Oculto</Badge> : null}
+              </button>
+              <DeleteButton label="Eliminar apartado" onClick={() => onChange(removeGroup(groups, groupIndex))} className="shrink-0" />
             </div>
 
-            {template ? (
-              <p className="font-body text-caption text-grafito">
-                Etiquetas sugeridas por la plantilla «{template.title}».
-              </p>
-            ) : null}
-
-            <div className="flex flex-col gap-sm pl-lg">
-              {group.fields.map((field, fieldIndex) => (
-                <div key={fieldIndex} className="flex items-end gap-sm">
+            {isOpen ? (
+              <div id={panelId} className="flex flex-col gap-md border-t border-borde p-md">
+                <div className="flex flex-wrap items-center gap-md">
                   <Input
-                    label="Etiqueta"
-                    placeholder="p. ej. Peso"
-                    list={fieldLabels.length > 0 ? fieldLabelsDatalistId : undefined}
-                    value={field.label}
-                    onChange={(event) => onChange(updateField(groups, groupIndex, fieldIndex, { label: event.target.value }))}
+                    label="Título del apartado"
+                    list={TITLES_DATALIST_ID}
+                    value={group.title}
+                    onChange={(event) => onChange(renameGroup(groups, groupIndex, event.target.value))}
+                    wrapperClassName="min-w-[14rem] flex-1"
                   />
-                  <Input
-                    label="Valor"
-                    placeholder="p. ej. 8.2 kg"
-                    helper="El dato de este producto en particular."
-                    value={field.value}
-                    onChange={(event) => onChange(updateField(groups, groupIndex, fieldIndex, { value: event.target.value }))}
-                    wrapperClassName="flex-1"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Subir campo"
-                    disabled={fieldIndex === 0}
-                    onClick={() => onChange(moveField(groups, groupIndex, fieldIndex, -1))}
-                  >
-                    <CaretUp aria-hidden="true" size={16} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Bajar campo"
-                    disabled={fieldIndex === group.fields.length - 1}
-                    onClick={() => onChange(moveField(groups, groupIndex, fieldIndex, 1))}
-                  >
-                    <CaretDown aria-hidden="true" size={16} />
-                  </Button>
-                  <Button variant="ghost" size="icon" aria-label="Eliminar" onClick={() => onChange(removeField(groups, groupIndex, fieldIndex))}>
-                    <Trash aria-hidden="true" size={16} />
-                  </Button>
+                  <GroupVisibilityToggle checked={groupVisible} onChange={() => onChange(toggleGroupVisible(groups, groupIndex))} />
                 </div>
-              ))}
-              <Button
-                variant="ghost"
-                disabled={group.fields.length >= MAX_SPEC_FIELDS_PER_GROUP}
-                onClick={() => onChange(addField(groups, groupIndex, "", ""))}
-                className="self-start"
-              >
-                Agregar campo
-              </Button>
-            </div>
+
+                {template ? (
+                  <p className="font-body text-caption text-grafito">
+                    Etiquetas sugeridas por la plantilla «{template.title}».
+                  </p>
+                ) : null}
+
+                <SpecFieldsList
+                  groups={groups}
+                  onChange={onChange}
+                  groupIndex={groupIndex}
+                  fieldLabels={fieldLabels}
+                  fieldLabelsDatalistId={fieldLabelsDatalistId}
+                  groupVisible={groupVisible}
+                />
+              </div>
+            ) : null}
           </div>
         );
       })}
 
-      <div className="flex items-end gap-sm">
+      <div className="flex flex-wrap items-end gap-sm">
         <Input
-          label="Nuevo grupo"
+          label="Nuevo apartado"
           placeholder="p. ej. Transmisión"
           list={TITLES_DATALIST_ID}
           helper={templates.length > 0 ? TEMPLATE_HELPER : undefined}
           value={newGroupTitle}
           onChange={(event) => setNewGroupTitle(event.target.value)}
-          wrapperClassName="flex-1"
+          wrapperClassName="min-w-[16rem] flex-1"
         />
         <Button variant="secondary" disabled={!newGroupTitle.trim() || groups.length >= MAX_SPEC_GROUPS} onClick={handleAddGroup}>
-          Agregar grupo
+          Agregar apartado
         </Button>
       </div>
     </div>

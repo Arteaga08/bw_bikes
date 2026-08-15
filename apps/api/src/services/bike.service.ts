@@ -1,14 +1,16 @@
-import type { AdminBike, AuditAction, PublicBike, ProductVariant } from "@bw-bikes/shared";
+import type { AdminBike, AuditAction, CategoryImage, PublicBike, ProductVariant, SummaryRow } from "@bw-bikes/shared";
 import { CURRENCY } from "@bw-bikes/shared";
 import { Types } from "mongoose";
 import { Accessory, Bike, BikeCategory, type IBike } from "../models/index.js";
 import { AppError } from "../utils/index.js";
+import { deleteImage } from "./storage/storage.service.js";
 import { recordAuditLog } from "./audit-log.service.js";
 import { toPublicBadge } from "./badge.service.js";
 import { toPublicBrand } from "./brand.service.js";
 import { toPublicCategory } from "./category.service.js";
 import { toPublicAccessory } from "./accessory.service.js";
 import { type ActorContext, createProductService } from "./product.service.js";
+import { learnSizeTemplates } from "./size-template.service.js";
 import { learnSpecTemplates } from "./spec-template.service.js";
 
 const MODULE_NAME = "catalog.bikes";
@@ -30,6 +32,7 @@ export interface BikeInput {
   price?: number;
   compareAtPrice?: number;
   variants?: ProductVariant[];
+  summary?: SummaryRow[];
   specGroups?: PublicBike["specGroups"];
   relatedAccessories?: string[];
   badges?: string[];
@@ -47,6 +50,37 @@ async function assertAccessoriesExist(ids: string[]): Promise<void> {
   if (found !== ids.length) {
     throw new AppError("Uno o más accesorios sugeridos no existen.", 404);
   }
+}
+
+/**
+ * Drops everything the storefront must not render: a group the admin turned
+ * off, a row it turned off, and a row left blank (a template applied but never
+ * filled in). Groups emptied by that filter are dropped too — an apartado with
+ * no rows would render as a bare heading.
+ *
+ * Done here rather than in the storefront for the same reason
+ * `toPublicBike` filters `variants` to `isActive`: shipping a value the UI is
+ * expected not to paint is a leak, not a convenience. The admin DTO below
+ * keeps every row, since the editor has to be able to turn them back on.
+ */
+function toPublicSpecGroups(groups: IBike["specGroups"]): PublicBike["specGroups"] {
+  return [...groups]
+    .filter((group) => group.visible !== false)
+    .sort((a, b) => a.order - b.order)
+    .map((group) => ({
+      // Rebuilt field by field rather than spread: these are Mongoose
+      // subdocuments, and `{...subdoc}` copies its internals (`$__`, `_doc`)
+      // instead of the data. The arrays above only ever spread the *array*,
+      // leaving the subdocuments themselves to serialize through `toJSON`.
+      title: group.title,
+      order: group.order,
+      visible: group.visible,
+      fields: [...group.fields]
+        .filter((field) => field.visible !== false && field.value.trim() !== "")
+        .sort((a, b) => a.order - b.order)
+        .map((field) => ({ label: field.label, value: field.value, order: field.order, visible: field.visible })),
+    }))
+    .filter((group) => group.fields.length > 0);
 }
 
 /**
@@ -80,7 +114,9 @@ export function toPublicBike(bike: IBike): PublicBike {
     ...(bike.compareAtPrice !== undefined ? { compareAtPrice: bike.compareAtPrice } : {}),
     currency: CURRENCY,
     variants: bike.variants.filter((variant) => variant.isActive),
-    specGroups: [...bike.specGroups].sort((a, b) => a.order - b.order),
+    summary: [...bike.summary].sort((a, b) => a.order - b.order),
+    specGroups: toPublicSpecGroups(bike.specGroups),
+    ...(bike.geometryImage ? { geometryImage: bike.geometryImage } : {}),
     gallery: [...bike.gallery].sort((a, b) => a.order - b.order),
     relatedAccessories: bike.populated("relatedAccessories")
       ? (bike.relatedAccessories as unknown as Parameters<typeof toPublicAccessory>[0][]).map(toPublicAccessory)
@@ -118,7 +154,11 @@ export function toAdminBike(bike: IBike): AdminBike {
     ...(bike.compareAtPrice !== undefined ? { compareAtPrice: bike.compareAtPrice } : {}),
     currency: CURRENCY,
     variants: bike.variants,
+    summary: [...bike.summary].sort((a, b) => a.order - b.order),
+    // Unfiltered, unlike `toPublicBike`'s: the editor has to show a hidden
+    // apartado to be able to turn it back on.
     specGroups: [...bike.specGroups].sort((a, b) => a.order - b.order),
+    ...(bike.geometryImage ? { geometryImage: bike.geometryImage } : {}),
     gallery: [...bike.gallery].sort((a, b) => a.order - b.order),
     relatedAccessories: bike.populated("relatedAccessories")
       ? (bike.relatedAccessories as unknown as Parameters<typeof toPublicAccessory>[0][]).map(toPublicAccessory)
@@ -159,7 +199,11 @@ async function create(input: BikeInput, actor: ActorContext): Promise<IBike> {
     price: input.price,
     compareAtPrice: input.compareAtPrice,
     variants,
+    summary: input.summary ?? [],
     specGroups: input.specGroups ?? [],
+    // Both image fields are server-owned and set only through their own
+    // endpoints, never from a create payload.
+    geometryImage: null,
     gallery: [],
     relatedAccessories: relatedAccessories.map((id) => new Types.ObjectId(id)),
     badges: badges.map((id) => new Types.ObjectId(id)),
@@ -179,6 +223,7 @@ async function create(input: BikeInput, actor: ActorContext): Promise<IBike> {
   // doc comment) — learn from it here, same best-effort discipline as
   // `replaceSpecGroups`.
   if (input.specGroups && input.specGroups.length > 0) await learnSpecTemplates(input.specGroups);
+  if (variants.length > 0) await learnSizeTemplates(variants);
 
   return bike;
 }
@@ -217,6 +262,7 @@ async function update(id: string, input: BikeInput, actor: ActorContext): Promis
   if (input.description !== undefined) bike.description = input.description;
   if (input.price !== undefined) bike.price = input.price;
   if (input.compareAtPrice !== undefined) bike.compareAtPrice = input.compareAtPrice;
+  if (input.summary !== undefined) bike.summary = input.summary;
   if (input.specGroups !== undefined) bike.specGroups = input.specGroups;
 
   await bike.save();
@@ -231,6 +277,11 @@ async function update(id: string, input: BikeInput, actor: ActorContext): Promis
     after: { slug: bike.slug, price: bike.price, variants: bike.variants.length },
     ip: actor.ip,
   });
+
+  // Unlike `specGroups` (a separate `PUT .../spec-groups`), variants are part
+  // of this same PATCH — so, unlike the sheet, learning has to happen here
+  // too, not just on create.
+  if (input.variants !== undefined && input.variants.length > 0) await learnSizeTemplates(input.variants);
 
   return bike;
 }
@@ -259,4 +310,67 @@ async function getAdminById(id: string): Promise<IBike> {
   return bike;
 }
 
-export const bikeService = { ...base, create, update, getPublicBySlug, getAdminById };
+/**
+ * The geometry chart (M10.6). Same ordering discipline as `brand.service.ts`'s
+ * `setLogo`: save first, delete the old remote asset only after — a failed
+ * remote delete orphans an asset in Cloudinary (recoverable), the reverse
+ * order would leave the bike pointing at a URL that 404s.
+ */
+async function setGeometryImage(id: string, image: CategoryImage, actor: ActorContext): Promise<IBike> {
+  const bike = await base.findByIdOrFail(id);
+  const previousPublicId = bike.geometryImage?.publicId;
+
+  bike.geometryImage = image;
+  await bike.save();
+
+  if (previousPublicId) {
+    await deleteImage(previousPublicId);
+  }
+
+  await recordAuditLog({
+    actorId: actor.actorId,
+    actorType: "user",
+    action: "catalog.geometry_image_updated" satisfies AuditAction,
+    module: MODULE_NAME,
+    targetId: id,
+    after: { publicId: image.publicId },
+    ip: actor.ip,
+  });
+
+  return bike;
+}
+
+async function removeGeometryImage(id: string, actor: ActorContext): Promise<IBike> {
+  const bike = await base.findByIdOrFail(id);
+  if (!bike.geometryImage) {
+    throw new AppError("La bicicleta no tiene imagen de geometría.", 409);
+  }
+  const { publicId } = bike.geometryImage;
+
+  bike.geometryImage = null;
+  await bike.save();
+
+  await deleteImage(publicId);
+
+  await recordAuditLog({
+    actorId: actor.actorId,
+    actorType: "user",
+    action: "catalog.geometry_image_updated" satisfies AuditAction,
+    module: MODULE_NAME,
+    targetId: id,
+    before: { publicId },
+    ip: actor.ip,
+  });
+
+  return bike;
+}
+
+export const bikeService = {
+  ...base,
+  create,
+  update,
+  getPublicBySlug,
+  getAdminById,
+  setGeometryImage,
+  removeGeometryImage,
+};

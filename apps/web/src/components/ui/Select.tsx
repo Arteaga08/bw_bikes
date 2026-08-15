@@ -45,7 +45,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           "transition-colors duration-150",
           "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro",
           error ? "border-estado-error" : "border-borde",
-          "disabled:bg-base disabled:text-negro-disabled-text disabled:cursor-not-allowed",
+          "disabled:bg-inset disabled:text-negro-disabled-text disabled:cursor-not-allowed",
           className,
         )}
         {...props}

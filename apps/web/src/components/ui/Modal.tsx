@@ -3,6 +3,7 @@
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useId, useRef } from "react";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
+import { cn } from "@/lib/cn";
 
 export interface ModalProps {
   open: boolean;
@@ -18,6 +19,15 @@ export interface ModalProps {
  * close (FRONTEND_GUIDELINES.md §5, DASHBOARD_GUIDELINES.md §8). Overlay is
  * the design system's overlay layer (`--color-overlay`, DESIGN_SYSTEM.md §4)
  * — no `box-shadow`, the surface change from base to card carries the depth.
+ *
+ * Three-strip flex column — title and footer `shrink-0`, body `min-h-0
+ * flex-1 overflow-y-auto` — instead of one rigid block. A tall form (long
+ * field lists, a template's growing "Etiquetas" section) used to push past
+ * the viewport with no way to reach what got clipped; now only the body
+ * scrolls, title and footer stay put. Horizontal padding lives inside the
+ * scrolling body, not on the dialog shell: `overflow-y: auto` forces the X
+ * axis to `auto` too, and a focus ring drawn 2px outside a control would
+ * otherwise get clipped at the dialog's own edge.
  */
 export function Modal({ open, onClose, title, children, footer }: ModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -52,13 +62,15 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
         aria-labelledby={titleId}
         tabIndex={-1}
         onClick={stopPropagation}
-        className="w-full max-w-dialog rounded-card-lg bg-surface p-lg focus:outline-none"
+        className="flex max-h-full w-full min-w-0 max-w-dialog flex-col rounded-card-lg bg-surface focus:outline-none"
       >
-        <h2 id={titleId} className="font-display text-h3 text-negro">
+        <h2 id={titleId} className="shrink-0 px-lg pt-lg font-display text-h3 text-negro">
           {title}
         </h2>
-        <div className="mt-md font-body text-body text-negro">{children}</div>
-        {footer ? <div className="mt-lg flex justify-end gap-sm">{footer}</div> : null}
+        <div className={cn("min-h-0 flex-1 overflow-y-auto px-lg pt-md font-body text-body text-negro", !footer && "pb-lg")}>
+          {children}
+        </div>
+        {footer ? <div className="flex shrink-0 justify-end gap-sm px-lg pb-lg pt-lg">{footer}</div> : null}
       </div>
     </div>
   );

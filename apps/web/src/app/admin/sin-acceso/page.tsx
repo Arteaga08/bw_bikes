@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { GoToLoginButton } from "./GoToLoginButton";
+import { ButtonLink } from "@/components/ui/ButtonLink";
+import { LOGIN_PATH } from "@/lib/config";
 
 export const metadata: Metadata = {
   title: "Sin acceso",
@@ -21,7 +22,12 @@ export default function SinAccesoPage() {
         Tu cuenta no tiene permisos para entrar al panel de administración. Si crees que esto es un
         error, contacta al equipo de Black and White Bikes.
       </p>
-      <GoToLoginButton />
+      {/* A `ButtonLink` keeps this page a pure Server Component: the old
+          `GoToLoginButton` island existed only because `Button` couldn't
+          render an `<a>` and `<Link><Button/></Link>` nests two controls. */}
+      <ButtonLink href={LOGIN_PATH} variant="secondary">
+        Ir a iniciar sesión
+      </ButtonLink>
     </main>
   );
 }

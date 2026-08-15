@@ -48,6 +48,7 @@ export const flatCatalogListQuerySchema = Joi.object({
 export const brandListQuerySchema = flatCatalogListQuerySchema;
 export const badgeListQuerySchema = flatCatalogListQuerySchema;
 export const specTemplateListQuerySchema = flatCatalogListQuerySchema;
+export const sizeTemplateListQuerySchema = flatCatalogListQuerySchema;
 
 /** Shared by both product catalogs; `isActive` is admin-only (public lists force it to true). */
 const productFilters = {

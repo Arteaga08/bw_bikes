@@ -14,6 +14,7 @@ export * from "./product-view.validator.js";
 export * from "./product.validator.js";
 export * from "./settings.validator.js";
 export * from "./shipping.validator.js";
+export * from "./size-template.validator.js";
 export * from "./spec-group.validator.js";
 export * from "./spec-template.validator.js";
 export * from "./stats.validator.js";

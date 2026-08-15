@@ -32,7 +32,7 @@ export function normalizeOrder<T extends { order: number }>(items: T[]): T[] {
  * atomic-replace contract the backend expects.
  */
 export function addGroup(groups: SpecGroup[], title: string): SpecGroup[] {
-  return normalizeOrder([...groups, { title, order: groups.length, fields: [] }]);
+  return normalizeOrder([...groups, { title, order: groups.length, visible: true, fields: [] }]);
 }
 
 export function renameGroup(groups: SpecGroup[], groupIndex: number, title: string): SpecGroup[] {
@@ -56,7 +56,35 @@ export function moveGroup(groups: SpecGroup[], groupIndex: number, direction: -1
 export function addField(groups: SpecGroup[], groupIndex: number, label: string, value: string): SpecGroup[] {
   return groups.map((group, index) => {
     if (index !== groupIndex) return group;
-    return { ...group, fields: normalizeOrder([...group.fields, { label, value, order: group.fields.length }]) };
+    return {
+      ...group,
+      fields: normalizeOrder([...group.fields, { label, value, order: group.fields.length, visible: true }]),
+    };
+  });
+}
+
+/**
+ * Turning an apartado or an especificación off, rather than deleting it
+ * (M10.6). A saved template is a superset — "Eléctrica" carries every row an
+ * e-bike could need — so a non-electric bike has to be able to drop those rows
+ * from the storefront while keeping the shape for the next product. The API
+ * stores the flag; `toPublicBike` is what actually withholds it from the PDP.
+ *
+ * `visible !== false` rather than a plain negation: a group loaded from a
+ * document written before the flag existed carries no value at all, and must
+ * read as visible.
+ */
+export function toggleGroupVisible(groups: SpecGroup[], groupIndex: number): SpecGroup[] {
+  return groups.map((group, index) => (index === groupIndex ? { ...group, visible: group.visible === false } : group));
+}
+
+export function toggleFieldVisible(groups: SpecGroup[], groupIndex: number, fieldIndex: number): SpecGroup[] {
+  return groups.map((group, index) => {
+    if (index !== groupIndex) return group;
+    return {
+      ...group,
+      fields: group.fields.map((field, fi) => (fi === fieldIndex ? { ...field, visible: field.visible === false } : field)),
+    };
   });
 }
 
@@ -92,8 +120,8 @@ export function applyTemplate(groups: SpecGroup[], template: SpecTemplate): Spec
   if (groups.length >= MAX_SPEC_GROUPS) return groups;
   const fields = template.fields
     .slice(0, MAX_SPEC_FIELDS_PER_GROUP)
-    .map((field, index) => ({ label: field.label, value: "", order: index }));
-  return normalizeOrder([...groups, { title: template.title, order: groups.length, fields }]);
+    .map((field, index) => ({ label: field.label, value: "", order: index, visible: true }));
+  return normalizeOrder([...groups, { title: template.title, order: groups.length, visible: true, fields }]);
 }
 
 export function moveField(groups: SpecGroup[], groupIndex: number, fieldIndex: number, direction: -1 | 1): SpecGroup[] {
@@ -106,6 +134,38 @@ export function moveField(groups: SpecGroup[], groupIndex: number, fieldIndex: n
     const nextFields = [...group.fields];
     const [moved] = nextFields.splice(fieldIndex, 1);
     nextFields.splice(target, 0, moved as SpecField);
+    return { ...group, fields: normalizeOrder(nextFields) };
+  });
+}
+
+/**
+ * Arbitrary-target counterpart to `moveGroup`'s ±1 step — what a drag release
+ * needs (`useDragReorder`'s `onReorder(from, to)`, see `hooks/use-drag-reorder.ts`),
+ * since a pointer can land several rows away in one gesture, not just on a
+ * neighbor. `to` is clamped rather than rejected, matching the drag hook's own
+ * contract of always handing back an in-range target.
+ */
+export function moveGroupTo(groups: SpecGroup[], from: number, to: number): SpecGroup[] {
+  const clampedTo = Math.min(Math.max(to, 0), groups.length - 1);
+  if (from === clampedTo) return groups;
+
+  const next = [...groups];
+  const [moved] = next.splice(from, 1);
+  next.splice(clampedTo, 0, moved as SpecGroup);
+  return normalizeOrder(next);
+}
+
+/** Arbitrary-target counterpart to `moveField`'s ±1 step, same reasoning as `moveGroupTo`. */
+export function moveFieldTo(groups: SpecGroup[], groupIndex: number, from: number, to: number): SpecGroup[] {
+  return groups.map((group, index) => {
+    if (index !== groupIndex) return group;
+
+    const clampedTo = Math.min(Math.max(to, 0), group.fields.length - 1);
+    if (from === clampedTo) return group;
+
+    const nextFields = [...group.fields];
+    const [moved] = nextFields.splice(from, 1);
+    nextFields.splice(clampedTo, 0, moved as SpecField);
     return { ...group, fields: normalizeOrder(nextFields) };
   });
 }

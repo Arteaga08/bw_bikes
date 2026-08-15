@@ -5,10 +5,13 @@ import type {
   AdminBrand,
   AdminCategory,
   BadgeVariant,
+  CategoryImage,
   FulfillmentMode,
   ProductImage,
+  SizeTemplate,
   SpecGroup,
   SpecTemplate,
+  SummaryRow,
 } from "@bw-bikes/shared";
 import { apiFetch } from "./client";
 import type { ParsedResponse } from "./parse-response";
@@ -103,6 +106,13 @@ interface ProductBasicsInput {
 
 export interface BikeInput extends ProductBasicsInput {
   shortDescription: string;
+  /**
+   * The "En pocas palabras" card. Unlike `specGroups`, it has no endpoint of
+   * its own — six bounded rows ride in the product's own body, so this saves
+   * on create *and* on edit, with no second write to fail separately.
+   * Bike-only: an accessory has no overview block.
+   */
+  summary?: SummaryRow[];
   relatedAccessories?: string[];
 }
 
@@ -224,11 +234,38 @@ function createProductApi<TAdmin, TInput extends ProductBasicsInput>(config: Pro
   };
 }
 
-export const adminBikesApi = createProductApi<AdminBike, BikeInput>({
-  basePath: "/admin/bikes",
-  listKey: "bikes",
-  itemKey: "bike",
-});
+/**
+ * The geometry chart — a single image, so unlike the gallery there's no
+ * reorder and no delete-by-publicId: POST replaces whatever was there, DELETE
+ * clears it. Same `FormData` pattern as the brand logo. Bikes only, which is
+ * why these sit outside `createProductApi` rather than inside the factory
+ * accessories also use.
+ */
+async function uploadBikeGeometryImage(id: string, file: File, alt?: string): Promise<CategoryImage> {
+  const formData = new FormData();
+  formData.append("images", file);
+  if (alt) formData.append("alt", alt);
+
+  const res = await apiFetch<{ geometryImage: CategoryImage }>(`/admin/bikes/${id}/geometry-image`, {
+    method: "POST",
+    body: formData,
+  });
+  return res.data.geometryImage;
+}
+
+async function removeBikeGeometryImage(id: string): Promise<void> {
+  await apiFetch<{ geometryImage: null }>(`/admin/bikes/${id}/geometry-image`, { method: "DELETE" });
+}
+
+export const adminBikesApi = {
+  ...createProductApi<AdminBike, BikeInput>({
+    basePath: "/admin/bikes",
+    listKey: "bikes",
+    itemKey: "bike",
+  }),
+  uploadGeometryImage: uploadBikeGeometryImage,
+  removeGeometryImage: removeBikeGeometryImage,
+};
 
 export const adminAccessoriesApi = createProductApi<AdminAccessory, AccessoryInput>({
   basePath: "/admin/accessories",
@@ -532,4 +569,75 @@ export const adminSpecTemplatesApi = {
   create: createSpecTemplate,
   update: updateSpecTemplate,
   remove: removeSpecTemplate,
+};
+
+// --- Size template API -------------------------------------------------------
+// Same shape as the spec template API, one level simpler — a saved size
+// (no fields, just its value). Feeds the "Tallas y variantes" step's chip
+// picker; its own CRUD screen (`/admin/catalogo/tallas`) manages it directly.
+
+export interface AdminSizeTemplateListParams {
+  page?: number;
+  limit?: number;
+  sort?: string;
+  search?: string;
+  isActive?: boolean;
+}
+
+function buildSizeTemplateListQuery(params: AdminSizeTemplateListParams): string {
+  const entries: Array<[string, string]> = [];
+  if (params.page !== undefined) entries.push(["page", String(params.page)]);
+  if (params.limit !== undefined) entries.push(["limit", String(params.limit)]);
+  if (params.sort) entries.push(["sort", params.sort]);
+  if (params.search) entries.push(["search", params.search]);
+  if (params.isActive !== undefined) entries.push(["isActive", String(params.isActive)]);
+
+  const query = new URLSearchParams(entries).toString();
+  return query ? `?${query}` : "";
+}
+
+export interface SizeTemplateInput {
+  value: string;
+  order?: number;
+  isActive?: boolean;
+}
+
+async function listSizeTemplates(params: AdminSizeTemplateListParams = {}): Promise<ParsedResponse<SizeTemplate[]>> {
+  const res = await apiFetch<{ sizeTemplates: SizeTemplate[] }>(
+    `/admin/size-templates${buildSizeTemplateListQuery(params)}`,
+  );
+  return { data: res.data.sizeTemplates, ...(res.meta ? { meta: res.meta } : {}) };
+}
+
+async function getSizeTemplateById(id: string): Promise<SizeTemplate> {
+  const res = await apiFetch<{ sizeTemplate: SizeTemplate }>(`/admin/size-templates/${id}`);
+  return res.data.sizeTemplate;
+}
+
+async function createSizeTemplate(input: SizeTemplateInput): Promise<SizeTemplate> {
+  const res = await apiFetch<{ sizeTemplate: SizeTemplate }>("/admin/size-templates", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return res.data.sizeTemplate;
+}
+
+async function updateSizeTemplate(id: string, input: Partial<SizeTemplateInput>): Promise<SizeTemplate> {
+  const res = await apiFetch<{ sizeTemplate: SizeTemplate }>(`/admin/size-templates/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+  return res.data.sizeTemplate;
+}
+
+async function removeSizeTemplate(id: string): Promise<void> {
+  await apiFetch<undefined>(`/admin/size-templates/${id}`, { method: "DELETE" });
+}
+
+export const adminSizeTemplatesApi = {
+  list: listSizeTemplates,
+  getById: getSizeTemplateById,
+  create: createSizeTemplate,
+  update: updateSizeTemplate,
+  remove: removeSizeTemplate,
 };

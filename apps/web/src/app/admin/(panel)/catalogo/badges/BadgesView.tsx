@@ -1,21 +1,26 @@
 "use client";
 
 import type { AdminBadge } from "@bw-bikes/shared";
-import { useEffect, useMemo, useState } from "react";
+import { PencilSimple, Trash } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataTable, DataTableSkeleton, TableRowActions, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
-import { Input } from "@/components/ui/Input";
+import { ListToolbar } from "@/components/ui/ListToolbar";
 import { Modal } from "@/components/ui/Modal";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useToast } from "@/hooks/use-toast";
 import { adminBadgesApi, type AdminBadgeListParams } from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
+import { cn } from "@/lib/cn";
 import { BadgeFormModal } from "./BadgeFormModal";
 
 const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface FormDialogState {
   mode: "create" | "edit";
@@ -31,11 +36,20 @@ function apiErrorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+function formatCount(total: number): string {
+  return `${total} ${total === 1 ? "badge" : "badges"}`;
+}
+
+function statusBadge(isActive: boolean) {
+  return isActive ? <Badge variant="accent">Activo</Badge> : <Badge variant="neutral">Inactivo</Badge>;
+}
+
 /** One flat list, same shape as `BrandsView` minus the logo column — a badge is just a label and a design-system variant. */
 export function BadgesView() {
   const { toast } = useToast();
 
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
   const [page, setPage] = useState(1);
 
   const [rows, setRows] = useState<AdminBadge[]>([]);
@@ -48,9 +62,21 @@ export function BadgesView() {
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
+  // Resets the page only once the debounced term actually changes, not on
+  // every keystroke — `skipReset` swallows the run debouncing itself
+  // triggers on mount, where there's nothing to reset yet.
+  const skipReset = useRef(true);
+  useEffect(() => {
+    if (skipReset.current) {
+      skipReset.current = false;
+      return;
+    }
+    setPage(1);
+  }, [debouncedSearch]);
+
   const effectiveParams: AdminBadgeListParams = useMemo(
-    () => ({ page, limit: PAGE_SIZE, sort: "order", ...(search.trim() ? { search: search.trim() } : {}) }),
-    [page, search],
+    () => ({ page, limit: PAGE_SIZE, sort: "order", ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}) }),
+    [page, debouncedSearch],
   );
 
   const requestKey = JSON.stringify(effectiveParams);
@@ -86,11 +112,6 @@ export function BadgesView() {
     setRefetchToken((token) => token + 1);
   }
 
-  function updateSearch(next: string): void {
-    setSearch(next);
-    setPage(1);
-  }
-
   async function handleDeleteConfirm(): Promise<void> {
     if (!deleteDialog) return;
     setDeleteSubmitting(true);
@@ -106,56 +127,64 @@ export function BadgesView() {
     }
   }
 
+  function renderActions(row: AdminBadge) {
+    return (
+      <TableRowActions>
+        <Button variant="secondary" size="sm" onClick={() => setFormDialog({ mode: "edit", badge: row })}>
+          Editar
+        </Button>
+        <Button variant="ghost" size="sm" tone="danger-strong" onClick={() => setDeleteDialog({ id: row.id, label: row.label })}>
+          Eliminar
+        </Button>
+      </TableRowActions>
+    );
+  }
+
   const columns: DataTableColumn<AdminBadge>[] = [
     {
       key: "preview",
       header: "Vista previa",
+      kind: "status",
       render: (row) => <Badge variant={row.variant}>{row.label}</Badge>,
     },
     { key: "label", header: "Etiqueta", kind: "text", render: (row) => row.label },
-    {
-      key: "status",
-      header: "Estatus",
-      kind: "status",
-      render: (row) => (row.isActive ? <Badge variant="exito">Activo</Badge> : <Badge variant="neutral">Inactivo</Badge>),
-    },
+    { key: "status", header: "Estatus", kind: "status", render: (row) => statusBadge(row.isActive) },
     {
       key: "actions",
       header: "Acciones",
       kind: "actions",
       className: "w-px whitespace-nowrap",
-      render: (row) => (
-        <TableRowActions>
-          <Button variant="secondary" size="sm" onClick={() => setFormDialog({ mode: "edit", badge: row })}>
-            Editar
-          </Button>
-          <Button variant="ghost" size="sm" tone="danger-strong" onClick={() => setDeleteDialog({ id: row.id, label: row.label })}>
-            Eliminar
-          </Button>
-        </TableRowActions>
-      ),
+      render: renderActions,
     },
   ];
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-md px-md py-md sm:px-lg">
-        <Input
-          label="Buscar"
-          placeholder="Etiqueta"
-          value={search}
-          onChange={(event) => updateSearch(event.target.value)}
-          wrapperClassName="w-full sm:max-w-[18rem]"
-        />
-        <Button variant="primary" onClick={() => setFormDialog({ mode: "create" })}>
-          Nuevo badge
-        </Button>
-      </div>
+      <PageHeader
+        title="Badges"
+        subtitle="Etiquetas de merchandising — Novedad, Bestseller — que un producto puede lucir en la ficha pública. Hasta 3 por producto."
+        actions={
+          <div className="hidden sm:block">
+            <Button variant="primary" onClick={() => setFormDialog({ mode: "create" })}>
+              Nuevo badge
+            </Button>
+          </div>
+        }
+      />
+
+      <ListToolbar
+        searchLabel="Buscar"
+        searchPlaceholder="Etiqueta"
+        value={search}
+        onChange={setSearch}
+        action={{ label: "Nuevo badge", onClick: () => setFormDialog({ mode: "create" }) }}
+        count={!loading && !loadError ? formatCount(meta.total) : undefined}
+      />
 
       <ErrorBoundary>
         <div className="p-md sm:p-lg">
           {loading ? (
-            <DataTableSkeleton columns={columns} />
+            <DataTableSkeleton columns={columns} mobile />
           ) : loadError ? (
             <EmptyState
               title="No se pudieron cargar los badges"
@@ -169,7 +198,42 @@ export function BadgesView() {
           ) : rows.length === 0 ? (
             <EmptyState title="No hay badges con estos filtros" description="Ajusta la búsqueda o crea el primer badge." />
           ) : (
-            <DataTable columns={columns} rows={rows} getRowKey={(row) => row.id} />
+            <DataTable
+              columns={columns}
+              rows={rows}
+              getRowKey={(row) => row.id}
+              mobileRow={(row) => (
+                <div className="flex items-center gap-sm px-md py-xs">
+                  <span
+                    className={cn("h-2 w-2 shrink-0 rounded-full", row.isActive ? "bg-dorado" : "bg-borde")}
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 truncate font-ui text-ui text-negro">{row.label}</span>
+                  <span className="ml-auto shrink-0 font-body text-caption text-grafito">
+                    {row.isActive ? "Activo" : "Inactivo"}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-xs">
+                    <Button
+                      variant="bare"
+                      size="icon"
+                      aria-label="Editar"
+                      onClick={() => setFormDialog({ mode: "edit", badge: row })}
+                    >
+                      <PencilSimple size={16} aria-hidden="true" />
+                    </Button>
+                    <Button
+                      variant="bare"
+                      size="icon"
+                      tone="danger-strong"
+                      aria-label="Eliminar"
+                      onClick={() => setDeleteDialog({ id: row.id, label: row.label })}
+                    >
+                      <Trash size={16} aria-hidden="true" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            />
           )}
         </div>
       </ErrorBoundary>

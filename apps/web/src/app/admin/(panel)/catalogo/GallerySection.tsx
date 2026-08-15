@@ -7,6 +7,7 @@ import type { ChangeEvent, DragEvent } from "react";
 import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ButtonGroup } from "@/components/ui/ButtonGroup";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/lib/api/error";
 import { moveImage } from "@/lib/catalog/gallery";
@@ -21,14 +22,25 @@ const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 /** Mirrors the formats `image-pipeline.ts` accepts by magic bytes — the `accept` attribute is a UX hint, the real check is server-side. */
 const ACCEPTED_MIME_TYPES = "image/jpeg,image/png,image/webp,image/avif";
 
-export interface GallerySectionProps {
-  /** Absent means the product hasn't been created yet — the upload endpoint requires an existing id. */
-  productId?: string;
-  gallery: ProductImage[];
-  onChange: (gallery: ProductImage[]) => void;
-  onUpload: (files: File[]) => Promise<ProductImage[]>;
-  onRemove: (publicId: string) => Promise<ProductImage[]>;
-  onReorder: (publicIds: string[]) => Promise<ProductImage[]>;
+/** A file staged in `deferred` mode — its own id (not the `File`'s identity) so reordering and removal can key off something stable across re-renders. */
+export interface StagedGalleryFile {
+  id: string;
+  file: File;
+  previewUrl: string;
+}
+
+function stageFile(file: File): StagedGalleryFile {
+  return { id: crypto.randomUUID(), file, previewUrl: URL.createObjectURL(file) };
+}
+
+/** Same shape as `moveImage` (`lib/catalog/gallery.ts`), one type over: a target index, clamped rather than rejected, so both the pointer drag and the arrow buttons share one call. Kept local instead of genericizing `moveImage` — `SpecTemplateFormModal.tsx`'s `moveField` sets the precedent of one small copy per data shape rather than a shared generic. */
+function moveStagedFile(staged: StagedGalleryFile[], from: number, to: number): StagedGalleryFile[] {
+  const clampedTo = Math.min(Math.max(to, 0), staged.length - 1);
+  if (from === clampedTo) return staged;
+  const next = [...staged];
+  const [moved] = next.splice(from, 1);
+  next.splice(clampedTo, 0, moved as StagedGalleryFile);
+  return next;
 }
 
 /** Splits a drop/pick into what's actually uploadable and what got turned away, so the admin sees exactly why (not a silent partial upload). */
@@ -45,13 +57,62 @@ function partitionUploadable(files: File[], remainingSlots: number): { accepted:
   return { accepted, rejectedNames };
 }
 
+interface GallerySectionImmediateProps {
+  mode: "immediate";
+  gallery: ProductImage[];
+  onChange: (gallery: ProductImage[]) => void;
+  onUpload: (files: File[]) => Promise<ProductImage[]>;
+  onRemove: (publicId: string) => Promise<ProductImage[]>;
+  onReorder: (publicIds: string[]) => Promise<ProductImage[]>;
+}
+
+interface GallerySectionDeferredProps {
+  mode: "deferred";
+  /** Files staged so far, in order — there's no product id yet to upload to. `ProductEditor` uploads them right after the product is created. */
+  staged: StagedGalleryFile[];
+  onChange: (staged: StagedGalleryFile[]) => void;
+}
+
+export type GallerySectionProps = GallerySectionImmediateProps | GallerySectionDeferredProps;
+
+/** A local card shape both modes render through the same grid — `isLocal` picks `<img>` (a blob URL `next/image` can't optimize) over `<Image>`. */
+interface GalleryCard {
+  key: string;
+  src: string;
+  alt: string;
+  width?: number;
+  height?: number;
+  isLocal: boolean;
+}
+
+function cardsFor(props: GallerySectionProps): GalleryCard[] {
+  if (props.mode === "deferred") {
+    return props.staged.map((item) => ({ key: item.id, src: item.previewUrl, alt: "", isLocal: true }));
+  }
+  return props.gallery.map((image) => ({
+    key: image.publicId,
+    src: image.url,
+    alt: image.alt ?? "",
+    width: image.width,
+    height: image.height,
+    isLocal: false,
+  }));
+}
+
 /**
- * Every action here hits its own endpoint immediately and refreshes from the
- * response — the gallery is never part of the surrounding form's save, same
- * discipline as `GallerySection`'s backend routes (`POST`/`DELETE`/
- * `PATCH .../gallery*`), which never touch the rest of the product document.
+ * Two modes, same discriminated shape as `CategoryImageFieldProps`:
+ *
+ * - `immediate` (the product exists): every action hits its own endpoint
+ *   right away and refreshes from the response — the gallery is never part
+ *   of the surrounding form's save, same discipline as this resource's
+ *   backend routes (`POST`/`DELETE`/`PATCH .../gallery*`), which never touch
+ *   the rest of the product document.
+ * - `deferred` (`create`, before the first save): the same dropzone and
+ *   grid, but drops just stage the files locally via `URL.createObjectURL`
+ *   — reorderable and removable in place, uploaded for real once the
+ *   product exists (`ProductEditor.persistPendingGallery`).
  */
-export function GallerySection({ productId, gallery, onChange, onUpload, onRemove, onReorder }: GallerySectionProps) {
+export function GallerySection(props: GallerySectionProps) {
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -59,20 +120,13 @@ export function GallerySection({ productId, gallery, onChange, onUpload, onRemov
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
 
-  if (!productId) {
-    return (
-      <p className="font-body text-caption text-grafito">
-        Guarda el producto para poder subir imágenes a la galería.
-      </p>
-    );
-  }
-
-  const atCapacity = gallery.length >= MAX_GALLERY_IMAGES;
+  const cards = cardsFor(props);
+  const atCapacity = cards.length >= MAX_GALLERY_IMAGES;
 
   async function processFiles(files: File[]): Promise<void> {
     if (files.length === 0 || busy || atCapacity) return;
 
-    const { accepted, rejectedNames } = partitionUploadable(files, MAX_GALLERY_IMAGES - gallery.length);
+    const { accepted, rejectedNames } = partitionUploadable(files, MAX_GALLERY_IMAGES - cards.length);
     if (rejectedNames.length > 0) {
       toast({
         variant: "warning",
@@ -82,9 +136,15 @@ export function GallerySection({ productId, gallery, onChange, onUpload, onRemov
     }
     if (accepted.length === 0) return;
 
+    if (props.mode === "deferred") {
+      props.onChange([...props.staged, ...accepted.map(stageFile)]);
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+
     setBusy(true);
     try {
-      onChange(await onUpload(accepted));
+      props.onChange(await props.onUpload(accepted));
       toast({ variant: "success", title: "Imágenes agregadas" });
     } catch (error) {
       toast({
@@ -108,10 +168,17 @@ export function GallerySection({ productId, gallery, onChange, onUpload, onRemov
     await processFiles(Array.from(event.dataTransfer.files));
   }
 
-  async function handleRemove(publicId: string): Promise<void> {
+  async function handleRemoveCard(key: string): Promise<void> {
+    if (props.mode === "deferred") {
+      const target = props.staged.find((item) => item.id === key);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      props.onChange(props.staged.filter((item) => item.id !== key));
+      return;
+    }
+
     setBusy(true);
     try {
-      onChange(await onRemove(publicId));
+      props.onChange(await props.onRemove(key));
       toast({ variant: "success", title: "Imagen eliminada" });
     } catch (error) {
       toast({
@@ -124,14 +191,20 @@ export function GallerySection({ productId, gallery, onChange, onUpload, onRemov
     }
   }
 
-  /** The one place a reorder is actually persisted — shared by the keyboard-reachable arrow buttons and drag-and-drop. */
+  /** The one place a reorder is actually persisted (or, in `deferred`, just applied locally) — shared by the keyboard-reachable arrow buttons and drag-and-drop. */
   async function commitMove(from: number, to: number): Promise<void> {
-    const reordered = moveImage(gallery, from, to);
-    if (reordered === gallery) return;
+    if (props.mode === "deferred") {
+      const reordered = moveStagedFile(props.staged, from, to);
+      if (reordered !== props.staged) props.onChange(reordered);
+      return;
+    }
+
+    const reordered = moveImage(props.gallery, from, to);
+    if (reordered === props.gallery) return;
 
     setBusy(true);
     try {
-      onChange(await onReorder(reordered.map((image) => image.publicId)));
+      props.onChange(await props.onReorder(reordered.map((image) => image.publicId)));
     } catch (error) {
       toast({
         variant: "error",
@@ -157,7 +230,7 @@ export function GallerySection({ productId, gallery, onChange, onUpload, onRemov
       <label
         className={cn(
           "flex flex-col items-center gap-xs rounded-card border border-dashed p-lg text-center transition-colors duration-150",
-          dragOver ? "border-negro bg-surface" : "border-borde bg-base",
+          dragOver ? "border-negro bg-surface" : "border-borde bg-inset",
           busy || atCapacity ? "cursor-not-allowed opacity-60" : "cursor-pointer",
         )}
         onDragEnter={(event) => {
@@ -194,13 +267,13 @@ export function GallerySection({ productId, gallery, onChange, onUpload, onRemov
         </p>
       </label>
 
-      {gallery.length === 0 ? (
+      {cards.length === 0 ? (
         <p className="font-body text-caption text-grafito">Sin imágenes todavía.</p>
       ) : (
         <div className="grid grid-cols-2 gap-md sm:grid-cols-3 lg:grid-cols-4">
-          {gallery.map((image, index) => (
+          {cards.map((card, index) => (
             <div
-              key={image.publicId}
+              key={card.key}
               draggable={!busy}
               onDragStart={() => setDraggedIndex(index)}
               onDragOver={(event) => {
@@ -219,13 +292,19 @@ export function GallerySection({ productId, gallery, onChange, onUpload, onRemov
               )}
             >
               <div className="relative">
-                <Image
-                  src={image.url}
-                  alt={image.alt ?? ""}
-                  width={image.width}
-                  height={image.height}
-                  className="aspect-square w-full object-cover"
-                />
+                {card.isLocal ? (
+                  // Local blob: URL from a file just staged — next/image can't optimize a client-only object URL.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={card.src} alt={card.alt} className="aspect-square w-full object-cover" />
+                ) : (
+                  <Image
+                    src={card.src}
+                    alt={card.alt}
+                    width={card.width ?? 0}
+                    height={card.height ?? 0}
+                    className="aspect-square w-full object-cover"
+                  />
+                )}
                 {index === 0 ? (
                   <Badge variant="accent" className="absolute left-xs top-xs">
                     Portada
@@ -239,33 +318,33 @@ export function GallerySection({ productId, gallery, onChange, onUpload, onRemov
                 </span>
               </div>
               <div className="flex items-center justify-between gap-xs border-t border-borde p-xs">
+                <ButtonGroup label="Reordenar imagen">
+                  <Button
+                    variant="bare"
+                    size="icon"
+                    aria-label="Mover antes"
+                    disabled={busy || index === 0}
+                    onClick={() => void commitMove(index, index - 1)}
+                    iconLeft={<CaretLeft />}
+                  />
+                  <Button
+                    variant="bare"
+                    size="icon"
+                    aria-label="Mover después"
+                    disabled={busy || index === cards.length - 1}
+                    onClick={() => void commitMove(index, index + 1)}
+                    iconLeft={<CaretRight />}
+                  />
+                </ButtonGroup>
                 <Button
-                  variant="ghost"
+                  variant="bare"
                   size="icon"
-                  aria-label="Mover antes"
-                  disabled={busy || index === 0}
-                  onClick={() => void commitMove(index, index - 1)}
-                >
-                  <CaretLeft aria-hidden="true" size={16} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Mover después"
-                  disabled={busy || index === gallery.length - 1}
-                  onClick={() => void commitMove(index, index + 1)}
-                >
-                  <CaretRight aria-hidden="true" size={16} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
+                  tone="danger-strong"
                   aria-label="Eliminar imagen"
                   disabled={busy}
-                  onClick={() => void handleRemove(image.publicId)}
-                >
-                  <Trash aria-hidden="true" size={16} />
-                </Button>
+                  onClick={() => void handleRemoveCard(card.key)}
+                  iconLeft={<Trash />}
+                />
               </div>
             </div>
           ))}

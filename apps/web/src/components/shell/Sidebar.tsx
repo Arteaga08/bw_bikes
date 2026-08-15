@@ -5,6 +5,7 @@ import { SignOut } from "@phosphor-icons/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { Button } from "@/components/ui/Button";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { apiFetch } from "@/lib/api/client";
@@ -102,7 +103,7 @@ export function Sidebar({ user }: SidebarProps) {
           <span className="font-display text-h3 text-blanco">Black &amp; White</span>
         </div>
 
-        <nav aria-label="Navegación principal" className="min-h-0 flex-1 overflow-y-auto px-sm py-md">
+        <nav aria-label="Navegación principal" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-sm py-md">
           <ul className="flex flex-col gap-lg">
             {NAV_SECTIONS.map((section) => (
               <li key={section.title}>
@@ -138,14 +139,11 @@ export function Sidebar({ user }: SidebarProps) {
         <div className="border-t border-blanco/10 px-md py-md">
           <p className="truncate font-ui text-caption text-blanco/60">{user.email}</p>
           <p className="font-ui text-caption text-blanco/40 uppercase">{user.role}</p>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="mt-sm flex items-center gap-xs font-ui text-ui text-blanco/70 transition-colors duration-150 hover:text-dorado"
-          >
-            <SignOut size={16} aria-hidden="true" />
+          {/* `tone="inverse"` is the palette for controls on the `overlay`
+              surface — what this used to spell out by hand. */}
+          <Button variant="text" tone="inverse" onClick={handleLogout} iconLeft={<SignOut />} className="mt-sm">
             Cerrar sesión
-          </button>
+          </Button>
         </div>
       </aside>
     </>

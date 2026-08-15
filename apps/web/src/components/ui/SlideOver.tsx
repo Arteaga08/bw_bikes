@@ -2,6 +2,7 @@
 
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useId, useRef } from "react";
+import { CloseButton } from "@/components/ui/CloseButton";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 export interface SlideOverProps {
@@ -70,14 +71,7 @@ export function SlideOver({ open, onClose, title, subtitle, children, footer }: 
             </h2>
             {subtitle ? <p className="mt-xs font-body text-caption text-grafito">{subtitle}</p> : null}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar panel"
-            className="font-ui text-h3 leading-none text-grafito transition-colors duration-150 hover:text-negro focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro"
-          >
-            ×
-          </button>
+          <CloseButton onClick={onClose} aria-label="Cerrar panel" className="-mr-sm shrink-0" />
         </header>
 
         <div className="flex-1 overflow-y-auto px-lg py-md font-body text-body text-negro">{children}</div>

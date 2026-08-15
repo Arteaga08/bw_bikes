@@ -17,8 +17,19 @@ function Harness({ templates = [] }: { templates?: SpecTemplate[] }) {
 }
 
 function addGroupViaUi(title: string): void {
-  fireEvent.change(screen.getByLabelText("Nuevo grupo"), { target: { value: title } });
-  fireEvent.click(screen.getByRole("button", { name: "Agregar grupo" }));
+  fireEvent.change(screen.getByLabelText("Nuevo apartado"), { target: { value: title } });
+  fireEvent.click(screen.getByRole("button", { name: "Agregar apartado" }));
+}
+
+/**
+ * The collapsed accordion bar for each apartado (M10.6.1) — always in the
+ * DOM regardless of open/closed state, unlike the "Título del apartado"
+ * input, which only renders while that one apartado is expanded. Matched by
+ * "N especificaci..." rather than a bare "especificaci..." substring so it
+ * doesn't also catch the "Agregar especificación" button.
+ */
+function accordionBars(): HTMLElement[] {
+  return screen.getAllByRole("button", { name: /\d+ especificaci/ });
 }
 
 describe("SpecSheetEditor — the four required operations", () => {
@@ -39,16 +50,17 @@ describe("SpecSheetEditor — the four required operations", () => {
     expect(screen.queryByDisplayValue("Transmision")).not.toBeInTheDocument();
   });
 
-  it("reorders groups with the ↑/↓ buttons", () => {
+  it("reorders groups by dragging the handle (keyboard fallback: Arrow key)", () => {
     render(<Harness />);
     addGroupViaUi("Cuadro");
     addGroupViaUi("Frenos");
 
-    // "Cuadro" is first; move it down past "Frenos".
-    fireEvent.click(screen.getAllByRole("button", { name: "Bajar grupo" })[0] as HTMLElement);
+    // "Cuadro" is first; move it down past "Frenos" via its drag handle's
+    // Arrow-key fallback — `useDragReorder`'s accessible path, since a real
+    // pointer drag isn't something `fireEvent` can simulate meaningfully.
+    fireEvent.keyDown(screen.getByRole("button", { name: "Reordenar el apartado Cuadro" }), { key: "ArrowDown" });
 
-    const titleInputs = screen.getAllByLabelText("Título del grupo") as HTMLInputElement[];
-    expect(titleInputs.map((input) => input.value)).toEqual(["Frenos", "Cuadro"]);
+    expect(accordionBars().map((bar) => bar.textContent)).toEqual([expect.stringContaining("Frenos"), expect.stringContaining("Cuadro")]);
   });
 
   it("deletes a group", () => {
@@ -56,28 +68,30 @@ describe("SpecSheetEditor — the four required operations", () => {
     addGroupViaUi("Cuadro");
     addGroupViaUi("Frenos");
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Eliminar grupo" })[0] as HTMLElement);
+    fireEvent.click(screen.getAllByRole("button", { name: "Eliminar apartado" })[0] as HTMLElement);
 
-    expect(screen.queryByDisplayValue("Cuadro")).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("Frenos")).toBeInTheDocument();
+    expect(accordionBars().map((bar) => bar.textContent)).toEqual([expect.stringContaining("Frenos")]);
   });
 
   it("adds, renames, reorders and deletes fields within a group", () => {
     render(<Harness />);
     addGroupViaUi("Transmisión");
 
-    fireEvent.click(screen.getByRole("button", { name: "Agregar campo" }));
-    fireEvent.click(screen.getByRole("button", { name: "Agregar campo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agregar especificación" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agregar especificación" }));
 
     const [firstLabel, secondLabel] = screen.getAllByLabelText("Etiqueta") as HTMLInputElement[];
     fireEvent.change(firstLabel as HTMLInputElement, { target: { value: "Cassette" } });
     fireEvent.change(secondLabel as HTMLInputElement, { target: { value: "Cadena" } });
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Bajar campo" })[0] as HTMLElement);
+    // Same accessible Arrow-key fallback as the group-level handle above.
+    fireEvent.keyDown(screen.getByRole("button", { name: "Reordenar la especificación Cassette" }), { key: "ArrowDown" });
     let labels = screen.getAllByLabelText("Etiqueta") as HTMLInputElement[];
     expect(labels.map((input) => input.value)).toEqual(["Cadena", "Cassette"]);
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Eliminar" })[0] as HTMLElement);
+    // "Eliminar especificación", not the old bare "Eliminar": next to "Eliminar apartado"
+    // in the same row, the unqualified label told a screen reader nothing.
+    fireEvent.click(screen.getAllByRole("button", { name: "Eliminar especificación" })[0] as HTMLElement);
     labels = screen.getAllByLabelText("Etiqueta") as HTMLInputElement[];
     expect(labels.map((input) => input.value)).toEqual(["Cassette"]);
   });
@@ -98,7 +112,7 @@ describe("SpecSheetEditor — applying a template (M10.3)", () => {
     render(<Harness templates={templates} />);
 
     fireEvent.change(screen.getByLabelText("Aplicar plantilla"), { target: { value: "tpl-1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Agregar grupo desde plantilla" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agregar apartado desde plantilla" }));
 
     expect(screen.getByDisplayValue("Geometría")).toBeInTheDocument();
     const labels = screen.getAllByLabelText("Etiqueta") as HTMLInputElement[];

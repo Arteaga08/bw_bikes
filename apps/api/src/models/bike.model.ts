@@ -1,6 +1,8 @@
-import type { ProductImage, ProductVariant, SpecGroup } from "@bw-bikes/shared";
+import type { CategoryImage, ProductImage, ProductVariant, SpecGroup, SummaryRow } from "@bw-bikes/shared";
 import { type Document, model, Schema, type Types } from "mongoose";
+import { categoryImageSchema } from "./schemas/category-image.schema.js";
 import { MAX_GALLERY_IMAGES, productImageSchema } from "./schemas/product-image.schema.js";
+import { MAX_SUMMARY_ROWS, summaryRowSchema } from "./schemas/product-summary.schema.js";
 import { MAX_PRICE_CENTS, MAX_VARIANTS, productVariantSchema } from "./schemas/product-variant.schema.js";
 import { MAX_SPEC_GROUPS, specGroupSchema } from "./schemas/spec-group.schema.js";
 
@@ -24,7 +26,9 @@ export interface IBike extends Document {
   price: number;
   compareAtPrice?: number;
   variants: ProductVariant[];
+  summary: SummaryRow[];
   specGroups: SpecGroup[];
+  geometryImage?: CategoryImage | null;
   gallery: ProductImage[];
   relatedAccessories: Types.ObjectId[];
   badges: Types.ObjectId[];
@@ -59,6 +63,17 @@ const bikeSchema = new Schema<IBike>(
         message: `Una bicicleta no puede tener más de ${MAX_VARIANTS} variantes.`,
       },
     },
+    // The PDP's overview card, written by hand rather than derived from the
+    // sheet below — see `product-summary.schema.ts`. Bikes only: an accessory
+    // has no overview block.
+    summary: {
+      type: [summaryRowSchema],
+      default: [],
+      validate: {
+        validator: (rows: unknown[]) => rows.length <= MAX_SUMMARY_ROWS,
+        message: `El resumen no puede tener más de ${MAX_SUMMARY_ROWS} renglones.`,
+      },
+    },
     specGroups: {
       type: [specGroupSchema],
       default: [],
@@ -67,6 +82,12 @@ const bikeSchema = new Schema<IBike>(
         message: `La ficha técnica no puede tener más de ${MAX_SPEC_GROUPS} grupos.`,
       },
     },
+    // The geometry chart is a diagram, not label/value rows, so it can't live
+    // in `specGroups`. Single image, hence `categoryImageSchema` (the same
+    // sub-schema `Brand.logo` uses) rather than `productImageSchema` and its
+    // `order`. Kept out of `gallery` on purpose: that one is the commercial
+    // carousel and this must never show up in it.
+    geometryImage: { type: categoryImageSchema, default: null },
     gallery: {
       type: [productImageSchema],
       default: [],

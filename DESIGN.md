@@ -15,8 +15,16 @@ colors:
   negro-carbono-disabled-text: "#9A9A95"
   surface-base: "#F1F1EE"
   surface-card: "#FFFFFF"
+  surface-inset: "#EAEAE6"
   surface-overlay: "#0A0A0A"
   border-neutral: "#E2E2DE"
+  bare-text: "#3A3A38"
+  bare-hover: "#E2E2DE"
+  bare-pressed: "#D8D8D3"
+  action-danger: "#7A3B32"
+  action-danger-soft: "#F1E0DC"
+  action-success: "#4A5D3A"
+  action-success-soft: "#E8ECE3"
   color-error: "#B42318"
   color-success: "#15803D"
 typography:
@@ -117,10 +125,37 @@ components:
   button-ghost:
     backgroundColor: "transparent"
     textColor: "{colors.negro-carbono}"
+    borderColor: "{colors.negro-carbono}"
     typography: "{typography.ui}"
     rounded: "{rounded.control}"
     padding: "0 24px"
     height: "44px"
+  button-bare:
+    backgroundColor: "transparent"
+    textColor: "{colors.bare-text}"
+    typography: "{typography.ui}"
+    rounded: "{rounded.control}"
+    padding: "0"
+  button-bare-hover:
+    backgroundColor: "{colors.bare-hover}"
+    textColor: "{colors.negro-carbono}"
+  button-bare-pressed:
+    backgroundColor: "{colors.bare-pressed}"
+  button-danger:
+    backgroundColor: "{colors.action-danger-soft}"
+    textColor: "{colors.action-danger}"
+  button-danger-strong:
+    backgroundColor: "{colors.action-danger}"
+    textColor: "{colors.blanco-hueso}"
+  button-success:
+    backgroundColor: "{colors.action-success-soft}"
+    textColor: "{colors.action-success}"
+    borderColor: "{colors.action-success}"
+  button-inverse:
+    backgroundColor: "transparent"
+    textColor: "rgba(250, 250, 250, 0.7)"
+  button-inverse-hover:
+    textColor: "{colors.dorado-triunfo}"
   button-text:
     backgroundColor: "transparent"
     textColor: "{colors.negro-carbono}"
@@ -215,7 +250,9 @@ Paleta restrained: dos neutros cargan el sistema, un tercero da profundidad de t
 
 ## 4. Elevation
 
-Sistema plano por diseño: no existe `box-shadow` decorativo en ningún componente. La jerarquía de profundidad se construye con cambio de fondo entre tres capas — Base (#F1F1EE) → Surface (#FFFFFF + borde #E2E2DE) → Overlay (#0A0A0A) — nunca con sombra simulando elevación. En un dashboard con muchas superficies apiladas (tablas, tarjetas de métricas, paneles de filtro), la tentación de usar sombra para separar niveles se resuelve subiendo o bajando de capa, no añadiendo profundidad falsa.
+Sistema plano por diseño: no existe `box-shadow` decorativo en ningún componente. La jerarquía de profundidad se construye con cambio de fondo entre cuatro capas — Overlay (#0A0A0A) · Base (#F1F1EE) → Surface (#FFFFFF + borde #E2E2DE) → Inset (#EAEAE6) — nunca con sombra simulando elevación. En un dashboard con muchas superficies apiladas (tablas, tarjetas de métricas, paneles de filtro), la tentación de usar sombra para separar niveles se resuelve subiendo o bajando de capa, no añadiendo profundidad falsa.
+
+**Inset** (#EAEAE6) es la cuarta capa, agregada al cerrar M10.5. Con solo tres, un panel dentro de una tarjeta no tenía a dónde ir y terminaba pintado con el fondo de página: leía como un agujero en la tarjeta, y un control transparente encima se quedaba sin cuerpo propio. La regla no cambia — sigue prohibido resolver profundidad con sombra — pero para cambiar de fondo hacen falta suficientes fondos a los que cambiar. Un escalón por nivel real de anidamiento; si un diseño pide un quinto, el problema es el anidamiento.
 
 ### Named Rules
 **The Flat-By-Default Rule.** Ninguna superficie usa sombra para simular elevación, ni en reposo ni en hover. La diferencia de capa se lee por el fondo, punto.
@@ -225,14 +262,21 @@ Sistema plano por diseño: no existe `box-shadow` decorativo en ningún componen
 Precisos y contenidos: cada estado se siente deliberado, no casual. Cuatro variantes de botón, seis estados cada una, sin gestos decorativos de por medio.
 
 ### Buttons
+
+Tres ejes independientes: **variante** es la forma, **tono** es el color,
+**tamaño** es la caja. Matriz completa en `handoff/DESIGN_SYSTEM.md` §4.
+
 - **Shape:** radio casi recto (2px) — transmite precisión, no suavidad.
 - **Primary:** fondo Dorado Triunfo (#F2B705), texto Negro Carbono, altura 44px, padding horizontal 24px. Una sola acción principal por vista ("Comprar", "Ir a pagar").
 - **Secondary:** fondo Negro Carbono, texto Blanco Hueso. Acciones de igual peso, no la principal.
-- **Ghost:** transparente con borde Negro Carbono 1px. Acciones terciarias.
-- **Text:** transparente, subrayado, sin altura fija. Navegación inline.
-- **Hover / Focus:** hover oscurece el fondo ~10%, pressed ~20%. Foco: anillo de 3px separado 2px del control — negro sobre el primario dorado, dorado sobre fondos oscuros o neutros. Las cuatro variantes implementan `:focus-visible`.
+- **Ghost:** transparente con borde Negro Carbono 1px. Acciones terciarias sueltas.
+- **Bare:** transparente **sin borde**, glifo en Grafito Rino. Controles que se repiten en una fila o barra — reordenar, eliminar, cerrar. Al hover **levanta a blanco** (`surface`) con hairline `borde`, el mismo cuerpo que los inputs de al lado. Dentro de un `ButtonGroup` (que ya trae cuerpo blanco propio) ese hover bajaría a `borde` en vez de subir, para no quedar blanco sobre blanco. Agregada al cerrar M10.5: `ghost` repetido como ícono en cada fila producía una reja de recuadros y le daba al control menos importante el borde más fuerte de la fila.
+- **Text:** transparente, subrayado que crece desde el centro, sin altura fija. Navegación inline.
+- **Tonos** (`ghost`, `bare`, `text`): `neutral`, `danger` (reversible — suave en hover, sólido al presionar), `danger-strong` (irreversible — hover directo a sólido), `inverse` (controles sobre Overlay #0A0A0A). El subrayado de `text` toma el color del tono, nunca el dorado sobre una acción destructiva.
+- **Hover / Focus:** hover oscurece el fondo ~10%, pressed ~20%. Foco: anillo de 3px separado 2px del control — negro sobre el primario dorado, dorado sobre fondos oscuros o neutros. Las cinco variantes implementan `:focus-visible`.
 - **Disabled:** baja contraste, nunca cambia de tamaño.
-- **Loading:** conserva el ancho original (evita saltos de layout); spinner de 10px a la izquierda vía `::before`, bloquea el click.
+- **Loading:** conserva el ancho original (evita saltos de layout); spinner de 10px a la izquierda vía `::before`, bloquea el click. Solo en acciones, no en enlaces.
+- **Success:** ventana de 2s tras una acción que salió bien — etiqueta en pasado ("Agregado") con check, color `estado-exito`, y el control queda deshabilitado durante toda la ventana. El doble clic se cierra con el hook `useAsyncAction`, que bloquea de forma síncrona (un `ref`, no solo el estado de React) desde el primer clic hasta que la confirmación termina.
 
 ### Cards
 - **Corner Style:** 10px (tarjetas pequeñas) / 14px (frames y contenedores grandes) — mayor que el radio de control porque suaviza superficies grandes sin restar precisión.
@@ -254,7 +298,10 @@ Precisos y contenidos: cada estado se siente deliberado, no casual. Cuatro varia
 ### Do:
 - **Do** usar el dorado (#F2B705) como único acento, máximo un CTA primario dorado por vista.
 - **Do** construir jerarquía con espacio (grid de 8px) y contraste de color, nunca con sombra.
-- **Do** implementar `:focus-visible` en las cuatro variantes de botón (anillo 3px, offset 2px) — WCAG AA.
+- **Do** implementar `:focus-visible` en las cinco variantes de botón (anillo 3px, offset 2px) — WCAG AA.
+- **Do** usar `bare` para cualquier control que se repita en una fila o barra, y `ghost` solo para acciones terciarias sueltas.
+- **Do** renderizar un enlace con estilo de botón como `ButtonLink` (un `<a>`), nunca como `<Link><Button/></Link>` — eso anida un `<button>` dentro de un `<a>`.
+- **Do** pintar un panel anidado dentro de una tarjeta con `inset`, nunca con `base`.
 - **Do** mantener una sola familia tipográfica (Hanken Grotesk) en máximo dos pesos por bloque.
 - **Do** conservar el ancho de un botón en estado `loading` para evitar saltos de layout.
 - **Do** emparejar error/success con ícono, nunca depender solo del color (#B42318 / #15803D) para comunicar el estado.
@@ -266,3 +313,6 @@ Precisos y contenidos: cada estado se siente deliberado, no casual. Cuatro varia
 - **Don't** repetir el dorado como color de fondo o como decoración recurrente — es acento, nunca superficie.
 - **Don't** usar un radio de esquina fuera de la escala (2px control / 10px card / 14px card-lg) sin justificar el porqué.
 - **Don't** dejar un botón sin sus seis estados (default, hover, focus, pressed, disabled, loading) al construir un componente nuevo.
+- **Don't** poner un contorno a cada ícono de una fila: eso le da al control menos importante el borde más fuerte de la fila. Va `bare`, agrupado si las acciones son adyacentes.
+- **Don't** recortar un grupo de botones con `overflow: hidden` — se traga el anillo de foco, que se dibuja 2px por fuera del control.
+- **Don't** pasar `h-*`/`w-*` por `className` para cambiar el tamaño de un botón: sin `tailwind-merge` esa clase pierde contra la del componente por orden de CSS, en silencio. Se agrega un tamaño al sistema.

@@ -1,5 +1,6 @@
 {
-  "files": ["handoff/playground.html"],
+  "files": ["apps/web/src/app/layout.tsx"],
   "insertBefore": "</body>",
-  "commentSyntax": "html"
+  "commentSyntax": "jsx",
+  "cspChecked": true
 }

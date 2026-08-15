@@ -6,6 +6,8 @@ import { cn } from "@/lib/cn";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
+  /** Keeps the `<label htmlFor>` in the DOM (still announced by a screen reader) but visually hides it — for a row repeated enough times that its own heading already says what the field is (a spec template's "Etiquetas" list, one `label` per row). */
+  labelHidden?: boolean;
   error?: string;
   helper?: string;
   /**
@@ -25,7 +27,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
  * it, and `aria-invalid` reflects the error state — never just a red border.
  */
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, error, helper, id, className, wrapperClassName, ...props },
+  { label, labelHidden, error, helper, id, className, wrapperClassName, ...props },
   ref,
 ) {
   const autoId = useId();
@@ -34,7 +36,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 
   return (
     <div className={cn("flex flex-col gap-xs", wrapperClassName)}>
-      <label htmlFor={inputId} className="font-ui text-ui text-negro">
+      <label htmlFor={inputId} className={cn("font-ui text-ui text-negro", labelHidden && "sr-only")}>
         {label}
       </label>
       <input
@@ -49,7 +51,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           "transition-colors duration-150",
           "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro",
           error ? "border-estado-error" : "border-borde",
-          "disabled:bg-base disabled:text-negro-disabled-text disabled:cursor-not-allowed",
+          "disabled:bg-inset disabled:text-negro-disabled-text disabled:cursor-not-allowed",
           className,
         )}
         {...props}

@@ -20,6 +20,14 @@ import { Schema } from "mongoose";
  *
  * These values are display-only and are never filtered on; anything the
  * storefront must filter by lives in a typed first-class column instead.
+ *
+ * `visible` (M10.6) lets the admin turn a group or a row off without deleting
+ * it: a saved template is a superset ("Eléctrica" carries every row an e-bike
+ * could need), and a non-electric bike must be able to hide those rows and
+ * still keep the shape for the next product. It defaults to `true`, which is
+ * what makes this a no-migration change — every document written before it
+ * existed reads back as visible. `value` is not `required` for the same
+ * reason: a hidden or half-filled row can't be allowed to block the save.
  */
 
 export const MAX_SPEC_GROUPS = 20;
@@ -31,8 +39,9 @@ export const MAX_SPEC_VALUE_LENGTH = 400;
 const specFieldSchema = new Schema(
   {
     label: { type: String, required: true, trim: true, maxlength: MAX_SPEC_LABEL_LENGTH },
-    value: { type: String, required: true, trim: true, maxlength: MAX_SPEC_VALUE_LENGTH },
+    value: { type: String, default: "", trim: true, maxlength: MAX_SPEC_VALUE_LENGTH },
     order: { type: Number, required: true, min: 0 },
+    visible: { type: Boolean, default: true },
   },
   { _id: false },
 );
@@ -41,6 +50,7 @@ export const specGroupSchema = new Schema(
   {
     title: { type: String, required: true, trim: true, maxlength: MAX_SPEC_TITLE_LENGTH },
     order: { type: Number, required: true, min: 0 },
+    visible: { type: Boolean, default: true },
     fields: {
       type: [specFieldSchema],
       default: [],

@@ -52,13 +52,47 @@ export function findDuplicateSkuIndices(variants: VariantRow[]): Set<number> {
   return duplicates;
 }
 
+interface VariantGroup {
+  size: string;
+  /** Original indices into the flat `variants` array — kept instead of copying rows so `updateRow`/`removeRow` can still address the source array directly. */
+  indices: number[];
+}
+
+/** One entry per distinct `size` already present, in first-appearance order — first-appearance instead of alphabetical so a group doesn't jump position as its own rows change. */
+function groupBySize(variants: VariantRow[]): VariantGroup[] {
+  const groups: VariantGroup[] = [];
+  const groupIndexBySize = new Map<string, number>();
+
+  variants.forEach((variant, index) => {
+    let groupIndex = groupIndexBySize.get(variant.size);
+    if (groupIndex === undefined) {
+      groupIndex = groups.length;
+      groupIndexBySize.set(variant.size, groupIndex);
+      groups.push({ size: variant.size, indices: [] });
+    }
+    groups[groupIndex]!.indices.push(index);
+  });
+
+  return groups;
+}
+
 export interface VariantsEditorProps {
   variants: VariantRow[];
   onChange: (variants: VariantRow[]) => void;
 }
 
+/**
+ * Rows grouped under the size that created them (`SizePicker`, M10.7 S3)
+ * instead of repeating a "Talla" field on every row — choosing *which*
+ * sizes exist is the picker's job now; this only ever adds, edits or
+ * removes the SKU-level detail (color, price override, availability)
+ * underneath an already-chosen size. A group with zero rows never renders:
+ * `SizePicker` removes the whole group the instant its last row goes away,
+ * so there's nothing here to clean up on this side.
+ */
 export function VariantsEditor({ variants, onChange }: VariantsEditorProps) {
   const duplicates = findDuplicateSkuIndices(variants);
+  const groups = groupBySize(variants);
 
   function updateRow(index: number, patch: Partial<VariantRow>): void {
     onChange(variants.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -68,82 +102,102 @@ export function VariantsEditor({ variants, onChange }: VariantsEditorProps) {
     onChange(variants.filter((_, i) => i !== index));
   }
 
-  function addRow(): void {
+  function addRowToGroup(size: string): void {
     if (variants.length >= MAX_VARIANTS) return;
-    onChange([...variants, emptyVariantRow()]);
+    onChange([...variants, { ...emptyVariantRow(), size }]);
+  }
+
+  if (groups.length === 0) {
+    return <p className="font-body text-caption text-grafito">Elige una talla arriba para empezar a capturar variantes.</p>;
   }
 
   return (
     <div className="flex flex-col gap-md">
-      {variants.length === 0 ? <p className="font-body text-caption text-grafito">Sin variantes todavía.</p> : null}
+      {groups.map((group) => (
+        // `bg-inset` — a panel nested inside an `EditorSection` card, same case
+        // as `SpecSheetEditor`: `base` is the page's ground, not a layer
+        // available above `surface`.
+        <div key={group.size} className="flex flex-col gap-sm rounded-control border border-borde bg-inset p-md">
+          <span className="font-ui text-ui text-negro">{group.size || "Sin talla"}</span>
 
-      {variants.map((row, index) => (
-        <div key={index} className="flex flex-col gap-sm rounded-control border border-borde bg-base p-md">
-          <div className="grid grid-cols-1 gap-sm sm:grid-cols-3">
-            <Input
-              label="SKU"
-              placeholder="p. ej. DOM-SL5-54-NEG"
-              value={row.sku}
-              onChange={(event) => updateRow(index, { sku: event.target.value.toUpperCase() })}
-              error={duplicates.has(index) ? "SKU repetido entre variantes." : undefined}
-            />
-            <Input
-              label="Talla"
-              placeholder="p. ej. 54"
-              value={row.size}
-              onChange={(event) => updateRow(index, { size: event.target.value })}
-            />
-            <Input
-              label="Color"
-              placeholder="p. ej. Negro mate"
-              value={row.color}
-              onChange={(event) => updateRow(index, { color: event.target.value })}
-            />
+          <div className="flex flex-col divide-y divide-borde">
+            {group.indices.map((index) => {
+              const row = variants[index]!;
+              return (
+                <div key={index} className="flex flex-col gap-sm py-sm first:pt-0 last:pb-0">
+                  <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
+                    <Input
+                      label="SKU"
+                      placeholder="p. ej. DOM-SL5-54-NEG"
+                      value={row.sku}
+                      onChange={(event) => updateRow(index, { sku: event.target.value.toUpperCase() })}
+                      error={duplicates.has(index) ? "SKU repetido entre variantes." : undefined}
+                    />
+                    <Input
+                      label="Color"
+                      placeholder="p. ej. Negro mate"
+                      value={row.color}
+                      onChange={(event) => updateRow(index, { color: event.target.value })}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-sm sm:grid-cols-3">
+                    <Input
+                      label="Precio override (opcional)"
+                      inputMode="decimal"
+                      placeholder="Usa el precio del producto"
+                      value={row.priceInput}
+                      onChange={(event) => updateRow(index, { priceInput: event.target.value })}
+                    />
+                    <Select
+                      label="Disponibilidad"
+                      value={row.fulfillmentMode}
+                      onChange={(event) => updateRow(index, { fulfillmentMode: event.target.value as FulfillmentMode })}
+                    >
+                      {ALL_FULFILLMENT_MODES.map((mode) => (
+                        <option key={mode} value={mode}>
+                          {FULFILLMENT_MODE_LABELS[mode]}
+                        </option>
+                      ))}
+                    </Select>
+                    {row.fulfillmentMode === "preorder" ? (
+                      <Input
+                        label="Fecha estimada"
+                        type="date"
+                        value={row.preorderReleaseDate?.slice(0, 10) ?? ""}
+                        onChange={(event) => updateRow(index, { preorderReleaseDate: event.target.value || undefined })}
+                      />
+                    ) : (
+                      <div aria-hidden="true" />
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <Toggle
+                      label="Activa"
+                      checked={row.isActive}
+                      onChange={(checked) => updateRow(index, { isActive: checked })}
+                    />
+                    <Button variant="ghost" size="sm" onClick={() => removeRow(index)}>
+                      Eliminar variante
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          <div className="grid grid-cols-1 gap-sm sm:grid-cols-3">
-            <Input
-              label="Precio override (opcional)"
-              inputMode="decimal"
-              placeholder="Usa el precio del producto"
-              value={row.priceInput}
-              onChange={(event) => updateRow(index, { priceInput: event.target.value })}
-            />
-            <Select
-              label="Disponibilidad"
-              value={row.fulfillmentMode}
-              onChange={(event) => updateRow(index, { fulfillmentMode: event.target.value as FulfillmentMode })}
-            >
-              {ALL_FULFILLMENT_MODES.map((mode) => (
-                <option key={mode} value={mode}>
-                  {FULFILLMENT_MODE_LABELS[mode]}
-                </option>
-              ))}
-            </Select>
-            {row.fulfillmentMode === "preorder" ? (
-              <Input
-                label="Fecha estimada"
-                type="date"
-                value={row.preorderReleaseDate?.slice(0, 10) ?? ""}
-                onChange={(event) => updateRow(index, { preorderReleaseDate: event.target.value || undefined })}
-              />
-            ) : (
-              <div aria-hidden="true" />
-            )}
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Toggle label="Activa" checked={row.isActive} onChange={(checked) => updateRow(index, { isActive: checked })} />
-            <Button variant="ghost" size="sm" onClick={() => removeRow(index)}>
-              Eliminar variante
-            </Button>
-          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={variants.length >= MAX_VARIANTS}
+            onClick={() => addRowToGroup(group.size)}
+            className="self-start"
+          >
+            Agregar variante en esta talla
+          </Button>
         </div>
       ))}
-
-      <Button variant="secondary" disabled={variants.length >= MAX_VARIANTS} onClick={addRow} className="self-start">
-        Agregar variante
-      </Button>
     </div>
   );
 }

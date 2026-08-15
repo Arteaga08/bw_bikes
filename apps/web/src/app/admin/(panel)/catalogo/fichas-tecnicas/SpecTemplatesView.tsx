@@ -1,21 +1,26 @@
 "use client";
 
 import type { SpecTemplate } from "@bw-bikes/shared";
-import { useEffect, useMemo, useState } from "react";
+import { PencilSimple, Trash } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataTable, DataTableSkeleton, TableRowActions, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
-import { Input } from "@/components/ui/Input";
+import { ListToolbar } from "@/components/ui/ListToolbar";
 import { Modal } from "@/components/ui/Modal";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useToast } from "@/hooks/use-toast";
 import { adminSpecTemplatesApi, type AdminSpecTemplateListParams } from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
+import { cn } from "@/lib/cn";
 import { SpecTemplateFormModal } from "./SpecTemplateFormModal";
 
 const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface FormDialogState {
   mode: "create" | "edit";
@@ -31,9 +36,21 @@ function apiErrorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+function formatCount(total: number): string {
+  return `${total} ${total === 1 ? "plantilla" : "plantillas"}`;
+}
+
+function statusBadge(isActive: boolean) {
+  return isActive ? <Badge variant="accent">Activa</Badge> : <Badge variant="neutral">Inactiva</Badge>;
+}
+
+function sourceBadge(source: SpecTemplate["source"]) {
+  return source === "auto" ? <Badge variant="neutral">Automática</Badge> : <Badge variant="exito">Manual</Badge>;
+}
+
 /**
  * One flat list, same shape as `BadgesView`/`BrandsView`. The one thing
- * specific to this resource: a "Automática"/"Manual" badge per row, so the
+ * specific to this resource: a "Automática"/"Manual" origin per row, so the
  * admin can tell a template it typed on purpose apart from one the system
  * learned from a product save (`source` — see `spec-template.model.ts`) and
  * decide whether to keep, edit or delete it.
@@ -42,6 +59,7 @@ export function SpecTemplatesView() {
   const { toast } = useToast();
 
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
   const [page, setPage] = useState(1);
 
   const [rows, setRows] = useState<SpecTemplate[]>([]);
@@ -54,9 +72,21 @@ export function SpecTemplatesView() {
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
+  // Resets the page only once the debounced term actually changes, not on
+  // every keystroke — `skipReset` swallows the run debouncing itself
+  // triggers on mount, where there's nothing to reset yet.
+  const skipReset = useRef(true);
+  useEffect(() => {
+    if (skipReset.current) {
+      skipReset.current = false;
+      return;
+    }
+    setPage(1);
+  }, [debouncedSearch]);
+
   const effectiveParams: AdminSpecTemplateListParams = useMemo(
-    () => ({ page, limit: PAGE_SIZE, sort: "order", ...(search.trim() ? { search: search.trim() } : {}) }),
-    [page, search],
+    () => ({ page, limit: PAGE_SIZE, sort: "order", ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}) }),
+    [page, debouncedSearch],
   );
 
   const requestKey = JSON.stringify(effectiveParams);
@@ -92,11 +122,6 @@ export function SpecTemplatesView() {
     setRefetchToken((token) => token + 1);
   }
 
-  function updateSearch(next: string): void {
-    setSearch(next);
-    setPage(1);
-  }
-
   async function handleDeleteConfirm(): Promise<void> {
     if (!deleteDialog) return;
     setDeleteSubmitting(true);
@@ -112,59 +137,60 @@ export function SpecTemplatesView() {
     }
   }
 
+  function renderActions(row: SpecTemplate) {
+    return (
+      <TableRowActions>
+        <Button variant="secondary" size="sm" onClick={() => setFormDialog({ mode: "edit", template: row })}>
+          Editar
+        </Button>
+        <Button variant="ghost" size="sm" tone="danger-strong" onClick={() => setDeleteDialog({ id: row.id, title: row.title })}>
+          Eliminar
+        </Button>
+      </TableRowActions>
+    );
+  }
+
   const columns: DataTableColumn<SpecTemplate>[] = [
     { key: "title", header: "Título", kind: "text", render: (row) => row.title },
     { key: "fields", header: "Campos", kind: "number", render: (row) => String(row.fields.length) },
-    {
-      key: "source",
-      header: "Origen",
-      kind: "status",
-      render: (row) =>
-        row.source === "auto" ? <Badge variant="neutral">Automática</Badge> : <Badge variant="exito">Manual</Badge>,
-    },
-    {
-      key: "status",
-      header: "Estatus",
-      kind: "status",
-      render: (row) => (row.isActive ? <Badge variant="exito">Activa</Badge> : <Badge variant="neutral">Inactiva</Badge>),
-    },
+    { key: "source", header: "Origen", kind: "status", render: (row) => sourceBadge(row.source) },
+    { key: "status", header: "Estatus", kind: "status", render: (row) => statusBadge(row.isActive) },
     {
       key: "actions",
       header: "Acciones",
       kind: "actions",
       className: "w-px whitespace-nowrap",
-      render: (row) => (
-        <TableRowActions>
-          <Button variant="secondary" size="sm" onClick={() => setFormDialog({ mode: "edit", template: row })}>
-            Editar
-          </Button>
-          <Button variant="ghost" size="sm" tone="danger-strong" onClick={() => setDeleteDialog({ id: row.id, title: row.title })}>
-            Eliminar
-          </Button>
-        </TableRowActions>
-      ),
+      render: renderActions,
     },
   ];
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-md px-md py-md sm:px-lg">
-        <Input
-          label="Buscar"
-          placeholder="Título"
-          value={search}
-          onChange={(event) => updateSearch(event.target.value)}
-          wrapperClassName="w-full sm:max-w-[18rem]"
-        />
-        <Button variant="primary" onClick={() => setFormDialog({ mode: "create" })}>
-          Nueva plantilla
-        </Button>
-      </div>
+      <PageHeader
+        title="Fichas técnicas"
+        subtitle="Plantillas reutilizables — un título y sus etiquetas, sin valores — que el editor de producto ofrece al armar una ficha técnica."
+        actions={
+          <div className="hidden sm:block">
+            <Button variant="primary" onClick={() => setFormDialog({ mode: "create" })}>
+              Nueva plantilla
+            </Button>
+          </div>
+        }
+      />
+
+      <ListToolbar
+        searchLabel="Buscar"
+        searchPlaceholder="Título"
+        value={search}
+        onChange={setSearch}
+        action={{ label: "Nueva plantilla", onClick: () => setFormDialog({ mode: "create" }) }}
+        count={!loading && !loadError ? formatCount(meta.total) : undefined}
+      />
 
       <ErrorBoundary>
         <div className="p-md sm:p-lg">
           {loading ? (
-            <DataTableSkeleton columns={columns} />
+            <DataTableSkeleton columns={columns} mobile />
           ) : loadError ? (
             <EmptyState
               title="No se pudieron cargar las plantillas"
@@ -181,7 +207,42 @@ export function SpecTemplatesView() {
               description="Ajusta la búsqueda, o guarda un grupo nuevo desde cualquier producto — se aprende solo."
             />
           ) : (
-            <DataTable columns={columns} rows={rows} getRowKey={(row) => row.id} />
+            <DataTable
+              columns={columns}
+              rows={rows}
+              getRowKey={(row) => row.id}
+              mobileRow={(row) => (
+                <div className="flex items-center gap-sm px-md py-xs">
+                  <span
+                    className={cn("h-2 w-2 shrink-0 rounded-full", row.isActive ? "bg-dorado" : "bg-borde")}
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 truncate font-ui text-ui text-negro">{row.title}</span>
+                  <span className="ml-auto shrink-0 font-body text-caption text-grafito">
+                    {row.isActive ? "Activa" : "Inactiva"}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-xs">
+                    <Button
+                      variant="bare"
+                      size="icon"
+                      aria-label="Editar"
+                      onClick={() => setFormDialog({ mode: "edit", template: row })}
+                    >
+                      <PencilSimple size={16} aria-hidden="true" />
+                    </Button>
+                    <Button
+                      variant="bare"
+                      size="icon"
+                      tone="danger-strong"
+                      aria-label="Eliminar"
+                      onClick={() => setDeleteDialog({ id: row.id, title: row.title })}
+                    >
+                      <Trash size={16} aria-hidden="true" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            />
           )}
         </div>
       </ErrorBoundary>

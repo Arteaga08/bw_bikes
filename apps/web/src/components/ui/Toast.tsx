@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { CloseButton } from "@/components/ui/CloseButton";
 import { cn } from "@/lib/cn";
 
 export type ToastVariant = "success" | "info" | "warning" | "error";
@@ -90,14 +91,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   <p className="mt-xs font-body text-caption text-grafito">{item.description}</p>
                 ) : null}
               </div>
-              <button
-                type="button"
-                onClick={() => dismiss(item.id)}
-                aria-label="Cerrar notificación"
-                className="rounded-control font-ui text-ui text-grafito transition-colors duration-150 hover:text-negro focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro"
-              >
-                ×
-              </button>
+              <CloseButton onClick={() => dismiss(item.id)} aria-label="Cerrar notificación" className="-mr-xs -mt-xs shrink-0" />
             </div>
           </div>
         ))}

@@ -23,23 +23,54 @@ export const CURRENCY = "MXN" as const;
  */
 export type PriceCents = number;
 
-/** One `label: value` row inside a spec group. Display-only, never filtered on. */
+/**
+ * One `label: value` row inside a spec group — an *especificación* in the
+ * admin's Spanish copy. Display-only, never filtered on.
+ *
+ * `visible` exists because a saved template is a superset: "Eléctrica" carries
+ * every row an e-bike could need, and a non-electric bike has to be able to
+ * turn a row off without deleting it and losing the shape for next time.
+ * `value` may be empty precisely so a turned-off row doesn't have to be filled
+ * in to save. The storefront renders a row only when `visible !== false` and
+ * `value` is non-blank.
+ */
 export interface SpecField {
   label: string;
   value: string;
   order: number;
+  visible: boolean;
 }
 
 /**
- * A named block of the free-form technical sheet ("Transmisión", "Cuadro"...).
- * The admin builds these per product with no template — see
- * `docs/superpowers/specs/…-design.md` §"Ficha técnica libre". Embedded in the
- * product document, never its own collection.
+ * A named block of the free-form technical sheet ("Transmisión", "Cuadro"...)
+ * — an *apartado* in the admin's Spanish copy. The admin builds these per
+ * product with no template — see `docs/superpowers/specs/…-design.md`
+ * §"Ficha técnica libre". Embedded in the product document, never its own
+ * collection.
+ *
+ * `visible` turns off the whole block at once; same reasoning as `SpecField`'s.
  */
 export interface SpecGroup {
   title: string;
   order: number;
+  visible: boolean;
   fields: SpecField[];
+}
+
+/**
+ * One row of a bike's "En pocas palabras" card — the short overview block the
+ * PDP shows next to the marketing copy, above the full sheet.
+ *
+ * Deliberately **not** derived from `SpecGroup`: the summary is written by
+ * hand and free to word things differently ("Transmisión: SRAM XX SL Eagle"
+ * where the sheet lists shifters, derailleurs and cassette separately). The
+ * trade-off the client accepted is that a value appearing in both places is
+ * captured twice and has to be corrected twice.
+ */
+export interface SummaryRow {
+  label: string;
+  value: string;
+  order: number;
 }
 
 /**
@@ -182,6 +213,20 @@ export interface SpecTemplate {
   isActive: boolean;
 }
 
+/**
+ * A saved size an admin can offer again on a variant's "Talla" — the
+ * single-value sibling of `SpecTemplate`, same admin-only reasoning. See
+ * `apps/api/src/models/size-template.model.ts`.
+ */
+export interface SizeTemplate {
+  id: string;
+  value: string;
+  /** `manual`: an admin created it explicitly. `auto`: learned the first time a variant saved this size. */
+  source: "manual" | "auto";
+  order: number;
+  isActive: boolean;
+}
+
 /** Fields both public product shapes share. */
 interface PublicProductBase {
   id: string;
@@ -207,6 +252,10 @@ interface PublicProductBase {
  */
 export interface PublicBike extends PublicProductBase {
   shortDescription: string;
+  /** The "En pocas palabras" card, up to `MAX_SUMMARY_ROWS`. Bikes only — an accessory has no overview block. */
+  summary: SummaryRow[];
+  /** The geometry chart, a single image with no rows of its own. Bikes only. */
+  geometryImage?: CategoryImage;
   /** Manually curated cross-sell (`Bike.relatedAccessories`), resolved for the PDP. */
   relatedAccessories: PublicAccessory[];
 }
@@ -244,6 +293,10 @@ interface AdminProductBase extends PublicProductBase {
 /** The exact shape the admin panel receives for a bike, unfiltered variants included. */
 export interface AdminBike extends AdminProductBase {
   shortDescription: string;
+  /** The "En pocas palabras" card, up to `MAX_SUMMARY_ROWS`. Bikes only, same as `PublicBike`'s. */
+  summary: SummaryRow[];
+  /** The geometry chart, a single image. Bikes only, same as `PublicBike`'s. */
+  geometryImage?: CategoryImage;
   /** Resolved for the editor's picker — includes archived accessories still referenced, unlike the PDP's. */
   relatedAccessories: PublicAccessory[];
 }

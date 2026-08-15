@@ -1,7 +1,7 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { Accessory, AccessoryCategory, Bike } from "../src/models/index.js";
+import { Accessory, AccessoryCategory, Bike, MAX_SUMMARY_ROWS } from "../src/models/index.js";
 import { createAdminSession } from "./helpers/admin-session.js";
 import { createBikeCategoryDoc, createBrandDoc } from "./helpers/factories.js";
 
@@ -347,5 +347,110 @@ describe("admin DTO shape (M10)", () => {
     // deliberately instead of it silently vanishing from the payload.
     expect(read.body.data.bike.relatedAccessories).toHaveLength(1);
     expect(read.body.data.bike.relatedAccessories[0].slug).toBe("casco-a-archivar");
+  });
+});
+
+/**
+ * The "En pocas palabras" card (M10.6). It rides in the bike's own body
+ * rather than getting an endpoint of its own — six bounded rows don't justify
+ * the second write `specGroups` needs — and it's bike-only: an accessory has
+ * no overview block, which is why it hangs off the bike schemas instead of
+ * `productBase`.
+ */
+describe("summary card (M10.6)", () => {
+  let app: ReturnType<typeof buildApp>;
+  let adminCookie: string;
+  let categoryId: string;
+  let brandId: string;
+
+  const ROWS = [
+    { label: "Uso", value: "Carreras XC", order: 0 },
+    { label: "Peso", value: "9.6 kg", order: 1 },
+  ];
+
+  beforeEach(async () => {
+    app = buildApp();
+    adminCookie = await createAdminSession(app);
+    const category = await createBikeCategoryDoc({ name: "Ruta", slug: "ruta" });
+    categoryId = String(category._id);
+    brandId = String((await createBrandDoc())._id);
+  });
+
+  function createBike(overrides: Record<string, unknown> = {}) {
+    return request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId, overrides));
+  }
+
+  it("saves the card on create and serves it to the storefront", async () => {
+    const created = await createBike({ summary: ROWS });
+    expect(created.status).toBe(201);
+    expect(created.body.data.bike.summary).toHaveLength(2);
+
+    const slug = created.body.data.bike.slug as string;
+    const publicRead = await request(app).get(`${PUBLIC}/bikes/${slug}`);
+    expect(publicRead.body.data.bike.summary[0].label).toBe("Uso");
+  });
+
+  it("defaults to an empty card when the payload omits it", async () => {
+    const created = await createBike();
+    expect(created.body.data.bike.summary).toEqual([]);
+  });
+
+  it("replaces the whole card on update", async () => {
+    const created = await createBike({ summary: ROWS });
+    const id = created.body.data.bike.id as string;
+
+    const updated = await request(app)
+      .patch(`${ADMIN}/bikes/${id}`)
+      .set("Cookie", adminCookie)
+      .send({ summary: [{ label: "Uso", value: "Gravel", order: 0 }] });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.data.bike.summary).toHaveLength(1);
+    expect(updated.body.data.bike.summary[0].value).toBe("Gravel");
+  });
+
+  it("caps the card at MAX_SUMMARY_ROWS", async () => {
+    const tooMany = Array.from({ length: MAX_SUMMARY_ROWS + 1 }, (_, index) => ({
+      label: `Dato ${index}`,
+      value: `Valor ${index}`,
+      order: index,
+    }));
+
+    const response = await createBike({ summary: tooMany });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain(String(MAX_SUMMARY_ROWS));
+  });
+
+  it("rejects a row with a blank value", async () => {
+    // Unlike a spec row — which may be blank because a template applied it and
+    // the admin hasn't filled it in — a summary row is always written on
+    // purpose, so blank is a mistake worth catching.
+    const response = await createBike({ summary: [{ label: "Uso", value: "", order: 0 }] });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("does not accept a card on an accessory", async () => {
+    const accessoryCategory = await AccessoryCategory.create({ name: "Cascos", slug: "cascos", order: 0 });
+    const response = await request(app)
+      .post(`${ADMIN}/accessories`)
+      .set("Cookie", adminCookie)
+      .send({
+        name: "Casco Evade",
+        brand: brandId,
+        category: String(accessoryCategory._id),
+        description: "Descripción",
+        price: 5_999_00,
+        summary: ROWS,
+      });
+
+    // `stripUnknown` drops it silently rather than 400-ing; what matters is
+    // that it never reaches the document.
+    expect(response.status).toBe(201);
+    expect(response.body.data.accessory).not.toHaveProperty("summary");
   });
 });

@@ -10,15 +10,17 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 /**
- * `accent`/`unavailable` are the two variants DESIGN_SYSTEM.md §5 specs by
- * name ("Nuevo"/"E-Bike" and "Agotado"). `exito`/`advertencia`/`error`/
- * `neutral` are the semantic status set M9–M11's tables need (paid/pending/
- * cancelled, shipped/delivered) — built from the desaturated status tokens
- * added in globals.css so a row full of badges never competes with the
- * dashboard's one dorado accent. `BadgeVariant` itself lives in
- * `@bw-bikes/shared` (M10.3) so the backend's merchandising `Badge` model can
- * validate against this exact same closed set, instead of a hex the palette
- * never sanctioned.
+ * `accent` marks a resource as active/enabled across every catalog list
+ * (Marcas, Bicicletas/Accesorios, Badges, Fichas técnicas, Categorías) as
+ * well as the merchandising "Nuevo"/"E-Bike" callouts DESIGN_SYSTEM.md §5
+ * names — a deliberate departure from the system's own "accent is scarce"
+ * default, decided because the soft `exito` green washed out over dark
+ * product/logo imagery. `unavailable` covers "Agotado". `advertencia`/
+ * `error`/`neutral` are the remaining semantic status set M9–M11's tables
+ * need (pending/cancelled, shipped/delivered, inactive). `BadgeVariant`
+ * itself lives in `@bw-bikes/shared` (M10.3) so the backend's merchandising
+ * `Badge` model can validate against this exact same closed set, instead of
+ * a hex the palette never sanctioned.
  */
 // Every variant declares its own border color, `neutral` included — a plain
 // `border` base class plus `neutral`'s override would rely on the second

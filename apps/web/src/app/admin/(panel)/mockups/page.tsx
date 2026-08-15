@@ -6,7 +6,13 @@ import { PageHeader } from "@/components/ui/PageHeader";
  * static image or a separate tool) so every variant is judged inside the
  * real shell: same Sidebar, same TopBar, same tokens, same `<main>` scroll
  * container. Nothing here is imported by production code and nothing here
- * is wired into `lib/nav.ts` — it's deleted whole once M10.5 closes.
+ * is wired into `lib/nav.ts`.
+ *
+ * The exploration pages are deleted whole once M10.5 closes. `botones` is the
+ * exception: it stopped being an exploration when the button system landed and
+ * is now the catalog `DESIGN_SYSTEM.md` §4 points at — every variant × tone ×
+ * size × state, rendered with the real components so it can't describe
+ * something the code doesn't do.
  */
 const PAGES = [
   {
@@ -16,8 +22,8 @@ const PAGES = [
   },
   {
     href: "/admin/mockups/botones",
-    title: "Estados de botón",
-    description: "El caso del ghost sin contraste dentro de una fila, más el destructivo en rojo (puntos 6 y 7).",
+    title: "Catálogo de botones",
+    description: "Referencia viva del sistema: 5 variantes × 4 tonos × 5 tamaños × 6 estados. No se borra al cerrar M10.5.",
   },
   {
     href: "/admin/mockups/tablas",
@@ -36,7 +42,7 @@ export default function MockupsIndexPage() {
     <>
       <PageHeader
         title="Mockups — M10.5"
-        subtitle="Andamio temporal para decidir mirando, no leyendo código. Se borra al cerrar M10.5."
+        subtitle="Andamio para decidir mirando, no leyendo código. Se borra al cerrar M10.5, salvo el catálogo de botones."
       />
       <div className="flex flex-col gap-md p-md sm:p-lg">
         <div className="grid grid-cols-1 gap-md sm:grid-cols-2">

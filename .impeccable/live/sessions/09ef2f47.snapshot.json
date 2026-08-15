@@ -1,0 +1,23 @@
+{
+  "id": "09ef2f47",
+  "phase": "cycling",
+  "pageUrl": "/admin/catalogo/fichas-tecnicas",
+  "sourceFile": "apps/web/src/app/admin/(panel)/catalogo/fichas-tecnicas/SpecTemplatesView.tsx",
+  "expectedVariants": 3,
+  "arrivedVariants": 3,
+  "visibleVariant": 2,
+  "paramValues": {
+    "titleSize": "comfortable",
+    "actions": false
+  },
+  "pendingEventSeq": null,
+  "pendingEvent": null,
+  "deliveryLease": null,
+  "checkpointRevision": 6,
+  "activeOwner": "98e81568",
+  "sourceMarkers": {},
+  "fallbackMode": null,
+  "annotationArtifacts": [],
+  "diagnostics": [],
+  "updatedAt": "2026-08-14T16:01:15.361Z"
+}
