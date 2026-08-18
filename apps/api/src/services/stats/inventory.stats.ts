@@ -1,13 +1,7 @@
 import type { InventoryStats, StatsRange } from "@bw-bikes/shared";
 import { InventoryItem, StockReservation } from "../../models/index.js";
-
-/**
- * Not a `Settings` value — M7's migration list (the design spec's thirteen
- * env-backed thresholds) never included a merchandising "low stock" line.
- * This is a fixed operational cutoff for the panel's own alerting, kept
- * local to this module rather than promoted to a section nobody asked for.
- */
-const LOW_STOCK_THRESHOLD_UNITS = 5;
+import { lowStockMatchExpr } from "../inventory.service.js";
+import { settingsService } from "../settings.service.js";
 
 const availableExpr = { $subtract: ["$onHand", "$reserved"] };
 
@@ -20,12 +14,8 @@ export async function countOutOfStockSkus(): Promise<number> {
   return InventoryItem.countDocuments({ $expr: { $lte: [availableExpr, 0] } }).exec();
 }
 
-async function countLowStockSkus(): Promise<number> {
-  return InventoryItem.countDocuments({
-    $expr: {
-      $and: [{ $gt: [availableExpr, 0] }, { $lte: [availableExpr, LOW_STOCK_THRESHOLD_UNITS] }],
-    },
-  }).exec();
+async function countLowStockSkus(defaultThreshold: number): Promise<number> {
+  return InventoryItem.countDocuments({ $expr: lowStockMatchExpr(defaultThreshold) }).exec();
 }
 
 interface CommittedUnitsRow {
@@ -39,6 +29,8 @@ interface CommittedUnitsRow {
  * doesn't become less true because the admin filtered to last month.
  */
 export async function getInventoryStats(range: StatsRange): Promise<InventoryStats> {
+  const { inventory } = await settingsService.get();
+
   const [committedRows, outOfStockSkus, lowStockSkus] = await Promise.all([
     StockReservation.aggregate<CommittedUnitsRow>([
       {
@@ -50,7 +42,7 @@ export async function getInventoryStats(range: StatsRange): Promise<InventorySta
       { $group: { _id: null, units: { $sum: "$qty" } } },
     ]).exec(),
     countOutOfStockSkus(),
-    countLowStockSkus(),
+    countLowStockSkus(inventory.lowStockThresholdUnits),
   ]);
 
   return {

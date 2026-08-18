@@ -16,7 +16,7 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M8 — Shell del dashboard | 2 | ✅ Hecho (mergeado) | `feat/m08-dashboard-shell` | Arranca la fase 2. Ver detalle abajo |
 | M9 — Órdenes y cola de confirmación | 2 | ✅ Hecho (mergeado); verificación Stripe pospuesta a M10 | `feat/m09-ordenes` (mergeado) | Ver `docs/DESIGN_REFERENCES.md`. Ver detalle abajo |
 | M10 — Catálogo en admin | 2 | ✅ Funcionalmente hecho; ⚠️ verificación Stripe en curso | `feat/m10-catalogo-admin` (en `main`, commit directo sin `merge:` propio) | Ver detalle abajo |
-| M11 — Inventario, solicitudes, settings, analítica, auditoría | 2 | ⏳ Pendiente | — | Ver `docs/DESIGN_REFERENCES.md` |
+| M11 — Inventario, solicitudes, settings, analítica, auditoría | 2 | ✅ Funcionalmente hecho; cierra la fase 2 | `feat/m10-catalogo-admin` (aún no ramificado a `feat/m11-...`, ver notas) | Ver detalle abajo y `docs/DESIGN_REFERENCES.md` |
 | M12 — Catálogo público | 3 | ⏳ Pendiente | — | |
 | M13 — Carrito, checkout y cuenta | 3 | ⏳ Pendiente | — | |
 | M14 — Embajadores, patrocinios y SEO | 3 | ⏳ Pendiente | — | |
@@ -1145,3 +1145,139 @@ sustituida por tarjetas de alerta); rediseño del Sidebar a dos columnas (cambio
 decide aparte); arreglar el `search` roto de `/admin/applications` (no tocado por M10, deuda
 existente); reconciliar la fila de inventario cuando se renombra un SKU (la clave es
 `{itemType,itemId,sku}`, un rename deja la fila huérfana — conocido, sin resolver).
+
+---
+
+## M11 — Inventario, solicitudes, settings, analítica, auditoría
+
+Último milestone de la fase 2: cierra el dashboard de administración. Llena las cinco rutas que M8
+dejó reservadas (`/admin`, `/admin/inventario`, `/admin/solicitudes`, `/admin/configuracion`,
+`/admin/analitica`) más una sexta que no existía en ningún lado (`/admin/auditoria`, primera ruta
+`restrictTo("superadmin")` del proyecto — el rol se separó en M2 justo para esto).
+
+**Backend nuevo — dos superficies que no existían:**
+- **Lectura de auditoría** (`audit-log.service.ts` solo tenía escritura): `listAuditLogs(query)`,
+  validador (`action` contra la unión real de `AuditAction`, no texto libre), controlador, ruta
+  `GET /admin/audit-logs` montada bajo `restrictTo("superadmin")`. Índices nuevos en `AuditLog`
+  (`{createdAt:-1}`, `{module:1,createdAt:-1}`) porque los existentes solo servían consultas por
+  `targetId`.
+- **Umbral de stock bajo movido a `Settings.inventory.lowStockThresholdUnits`** (default 5,
+  reemplaza la constante privada hardcodeada de `stats/inventory.stats.ts`), con override opcional
+  por SKU en `InventoryItem.lowStockThreshold`.
+
+**El modelo de inventario, corregido a mitad de diseño por Manuel:** el plan original incluía un
+cuarto número derivado ("comprometido"). La regla real del negocio es que el inventario descuenta
+**al momento del pago**, no al crear la orden — `commit()` ya hacía exactamente eso desde M4. Lo
+pagado y sin despachar es un estado de la orden (`paid`/`processing`), no del inventario; sumarlo ahí
+habría contado la misma unidad dos veces. La pantalla terminó con tres números reales:
+`onHand` ("En bodega"), `reserved` ("Apartado", solo por un checkout en curso sin pagar) y
+`available` (el único que consume la tienda). Las variantes `on_request` no tienen fila de
+inventario ni reserva — se muestran como "Bajo pedido", nunca como "Agotado".
+
+**Entregado:**
+- **`GET /admin/inventory` enriquecido**: DTO con `product`/`variant` resueltos (nombre, marca,
+  imagen, talla, color, `fulfillmentMode`), filtro `stock=low|out` (umbral por SKU con fallback al
+  global), filtro por categoría raíz (expande a sus hijas, mismo patrón que `product.service.ts`),
+  `available` como campo ordenable. `GET /admin/inventory/summary` nuevo, conteos por categoría raíz
+  sin traer todas las filas.
+- **Stock inicial al crear un producto**: `variants[].initialStock` en el payload de creación de
+  bici/accesorio, solo para variantes `in_stock`. `createBike`/`createAccessory` ahora escriben dos
+  colecciones (producto + una `InventoryItem` por variante) dentro de `withOptionalTransaction` —
+  las dos aterrizan juntas o ninguna. En edición el campo es de solo lectura a propósito: un campo
+  editable ahí pisaría en silencio cualquier ajuste hecho desde `/admin/inventario` mientras el
+  formulario estaba abierto, sin auditoría. `VariantsEditor.tsx` gana el modo `mode: "create"|"edit"`
+  para esto; el "Ajustar" en modo edición **no se construyó** (ver "Fuera de este milestone").
+- **`/admin/inventario`** — la única de las seis pantallas que pasó por el flujo `shape` de
+  `impeccable` antes de construirse (las otras cuatro llegaron descritas como tabla+columnas, ver
+  nota de deuda de diseño abajo). Tres zonas de peso decreciente: **Reposición** (los SKUs en/bajo
+  umbral, peor primero — no un contador, la lista), **Por categoría** (dos pestañas Bicicletas/
+  Accesorios, bandas por categoría raíz sin envoltorio de tarjeta, colapsadas si sanas y abiertas si
+  tienen problemas) y **Captura** (`Registrar entrada` dorado, único acento de la vista — selector de
+  variante, nunca SKU libre a mano). Fila con `Disponible` como cifra dominante y `En bodega ·
+  Apartado` subordinado en `caption`, visible solo cuando `reserved > 0`. Ajuste por delta (por
+  defecto) o absoluto, motivo obligatorio en la UI aunque el backend lo deje opcional.
+- **`/admin/solicitudes`**: tabs por estatus (Pendientes con badge de conteo / Aprobadas /
+  Rechazadas) + filtro de tipo, `SlideOver` de detalle, rechazo con motivo 5–300 caracteres.
+- **`/admin/configuracion`**: seis `SettingsSectionCard` independientes, cada una su propio
+  formulario con envío/error propios — hace visible en la UI la garantía de que guardar una sección
+  no toca las otras cinco.
+- **`/admin` (Inicio)**: fila de 4 `AlertCard` (pedidos entrantes, stock agotado, problemas con
+  órdenes, solicitudes pendientes) en vez de campanita de notificaciones — decisión tomada con Manuel
+  viendo que centralizar cuatro alertas distintas en un solo dropdown las vuelve indistinguibles.
+  Debajo, `StatsRangePicker` + 4 `StatCard` + gráfico de órdenes por día + top-5 más vendidos.
+- **`/admin/analitica`**: una sola llamada a `GET /admin/stats/overview` (resuelve la ventana una vez,
+  la comparte entre módulos), cuatro barras rankeadas (top 10), tabla de órdenes por estatus,
+  `StatCard`s de inventario/solicitudes.
+- **`/admin/auditoria`** (nueva, `superadmin` únicamente): filtros de módulo/acción/rango de fechas,
+  tabla, `SlideOver` con `before`/`after` formateados. Solo lectura, sin acciones.
+- **Gráficos hechos a mano en SVG, sin librería** (`components/charts/`: `chart-theme.ts`,
+  `ChartCard.tsx`, `OrdersByDayChart.tsx`, `RankedBarChart.tsx`) — decisión tomada durante el
+  milestone, ver "Cambios de alcance" abajo. Una sola serie por gráfico siempre: `validate_palette.js`
+  del skill `dataviz` confirma que este sistema no tiene paleta categórica (grafito+dorado falla como
+  categórica, el trío `estado-*` falla por contraste) y no se le puede inventar una sin romper la
+  regla del acento único. La barra `#1` de cada ranking lleva el único dorado con su valor etiquetado;
+  el resto va en grafito sin etiqueta, con `<title>` nativo al hover.
+- **Gating por rol, capa nueva completa**: `NavItem.roles?`, `Sidebar`/`CommandPalette` filtran por
+  `user.role`, `requireSuperadminSession()` en el servidor (la barrera real es
+  `restrictTo("superadmin")` en la API; esto solo evita el 403 feo).
+- Cinco módulos nuevos en `apps/web/src/lib/api/` (`admin-inventory`, `admin-applications`,
+  `admin-settings`, `admin-stats`, `admin-audit-logs`), cada uno con whitelist explícita de query
+  params espejando el schema Joi correspondiente.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm -r exec tsc --noEmit              → limpio
+pnpm --filter @bw-bikes/api lint && pnpm --filter @bw-bikes/web lint   → limpio
+pnpm --filter @bw-bikes/web test       → 58 archivos, 330/330
+API_URL=http://localhost:4000 pnpm -r build   → limpio, 26 rutas (ver bug de build abajo)
+pnpm audit --prod                      → sin vulnerabilidades conocidas
+```
+**API — sin corrida 100% limpia al momento de escribir esto:** tres corridas completas de
+`pnpm --filter @bw-bikes/api test` (44 archivos) dieron cada una **un solo archivo distinto** roto
+(`catalog-product-deletion.test.ts`, `settings.test.ts`, `order-fulfillment.test.ts` en corridas
+separadas) — mismo patrón de contención por recursos ya diagnosticado y corregido al cerrar M10
+(`poolOptions.forks.maxForks: 4`), reapareciendo porque el conteo de archivos creció de 39 a 44.
+Ninguno de los tests que fallaron pertenece a este milestone, y el propio `git status` durante esta
+sesión mostró archivos de mailer/Stripe modificados que no son míos — consistente con otra sesión
+trabajando en paralelo sobre el mismo checkout. Se deja como flake conocido, sin re-tunear
+`maxForks` todavía; si vuelve a aparecer de forma consistente en el mismo archivo, deja de ser flake.
+
+**Bug de build encontrado y corregido durante este milestone:** `pnpm -r build` fallaba con
+`TypeError: createContext is not a function` al recolectar datos de `/admin`. Diagnosticado por
+bisección con `next build --debug-build-paths` (no por intuición): no era Turbopack, no era la
+versión de Recharts (falló igual con v3 y v2), no era ninguna de las otras cinco pantallas — era
+`AlertCard.tsx`, que importaba `ArrowRight` de `@phosphor-icons/react` (variante cliente) en vez de
+`@phosphor-icons/react/ssr`. Al ser importado directo por `page.tsx` (Server Component), Next evalúa
+`AlertCard` como Server Component también, y el `createContext()` interno del paquete cliente rompe
+bajo la condición `react-server`. Corregido cambiando el import.
+
+**Cambios de alcance decididos durante la implementación:**
+- **Recharts, removido por completo** en favor de SVG hecho a mano. El plan original decía Recharts;
+  la investigación del bug de arriba mostró que el paquete no está marcado `"use client"` y sigue
+  siendo un riesgo latente para cualquier uso futuro cerca de un Server Component, incluso ya
+  corregido el bug puntual de `AlertCard`. Sin dependencia de charts, cero riesgo de esa clase.
+- **`VariantsEditor` en modo edición no gana "Ajustar"**: el plan lo dejaba como un solo componente
+  `StockAdjustDialog` reusado entre inventario y catálogo. Se construyó el `StockAdjustDialog` y se
+  usa en `/admin/inventario`; enlazarlo también desde la edición de producto se dejó fuera para no
+  desestabilizar `ProductEditor.tsx`, que sigue evolucionando. El stock se ajusta desde
+  `/admin/inventario`, que es la pantalla dueña de esa operación.
+- **`StatCard.tsx` no se tocó.** Existe desde antes de este milestone (construido en una sesión
+  concurrente) con un acento `border-l-4` — un side-stripe, prohibición absoluta del skill
+  `impeccable`. Queda documentado como deuda; no se corrigió unilateralmente porque es infraestructura
+  compartida fuera de la propiedad de M11.
+
+**Deuda de diseño heredada:** solo `/admin/inventario` pasó por el flujo `shape` de `impeccable`
+completo. Las otras cinco pantallas se construyeron sobre patrones ya validados por M9/M10
+(tabla + filtros + `SlideOver`, formularios independientes) sin una sesión de diseño dedicada —
+riesgo más agudo en Inicio y Analítica, donde el reflejo de categoría ("panel admin → KPIs →
+gráfico") es más fuerte.
+
+**Fuera de este milestone:** `search` roto de `/admin/applications` (deuda ya conocida, no tocada);
+`revenueByDay` en stats; historial de movimientos de stock; exportación a CSV; comparación contra
+periodo anterior; reconciliar la fila de inventario huérfana al renombrar un SKU; estado de filtros
+en la URL; rediseño del Sidebar a dos columnas; un campo `allowBackorder` propio (se reusa
+`fulfillmentMode: "on_request"`); un tercer contador `allocated` en `InventoryItem` (no existe —
+ver corrección del modelo de datos arriba); cambiar `fulfillmentMode` desde inventario (se edita en
+`VariantsEditor`). Ninguna operación de git — este trabajo queda sin commitear, a la espera de
+revisión y aprobación explícita de Manuel.

@@ -110,3 +110,72 @@ export type AuditAction =
   | "settings.shipping_updated"
   | "settings.applications_updated"
   | "settings.jobs_updated";
+
+/**
+ * Runtime mirror of `AuditAction`, for the one place that needs the values as
+ * data rather than as a type — the audit-log viewer's `action` query filter
+ * (`GET /admin/audit-logs`, M11), validated with `Joi.valid(...AUDIT_ACTIONS)`
+ * instead of accepting free text. `satisfies readonly AuditAction[]` is what
+ * keeps the two lists from drifting: adding a value to the union without
+ * mirroring it here fails `tsc`, the same discipline `SETTINGS_SECTIONS`
+ * uses for `SettingsSectionName`.
+ */
+export const AUDIT_ACTIONS = [
+  "admin.login",
+  "admin.two_factor_enrolled",
+  "admin.two_factor_disabled",
+  "catalog.category_created",
+  "catalog.category_updated",
+  "catalog.category_deleted",
+  "catalog.category_image_updated",
+  "catalog.brand_created",
+  "catalog.brand_updated",
+  "catalog.brand_deleted",
+  "catalog.brand_logo_updated",
+  "catalog.badge_created",
+  "catalog.badge_updated",
+  "catalog.badge_deleted",
+  "catalog.spec_template_created",
+  "catalog.spec_template_updated",
+  "catalog.spec_template_deleted",
+  "catalog.size_template_created",
+  "catalog.size_template_updated",
+  "catalog.size_template_deleted",
+  "catalog.product_created",
+  "catalog.product_updated",
+  "catalog.product_archived",
+  "catalog.product_restored",
+  "catalog.product_deleted",
+  "catalog.gallery_updated",
+  "catalog.geometry_image_updated",
+  "catalog.spec_groups_updated",
+  "inventory.item_created",
+  "inventory.stock_adjusted",
+  "inventory.reservation_expired",
+  "order.created",
+  "order.authorized",
+  "order.paid",
+  "order.supplier_confirmed",
+  "order.supplier_rejected",
+  "order.cancelled",
+  "order.authorization_expiring",
+  "order.authorization_expired",
+  "order.refunded",
+  "order.disputed",
+  "order.reconciled",
+  "order.shipping_address_updated",
+  "order.shipped",
+  "order.shipment_updated",
+  "order.bulk_status_updated",
+  "order.priority_updated",
+  "order.note_added",
+  "application.submitted",
+  "application.approved",
+  "application.rejected",
+  "settings.inventory_updated",
+  "settings.orders_updated",
+  "settings.pricing_updated",
+  "settings.shipping_updated",
+  "settings.applications_updated",
+  "settings.jobs_updated",
+] as const satisfies readonly AuditAction[];

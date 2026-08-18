@@ -19,6 +19,14 @@ export interface VariantRow {
   fulfillmentMode: FulfillmentMode;
   preorderReleaseDate?: string;
   isActive: boolean;
+  /**
+   * Physical stock to seed on creation (M11) — plain text like `priceInput`,
+   * parsed to an integer only when the product is actually saved. Write-only
+   * and create-only: `ProductEditor` never populates this from an existing
+   * product, and `VariantsEditor` doesn't render the field at all in `mode:
+   * "edit"` — see that prop's own doc comment for why.
+   */
+  initialStock?: string;
 }
 
 export function emptyVariantRow(): VariantRow {
@@ -81,6 +89,17 @@ export interface VariantsEditorProps {
   onChange: (variants: VariantRow[]) => void;
   /** True when the product's category doesn't manage sizes — `SizePicker` isn't rendered, so this component owns the empty state and the affordance to add the product's single implicit "Sin talla" group. */
   sizeless?: boolean;
+  /**
+   * `"create"` shows the Stock inicial field (`in_stock` rows only — an
+   * `on_request`/`preorder` variant holds no stock, so the field is skipped
+   * for those the same way the preorder-only date field skips everything
+   * else). `"edit"` never renders it: stock capture only happens once, at
+   * creation — editing an existing variant's stock here would silently
+   * overwrite whatever `/admin/inventario` adjusted since the form opened,
+   * with no reason and no audit entry. Adjusting existing stock stays a
+   * dedicated action on that screen instead.
+   */
+  mode: "create" | "edit";
 }
 
 /**
@@ -92,7 +111,7 @@ export interface VariantsEditorProps {
  * `SizePicker` removes the whole group the instant its last row goes away,
  * so there's nothing here to clean up on this side.
  */
-export function VariantsEditor({ variants, onChange, sizeless = false }: VariantsEditorProps) {
+export function VariantsEditor({ variants, onChange, sizeless = false, mode }: VariantsEditorProps) {
   const duplicates = findDuplicateSkuIndices(variants);
   const groups = groupBySize(variants);
 
@@ -180,6 +199,18 @@ export function VariantsEditor({ variants, onChange, sizeless = false }: Variant
                       <div aria-hidden="true" />
                     )}
                   </div>
+
+                  {mode === "create" && row.fulfillmentMode === "in_stock" ? (
+                    <Input
+                      label="Stock inicial"
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={row.initialStock ?? ""}
+                      onChange={(event) => updateRow(index, { initialStock: event.target.value })}
+                      helper="Unidades en bodega al crear el producto. Después se ajusta desde Inventario."
+                      wrapperClassName="sm:max-w-[12rem]"
+                    />
+                  ) : null}
 
                   <div className="flex items-center justify-between">
                     <Toggle

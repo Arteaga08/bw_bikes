@@ -11,6 +11,7 @@
     "lint": "eslint src",
     "test": "vitest run",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
+    "seed:test-orders": "tsx src/scripts/seed-test-orders.ts",
     "migrate:brands": "tsx src/scripts/migrate-brands.ts"
   },
   "dependencies": {
@@ -31,6 +32,7 @@
     "pino": "^9.4.0",
     "pino-http": "^10.3.0",
     "pino-pretty": "^11.2.2",
+    "resend": "^6.20.0",
     "sharp": "^0.35.3",
     "stripe": "^22.4.0",
     "xss": "^1.0.15"

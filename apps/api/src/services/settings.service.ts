@@ -46,6 +46,7 @@ function toAdminSettings(doc: ISettings): AdminSettings {
     inventory: {
       stockReservationTtlMinutes: doc.inventory.stockReservationTtlMinutes,
       reservationRetentionDays: doc.inventory.reservationRetentionDays,
+      lowStockThresholdUnits: doc.inventory.lowStockThresholdUnits,
     },
     orders: {
       orderPaymentTtlMinutes: doc.orders.orderPaymentTtlMinutes,

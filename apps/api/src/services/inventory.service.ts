@@ -1,6 +1,11 @@
 import type {
+  AdminInventoryItem,
+  AdminInventoryProductInfo,
+  AdminInventoryVariantInfo,
   FulfillmentMode,
   InventoryAvailability,
+  InventorySummary,
+  InventorySummaryGroup,
   ItemType,
   ReservationReferenceType,
 } from "@bw-bikes/shared";
@@ -10,7 +15,9 @@ import { logger } from "../config/logger.js";
 import type { IInventoryItem, IStockReservation } from "../models/index.js";
 import {
   Accessory,
+  AccessoryCategory,
   Bike,
+  BikeCategory,
   InventoryItem,
   MAX_ON_HAND,
   MAX_RESERVATION_QTY,
@@ -23,7 +30,7 @@ import { settingsService } from "./settings.service.js";
 
 const MODULE_NAME = "inventory";
 
-const SORTABLE_FIELDS = ["createdAt", "sku", "onHand"] as const;
+const SORTABLE_FIELDS = ["createdAt", "sku", "onHand", "available"] as const;
 
 /** Cap on one expiry sweep, so a long backlog can't hold the event loop hostage. */
 const EXPIRY_BATCH_SIZE = 500;
@@ -35,6 +42,28 @@ const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE;
 const CATALOG_MODELS: Record<ItemType, Model<{ variants: { sku: string }[] }>> = {
   bike: Bike as unknown as Model<{ variants: { sku: string }[] }>,
   accessory: Accessory as unknown as Model<{ variants: { sku: string }[] }>,
+};
+
+/**
+ * Same mapping, wider projection — `Bike`/`Accessory` are two genuinely
+ * distinct Mongoose models, so a plain `itemType === "bike" ? Bike :
+ * Accessory` ternary produces a union of incompatible overloaded `.find()`
+ * signatures TS can't call. Routing through one record typed against the
+ * shape every read here actually needs sidesteps that, the same way
+ * `CATALOG_MODELS` above already does for `assertVariantExists`.
+ */
+interface CatalogProductDoc {
+  _id: Types.ObjectId;
+  name: string;
+  brand: unknown;
+  category: Types.ObjectId;
+  gallery: { url: string; order: number }[];
+  variants: { sku: string; size?: string; color?: string; fulfillmentMode: FulfillmentMode }[];
+}
+
+const CATALOG_LOOKUP_MODELS: Record<ItemType, Model<CatalogProductDoc>> = {
+  bike: Bike as unknown as Model<CatalogProductDoc>,
+  accessory: Accessory as unknown as Model<CatalogProductDoc>,
 };
 
 const ITEM_TYPE_LABELS: Record<ItemType, string> = {
@@ -79,6 +108,14 @@ export interface CreateInventoryItemInput {
   itemId: string;
   sku: string;
   onHand?: number;
+  lowStockThreshold?: number;
+}
+
+/** One `productVariantSchema` row's worth of what `seedInitialStock` needs — never the full `ProductVariant`, so this stays agnostic of every other field a variant carries. */
+export interface InitialStockVariant {
+  sku: string;
+  fulfillmentMode: FulfillmentMode;
+  initialStock?: number;
 }
 
 export interface AdjustStockInput {
@@ -118,23 +155,111 @@ function toAvailability(item: IInventoryItem): InventoryAvailability {
 }
 
 /**
- * What the admin endpoints return. Built field by field like the catalog DTOs
- * rather than shipping the raw document, because `available` is the number the
- * panel actually acts on and it exists nowhere in the stored shape.
+ * A SKU counts as low stock at or below its **effective** threshold: its own
+ * `lowStockThreshold` override if one was set, otherwise the store-wide
+ * `Settings.inventory.lowStockThresholdUnits` (M11). Exported so
+ * `services/stats/inventory.stats.ts` reads the exact same definition of "low
+ * stock" as the admin list's `stock=low` filter, not a second one that could
+ * drift from this one — `stats/` depends on this module, never the reverse.
  */
-export interface AdminInventoryItem extends InventoryAvailability {
-  id: string;
-  createdAt: Date;
-  updatedAt: Date;
+export function lowStockMatchExpr(defaultThreshold: number): Record<string, unknown> {
+  const availableExpr = { $subtract: ["$onHand", "$reserved"] };
+  const thresholdExpr = { $ifNull: ["$lowStockThreshold", defaultThreshold] };
+  return { $and: [{ $gt: [availableExpr, 0] }, { $lte: [availableExpr, thresholdExpr] }] };
 }
 
-function toAdminInventoryItem(item: IInventoryItem): AdminInventoryItem {
+/** What a row is stock *for* — resolved by joining against the catalog, never stored on the row. */
+interface CatalogLookupEntry {
+  name: string;
+  brandName: string;
+  imageUrl?: string;
+  variants: { sku: string; size?: string; color?: string; fulfillmentMode: FulfillmentMode }[];
+}
+
+/**
+ * Batch-resolves name/brand/gallery/variants for a page of inventory rows,
+ * grouped by `itemType` since bikes and accessories are separate collections.
+ * Same "join after the page, not per row" shape `AdminApplication`'s
+ * `applicant` field already uses — two queries per page at most, never N+1.
+ */
+async function loadCatalogLookup(items: IInventoryItem[]): Promise<Map<string, CatalogLookupEntry>> {
+  const idsByType: Record<ItemType, Types.ObjectId[]> = { bike: [], accessory: [] };
+  for (const item of items) idsByType[item.itemType].push(item.itemId);
+
+  const lookup = new Map<string, CatalogLookupEntry>();
+
+  for (const itemType of ["bike", "accessory"] as const) {
+    const ids = idsByType[itemType];
+    if (ids.length === 0) continue;
+
+    const docs = await CATALOG_LOOKUP_MODELS[itemType]
+      .find({ _id: { $in: ids } })
+      .select("name brand gallery variants")
+      .populate("brand", "name")
+      .exec();
+
+    for (const doc of docs) {
+      const brandDoc = doc.brand as unknown as { name: string } | null;
+      const gallery = [...doc.gallery].sort((a, b) => a.order - b.order);
+      lookup.set(String(doc._id), {
+        name: doc.name,
+        brandName: brandDoc?.name ?? "",
+        imageUrl: gallery[0]?.url,
+        variants: doc.variants,
+      });
+    }
+  }
+
+  return lookup;
+}
+
+/**
+ * What the admin endpoints return. Built field by field like the catalog DTOs
+ * rather than shipping the raw document, because `available` (and now
+ * `product`/`variant`/the effective threshold) is what the panel actually
+ * acts on, and none of it exists on the stored row.
+ */
+function toAdminInventoryItem(
+  item: IInventoryItem,
+  lookup: Map<string, CatalogLookupEntry>,
+  defaultThreshold: number,
+): AdminInventoryItem {
+  const entry = lookup.get(String(item.itemId));
+  const matchedVariant = entry?.variants.find((variant) => variant.sku === item.sku);
+
+  const product: AdminInventoryProductInfo | null = entry
+    ? {
+        name: entry.name,
+        brand: entry.brandName,
+        ...(entry.imageUrl !== undefined ? { imageUrl: entry.imageUrl } : {}),
+      }
+    : null;
+
+  const variant: AdminInventoryVariantInfo | null = matchedVariant
+    ? {
+        ...(matchedVariant.size ? { size: matchedVariant.size } : {}),
+        ...(matchedVariant.color ? { color: matchedVariant.color } : {}),
+        fulfillmentMode: matchedVariant.fulfillmentMode,
+      }
+    : null;
+
   return {
     id: String(item._id),
     ...toAvailability(item),
-    createdAt: item.createdAt,
-    updatedAt: item.updatedAt,
+    product,
+    variant,
+    lowStockThresholdUnits: item.lowStockThreshold ?? defaultThreshold,
+    ...(item.lastRestockedAt ? { lastRestockedAt: item.lastRestockedAt.toISOString() } : {}),
+    createdAt: item.createdAt.toISOString(),
+    updatedAt: item.updatedAt.toISOString(),
   };
+}
+
+/** Single-item version of the same enrichment, for the create/get/adjust endpoints that hand back one row. */
+async function toEnrichedAdminItem(item: IInventoryItem): Promise<AdminInventoryItem> {
+  const { inventory } = await settingsService.get();
+  const lookup = await loadCatalogLookup([item]);
+  return toAdminInventoryItem(item, lookup, inventory.lowStockThresholdUnits);
 }
 
 /**
@@ -549,39 +674,183 @@ async function findByIdOrFail(id: string): Promise<IInventoryItem> {
 }
 
 /**
+ * A root category's product ids, its own plus its children's — `itemType`
+ * picks which of the two independent trees (bikes/accessories) the id
+ * belongs to. Same "parent filter expands to children" shape
+ * `product.service.ts`'s `buildFilter` already uses for the public catalog.
+ */
+async function categoryProductIds(itemType: ItemType, categoryId: string): Promise<Types.ObjectId[]> {
+  const CategoryModel = itemType === "bike" ? BikeCategory : AccessoryCategory;
+
+  const children = await CategoryModel.find({ parent: categoryId }).select("_id").exec();
+  const categoryIds = [new Types.ObjectId(categoryId), ...children.map((child) => child._id as Types.ObjectId)];
+
+  const products = await CATALOG_LOOKUP_MODELS[itemType]
+    .find({ category: { $in: categoryIds } })
+    .select("_id")
+    .exec();
+  return products.map((product) => product._id);
+}
+
+export interface ListInventoryItemsResult {
+  items: AdminInventoryItem[];
+  meta: ReturnType<typeof buildMeta>;
+}
+
+/**
  * Named query params only — the client's query object is never spread into the
  * filter, which is what stops `?sku[$ne]=x` from becoming a Mongo operator.
  */
-async function listItems(query: Record<string, unknown>): Promise<{
-  documents: IInventoryItem[];
-  meta: ReturnType<typeof buildMeta>;
-}> {
+async function listItems(query: Record<string, unknown>): Promise<ListInventoryItemsResult> {
   const { page, limit, skip, sort, search } = parseListQuery(query, {
     allowedSortFields: SORTABLE_FIELDS,
     defaultSort: "-createdAt",
   });
 
+  const { inventory } = await settingsService.get();
+
   const filter: Record<string, unknown> = {};
   const itemType = query["itemType"];
   if (typeof itemType === "string") filter["itemType"] = itemType;
 
+  // `itemId` (one specific product) is more specific than `category` (a
+  // whole root and its children), so it wins if a caller somehow sends both.
   const itemId = query["itemId"];
-  if (typeof itemId === "string") filter["itemId"] = toObjectId(itemId, "producto");
+  const category = query["category"];
+  if (typeof itemId === "string") {
+    filter["itemId"] = toObjectId(itemId, "producto");
+  } else if (typeof category === "string") {
+    if (typeof itemType !== "string") {
+      throw new AppError("Para filtrar por categoría también debes indicar el tipo de producto.", 400);
+    }
+    // Joi already restricted `itemType` to the `ItemType` enum before this
+    // service ever sees the query — the cast just tells TS what validation
+    // already guarantees.
+    filter["itemId"] = { $in: await categoryProductIds(itemType as ItemType, category) };
+  }
 
   if (search !== undefined) filter["sku"] = { $regex: escapeRegex(search), $options: "i" };
 
-  const [documents, total] = await Promise.all([
-    InventoryItem.find(filter).sort(sort).skip(skip).limit(limit).exec(),
-    InventoryItem.countDocuments(filter).exec(),
-  ]);
+  const stock = query["stock"];
+  if (stock === "out") {
+    filter["$expr"] = { $lte: [{ $subtract: ["$onHand", "$reserved"] }, 0] };
+  } else if (stock === "low") {
+    filter["$expr"] = lowStockMatchExpr(inventory.lowStockThresholdUnits);
+  }
 
-  return { documents, meta: buildMeta(total, page, limit) };
+  const [sortField, sortDirection] = Object.entries(sort)[0] as [string, 1 | -1];
+
+  let documents: IInventoryItem[];
+  let total: number;
+
+  if (sortField === "available") {
+    // Not a stored field — `.sort()` on `find()` can't order by it, so this
+    // one path goes through an aggregation that computes it first.
+    [documents, total] = await Promise.all([
+      InventoryItem.aggregate<IInventoryItem>([
+        { $match: filter },
+        { $addFields: { available: { $subtract: ["$onHand", "$reserved"] } } },
+        { $sort: { available: sortDirection } },
+        { $skip: skip },
+        { $limit: limit },
+      ]).exec(),
+      InventoryItem.countDocuments(filter).exec(),
+    ]);
+  } else {
+    [documents, total] = await Promise.all([
+      InventoryItem.find(filter).sort(sort).skip(skip).limit(limit).exec(),
+      InventoryItem.countDocuments(filter).exec(),
+    ]);
+  }
+
+  const lookup = await loadCatalogLookup(documents);
+  const items = documents.map((doc) => toAdminInventoryItem(doc, lookup, inventory.lowStockThresholdUnits));
+
+  return { items, meta: buildMeta(total, page, limit) };
 }
 
 /**
- * Inventory rows are created explicitly by the admin, not derived from the
- * catalog — but the triplet still has to point at a variant that exists, or
- * the row would be stock for nothing that can be sold.
+ * Category rollups for the inventory panel's band headers (M11) — total
+ * SKUs, out-of-stock and low-stock counts per root category, without
+ * fetching every row just to paint a summary. One pair of queries per root
+ * (its product ids, then an aggregate over their inventory rows) rather than
+ * a single cross-collection pipeline — the category count this milestone
+ * targets (~5 roots) doesn't justify the complexity of a `$facet`/
+ * `$unionWith` across two catalogs.
+ */
+async function getSummary(): Promise<InventorySummary> {
+  const { inventory } = await settingsService.get();
+  const groups: InventorySummaryGroup[] = [];
+
+  for (const itemType of ["bike", "accessory"] as const) {
+    const CategoryModel = itemType === "bike" ? BikeCategory : AccessoryCategory;
+
+    const roots = await CategoryModel.find({ parent: null }).sort({ order: 1, name: 1 }).exec();
+
+    for (const root of roots) {
+      const children = await CategoryModel.find({ parent: root._id }).select("_id").exec();
+      const categoryIds = [root._id as Types.ObjectId, ...children.map((child) => child._id as Types.ObjectId)];
+      const products = await CATALOG_LOOKUP_MODELS[itemType]
+        .find({ category: { $in: categoryIds } })
+        .select("_id")
+        .exec();
+      const productIds = products.map((product) => product._id);
+
+      if (productIds.length === 0) {
+        groups.push({
+          itemType,
+          categoryId: String(root._id),
+          categoryName: root.name,
+          totalSkus: 0,
+          outOfStockSkus: 0,
+          lowStockSkus: 0,
+        });
+        continue;
+      }
+
+      const [row] = await InventoryItem.aggregate<{ total: number; outOfStock: number; lowStock: number }>([
+        { $match: { itemType, itemId: { $in: productIds } } },
+        {
+          $addFields: {
+            available: { $subtract: ["$onHand", "$reserved"] },
+            threshold: { $ifNull: ["$lowStockThreshold", inventory.lowStockThresholdUnits] },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            outOfStock: { $sum: { $cond: [{ $lte: ["$available", 0] }, 1, 0] } },
+            lowStock: {
+              $sum: { $cond: [{ $and: [{ $gt: ["$available", 0] }, { $lte: ["$available", "$threshold"] }] }, 1, 0] },
+            },
+          },
+        },
+      ]).exec();
+
+      groups.push({
+        itemType,
+        categoryId: String(root._id),
+        categoryName: root.name,
+        totalSkus: row?.total ?? 0,
+        outOfStockSkus: row?.outOfStock ?? 0,
+        lowStockSkus: row?.lowStock ?? 0,
+      });
+    }
+  }
+
+  return { groups };
+}
+
+/**
+ * Inventory rows are created by hand — either through this endpoint, or
+ * since M11 seeded transactionally when a product is created with initial
+ * stock (`seedInitialStock`) — never derived from the catalog on their own.
+ * But the triplet still has to point at a variant that exists, or the row
+ * would be stock for nothing that can be sold. `seedInitialStock` skips this
+ * check on purpose: its variants come from the very payload the same
+ * transaction is writing, so re-validating against a document that hasn't
+ * committed yet would be redundant.
  */
 async function assertVariantExists(itemType: ItemType, itemId: Types.ObjectId, sku: string): Promise<void> {
   const catalogModel = CATALOG_MODELS[itemType];
@@ -594,6 +863,19 @@ async function assertVariantExists(itemType: ItemType, itemId: Types.ObjectId, s
 
 function isDuplicateKeyError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
+}
+
+/** Shared by the manual `POST /admin/inventory` and `seedInitialStock`'s per-row logging, so the two paths that create a row write the same audit shape. */
+async function recordItemCreatedAudit(item: IInventoryItem, actor: ActorContext): Promise<void> {
+  await recordAuditLog({
+    actorId: actor.actorId,
+    actorType: "user",
+    action: "inventory.item_created",
+    module: MODULE_NAME,
+    targetId: String(item._id),
+    after: { itemType: item.itemType, sku: item.sku, onHand: item.onHand },
+    ip: actor.ip,
+  });
 }
 
 async function createItem(input: CreateInventoryItemInput, actor: ActorContext): Promise<IInventoryItem> {
@@ -609,6 +891,7 @@ async function createItem(input: CreateInventoryItemInput, actor: ActorContext):
       itemId,
       sku: input.sku,
       onHand: input.onHand ?? 0,
+      ...(input.lowStockThreshold !== undefined ? { lowStockThreshold: input.lowStockThreshold } : {}),
     });
   } catch (error) {
     if (isDuplicateKeyError(error)) {
@@ -617,17 +900,37 @@ async function createItem(input: CreateInventoryItemInput, actor: ActorContext):
     throw error;
   }
 
-  await recordAuditLog({
-    actorId: actor.actorId,
-    actorType: "user",
-    action: "inventory.item_created",
-    module: MODULE_NAME,
-    targetId: String(item._id),
-    after: { itemType: item.itemType, sku: item.sku, onHand: item.onHand },
-    ip: actor.ip,
-  });
+  await recordItemCreatedAudit(item, actor);
 
   return item;
+}
+
+/**
+ * Seeds one `InventoryItem` row per `in_stock` variant carrying a positive
+ * `initialStock` — called from inside `bike.service.ts`/`accessory.service.ts`'s
+ * create transaction (M11), never on its own. `on_request`/`preorder`
+ * variants are skipped (they hold no stock, the same rule `reserve()`
+ * enforces), and so is a missing or zero `initialStock`. `assertVariantExists`
+ * is deliberately not called — see that function's own doc comment.
+ */
+async function seedInitialStock(
+  itemType: ItemType,
+  itemId: Types.ObjectId,
+  variants: InitialStockVariant[],
+  session: ClientSession | undefined,
+): Promise<IInventoryItem[]> {
+  const created: IInventoryItem[] = [];
+
+  for (const variant of variants) {
+    if (variant.fulfillmentMode !== "in_stock") continue;
+    const onHand = variant.initialStock ?? 0;
+    if (onHand <= 0) continue;
+
+    const [item] = await InventoryItem.create([{ itemType, itemId, sku: variant.sku, onHand }], { session });
+    if (item) created.push(item);
+  }
+
+  return created;
 }
 
 /**
@@ -654,7 +957,14 @@ async function adjustStock(id: string, input: AdjustStockInput, actor: ActorCont
         { $lte: [{ $add: ["$onHand", input.delta] }, MAX_ON_HAND] },
       ],
     };
-    update = { $inc: { onHand: input.delta } };
+    // `lastRestockedAt` moves only on a positive delta — new stock actually
+    // arriving. A negative delta (write-off, damage) and an absolute `onHand`
+    // recount are both real stock movements, but neither one is "we got more
+    // in", which is the one question this timestamp answers.
+    update =
+      input.delta > 0
+        ? { $inc: { onHand: input.delta }, $set: { lastRestockedAt: new Date() } }
+        : { $inc: { onHand: input.delta } };
   } else {
     throw new AppError("Indica el nuevo stock físico (onHand) o un ajuste (delta).", 400);
   }
@@ -697,9 +1007,13 @@ export const inventoryService = {
   releaseExpiredReservations,
   getAvailability,
   listItems,
+  getSummary,
   findByIdOrFail,
   createItem,
   adjustStock,
+  seedInitialStock,
+  recordItemCreatedAudit,
+  toEnrichedAdminItem,
 };
 
-export { toAdminInventoryItem, toAvailability };
+export { toAvailability };

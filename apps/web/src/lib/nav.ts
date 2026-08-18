@@ -1,8 +1,10 @@
+import type { UserRole } from "@bw-bikes/shared";
 import type { Icon } from "@phosphor-icons/react";
 import {
   Bicycle,
   ChartBar,
   ClipboardText,
+  ClockCounterClockwise,
   Gear,
   Handshake,
   House,
@@ -19,6 +21,8 @@ export interface NavItem {
   href: string;
   icon: Icon;
   keywords: readonly string[];
+  /** Absent means every admin role sees it. Present restricts it to exactly those roles — M11's audit viewer is the first item to use this. */
+  roles?: readonly UserRole[];
 }
 
 export interface NavSection {
@@ -123,6 +127,13 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         keywords: ["analitica", "estadisticas", "reportes", "preferencias"],
       },
       { label: "Configuración", href: "/admin/configuracion", icon: Gear, keywords: ["configuracion", "ajustes", "settings"] },
+      {
+        label: "Auditoría",
+        href: "/admin/auditoria",
+        icon: ClockCounterClockwise,
+        keywords: ["auditoria", "bitacora", "log", "historial"],
+        roles: ["superadmin"],
+      },
     ],
   },
 ];

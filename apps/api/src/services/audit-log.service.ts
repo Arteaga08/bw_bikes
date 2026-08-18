@@ -1,7 +1,8 @@
-import type { AuditAction } from "@bw-bikes/shared";
+import type { AdminAuditLog, AuditAction } from "@bw-bikes/shared";
 import { Types } from "mongoose";
 import { logger } from "../config/logger.js";
 import { AuditLog, type IAuditLog } from "../models/index.js";
+import { buildMeta, parseListQuery } from "../utils/index.js";
 
 interface RecordAuditLogParams {
   actorId?: Types.ObjectId | string | undefined;
@@ -53,4 +54,90 @@ export async function listForTarget({
     .sort({ createdAt: -1 })
     .limit(limit)
     .exec();
+}
+
+interface PopulatedActor {
+  _id: Types.ObjectId;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
+function toAdminAuditLog(doc: IAuditLog): AdminAuditLog {
+  // `.populated("actorId")` is false both for a system entry (no `actorId`
+  // at all) and for a user entry whose `.populate()` didn't resolve (the
+  // account was deleted) — both correctly read back as `actor: null`.
+  const populatedActor = doc.populated("actorId") ? (doc.actorId as unknown as PopulatedActor) : undefined;
+
+  return {
+    id: String(doc._id),
+    actorType: doc.actorType,
+    actor: populatedActor
+      ? {
+          id: String(populatedActor._id),
+          email: populatedActor.email,
+          firstName: populatedActor.firstName,
+          lastName: populatedActor.lastName,
+        }
+      : null,
+    action: doc.action,
+    module: doc.module,
+    targetId: doc.targetId ? String(doc.targetId) : null,
+    ...(doc.before !== undefined ? { before: doc.before } : {}),
+    ...(doc.after !== undefined ? { after: doc.after } : {}),
+    ...(doc.ip !== undefined ? { ip: doc.ip } : {}),
+    createdAt: doc.createdAt.toISOString(),
+  };
+}
+
+const AUDIT_SORTABLE_FIELDS = ["createdAt"] as const;
+
+export interface ListAuditLogsResult {
+  logs: AdminAuditLog[];
+  meta: ReturnType<typeof buildMeta>;
+}
+
+/**
+ * The superadmin audit viewer's read surface (M11) — `GET /admin/audit-logs`.
+ * Unlike `listForTarget`, this is a general-purpose paginated listing: no
+ * `targetId` is assumed, and every filter is optional. Named query params
+ * only, same discipline as every other admin listing — the client's query
+ * object is never spread into the filter.
+ */
+export async function listAuditLogs(query: Record<string, unknown>): Promise<ListAuditLogsResult> {
+  const { page, limit, skip, sort } = parseListQuery(query, {
+    allowedSortFields: AUDIT_SORTABLE_FIELDS,
+    defaultSort: "-createdAt",
+  });
+
+  const filter: Record<string, unknown> = {};
+
+  if (typeof query["module"] === "string") filter["module"] = query["module"];
+  if (typeof query["action"] === "string") filter["action"] = query["action"];
+
+  const actorId = query["actorId"];
+  if (typeof actorId === "string" && Types.ObjectId.isValid(actorId)) {
+    filter["actorId"] = new Types.ObjectId(actorId);
+  }
+
+  const from = query["from"];
+  const to = query["to"];
+  if (typeof from === "string" || typeof to === "string") {
+    const range: Record<string, Date> = {};
+    if (typeof from === "string") range["$gte"] = new Date(from);
+    if (typeof to === "string") range["$lte"] = new Date(to);
+    filter["createdAt"] = range;
+  }
+
+  const [documents, total] = await Promise.all([
+    AuditLog.find(filter)
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .populate("actorId", "email firstName lastName")
+      .exec(),
+    AuditLog.countDocuments(filter).exec(),
+  ]);
+
+  return { logs: documents.map(toAdminAuditLog), meta: buildMeta(total, page, limit) };
 }

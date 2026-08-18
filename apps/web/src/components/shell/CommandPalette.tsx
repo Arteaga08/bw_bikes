@@ -1,5 +1,6 @@
 "use client";
 
+import type { UserRole } from "@bw-bikes/shared";
 import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import type { KeyboardEvent } from "react";
@@ -11,6 +12,7 @@ import { NAV_ITEMS_FLAT } from "@/lib/nav";
 export interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
+  role: UserRole;
 }
 
 /**
@@ -19,7 +21,7 @@ export interface CommandPaletteProps {
  * Search by label + keywords; arrow keys move selection, Enter navigates,
  * Escape closes.
  */
-export function CommandPalette({ open, onClose }: CommandPaletteProps) {
+export function CommandPalette({ open, onClose, role }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -27,13 +29,23 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
   useFocusTrap(containerRef, open);
 
+  // Filtered by role before search — without this, the palette would let an
+  // `admin` jump straight to `/admin/auditoria` by typing, bypassing the
+  // Sidebar hiding it. The API's own `restrictTo("superadmin")` is still the
+  // real barrier; this only keeps the palette from advertising a route the
+  // caller can't use.
+  const visibleItems = useMemo(
+    () => NAV_ITEMS_FLAT.filter((item) => item.roles === undefined || item.roles.includes(role)),
+    [role],
+  );
+
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return NAV_ITEMS_FLAT;
-    return NAV_ITEMS_FLAT.filter(
+    if (!term) return visibleItems;
+    return visibleItems.filter(
       (item) => item.label.toLowerCase().includes(term) || item.keywords.some((k) => k.includes(term)),
     );
-  }, [query]);
+  }, [query, visibleItems]);
 
   // Both adjustments below use React's "set state during render" pattern
   // (react-hooks/set-state-in-effect) instead of an Effect — neither

@@ -21,6 +21,15 @@ export const DEFAULT_RESERVATION_TTL_MINUTES = 30;
 export const DEFAULT_RESERVATION_RETENTION_DAYS = 30;
 
 /**
+ * Store-wide low-stock cutoff (M11) — moved here from a private constant in
+ * `services/stats/inventory.stats.ts` so the owner can tune it without a
+ * redeploy, same reasoning as every other threshold in this file. Same value
+ * as the constant it replaces, so a deploy that has never touched the admin
+ * panel keeps behaving identically.
+ */
+export const DEFAULT_LOW_STOCK_THRESHOLD_UNITS = 5;
+
+/**
  * How long an order may sit in `pending_payment` holding stock while the
  * customer completes the payment form. Shorter than the generic reservation
  * TTL on purpose — see `order.service.ts`'s `createFromCart`.
@@ -79,6 +88,7 @@ export const SETTINGS_DEFAULTS: SettingsSections = Object.freeze({
   inventory: Object.freeze({
     stockReservationTtlMinutes: DEFAULT_RESERVATION_TTL_MINUTES,
     reservationRetentionDays: DEFAULT_RESERVATION_RETENTION_DAYS,
+    lowStockThresholdUnits: DEFAULT_LOW_STOCK_THRESHOLD_UNITS,
   }),
   orders: Object.freeze({
     orderPaymentTtlMinutes: DEFAULT_ORDER_PAYMENT_TTL_MINUTES,

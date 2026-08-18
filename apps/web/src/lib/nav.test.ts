@@ -13,8 +13,8 @@ describe("NAV_SECTIONS", () => {
     expect(new Set(hrefs).size).toBe(hrefs.length);
   });
 
-  it("flattens to the fifteen real phase-2 destinations", () => {
-    expect(NAV_ITEMS_FLAT).toHaveLength(15);
+  it("flattens to the sixteen real phase-2 destinations", () => {
+    expect(NAV_ITEMS_FLAT).toHaveLength(16);
     expect(NAV_ITEMS_FLAT.map((item) => item.href)).toEqual([
       "/admin",
       "/admin/ordenes",
@@ -31,6 +31,15 @@ describe("NAV_SECTIONS", () => {
       "/admin/catalogo/accesorios",
       "/admin/analitica",
       "/admin/configuracion",
+      "/admin/auditoria",
     ]);
+  });
+
+  it("scopes Auditoría to superadmin — the one item not every admin role sees", () => {
+    const audit = NAV_ITEMS_FLAT.find((item) => item.href === "/admin/auditoria");
+    expect(audit?.roles).toEqual(["superadmin"]);
+    expect(NAV_ITEMS_FLAT.filter((item) => item.href !== "/admin/auditoria").every((item) => item.roles === undefined)).toBe(
+      true,
+    );
   });
 });

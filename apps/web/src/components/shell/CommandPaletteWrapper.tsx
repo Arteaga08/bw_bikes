@@ -1,5 +1,6 @@
 "use client";
 
+import type { UserRole } from "@bw-bikes/shared";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 
@@ -7,13 +8,17 @@ const CommandPalette = dynamic(() => import("./CommandPalette").then((mod) => mo
   ssr: false,
 });
 
+export interface CommandPaletteWrapperProps {
+  role: UserRole;
+}
+
 /**
  * Owns the `Cmd/Ctrl+K` shortcut and the open/closed state; the palette
  * itself is only ever imported after the first open (`everOpened` gates the
  * render that triggers `dynamic`'s `import()`), so its chunk never ships in
  * the initial bundle (DASHBOARD_GUIDELINES.md §2).
  */
-export function CommandPaletteWrapper() {
+export function CommandPaletteWrapper({ role }: CommandPaletteWrapperProps) {
   const [open, setOpen] = useState(false);
   const [everOpened, setEverOpened] = useState(false);
 
@@ -37,5 +42,5 @@ export function CommandPaletteWrapper() {
 
   if (!everOpened) return null;
 
-  return <CommandPalette open={open} onClose={() => setOpen(false)} />;
+  return <CommandPalette open={open} onClose={() => setOpen(false)} role={role} />;
 }

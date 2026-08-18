@@ -29,11 +29,19 @@ const onHand = Joi.number().integer().min(0).max(MAX_ON_HAND).messages({
  * counter, only ever moved by a reservation. Letting an admin set it would
  * hand them a way to make availability lie.
  */
+const lowStockThreshold = Joi.number().integer().min(0).max(MAX_ON_HAND).messages({
+  "number.base": "El umbral de stock bajo debe ser un número.",
+  "number.integer": "El umbral de stock bajo debe ser un número entero de unidades.",
+  "number.min": "El umbral de stock bajo no puede ser negativo.",
+  "number.max": `El umbral de stock bajo no puede exceder ${MAX_ON_HAND} unidades.`,
+});
+
 export const createInventoryItemSchema = Joi.object({
   itemType: itemType.required(),
   itemId: objectId.required().messages({ "string.pattern.base": "El producto es inválido." }),
   sku: sku.required(),
   onHand: onHand.default(0),
+  lowStockThreshold: lowStockThreshold.optional(),
 });
 
 /**
@@ -70,4 +78,10 @@ export const inventoryListQuerySchema = Joi.object({
   ...pagination,
   itemType: itemType.optional(),
   itemId: objectId.optional().messages({ "string.pattern.base": "El producto es inválido." }),
+  stock: Joi.string().valid("low", "out").optional().messages({
+    "any.only": 'El filtro de stock debe ser "low" u "out".',
+  }),
+  // A root category id — requires `itemType` too, since bikes and accessories
+  // are two independent trees and the id alone doesn't say which one.
+  category: objectId.optional().messages({ "string.pattern.base": "La categoría es inválida." }),
 });

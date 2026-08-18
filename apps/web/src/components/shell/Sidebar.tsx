@@ -30,6 +30,11 @@ function isItemActive(pathname: string, href: string): boolean {
   return href === "/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/** Absent `roles` means every admin role sees the item; present restricts it — cosmetic only, the API is the real barrier. */
+function isVisibleTo(role: AuthUser["role"], item: { roles?: readonly AuthUser["role"][] }): boolean {
+  return item.roles === undefined || item.roles.includes(role);
+}
+
 /**
  * Fixed ~240px on desktop; becomes an off-canvas drawer on mobile
  * (DASHBOARD_GUIDELINES.md §1–2), controlled by `MobileNavContext` — closes
@@ -105,34 +110,39 @@ export function Sidebar({ user }: SidebarProps) {
 
         <nav aria-label="Navegación principal" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-sm py-md">
           <ul className="flex flex-col gap-lg">
-            {NAV_SECTIONS.map((section) => (
-              <li key={section.title}>
-                <p className="px-md pb-xs font-ui text-caption text-blanco/40 uppercase">{section.title}</p>
-                <ul className="flex flex-col gap-xs">
-                  {section.items.map((item) => {
-                    const isActive = isItemActive(pathname, item.href);
-                    const Icon = item.icon;
-                    return (
-                      <li key={item.href}>
-                        <Link
-                          href={item.href}
-                          aria-current={isActive ? "page" : undefined}
-                          className={cn(
-                            "flex min-h-11 items-center gap-sm rounded-control border-l-2 px-md py-sm font-ui text-ui transition-colors duration-150 md:min-h-0",
-                            isActive
-                              ? "border-dorado bg-dorado/10 text-blanco"
-                              : "border-transparent text-blanco/70 hover:bg-blanco/5 hover:text-blanco",
-                          )}
-                        >
-                          <Icon size={18} weight="regular" aria-hidden="true" />
-                          {item.label}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </li>
-            ))}
+            {NAV_SECTIONS.map((section) => {
+              const items = section.items.filter((item) => isVisibleTo(user.role, item));
+              if (items.length === 0) return null;
+
+              return (
+                <li key={section.title}>
+                  <p className="px-md pb-xs font-ui text-caption text-blanco/40 uppercase">{section.title}</p>
+                  <ul className="flex flex-col gap-xs">
+                    {items.map((item) => {
+                      const isActive = isItemActive(pathname, item.href);
+                      const Icon = item.icon;
+                      return (
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            aria-current={isActive ? "page" : undefined}
+                            className={cn(
+                              "flex min-h-11 items-center gap-sm rounded-control border-l-2 px-md py-sm font-ui text-ui transition-colors duration-150 md:min-h-0",
+                              isActive
+                                ? "border-dorado bg-dorado/10 text-blanco"
+                                : "border-transparent text-blanco/70 hover:bg-blanco/5 hover:text-blanco",
+                            )}
+                          >
+                            <Icon size={18} weight="regular" aria-hidden="true" />
+                            {item.label}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              );
+            })}
           </ul>
         </nav>
 

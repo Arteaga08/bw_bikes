@@ -43,6 +43,10 @@ export interface IInventoryItem extends Document {
   sku: string;
   onHand: number;
   reserved: number;
+  /** Per-SKU override of `Settings.inventory.lowStockThresholdUnits` (M11) — absent means "use the store-wide default". */
+  lowStockThreshold?: number;
+  /** Set only when `adjustStock` applies a positive `delta` — a physical recount (`onHand`) or a deduction is not a restock. Absent means never restocked since this row was created. */
+  lastRestockedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +62,8 @@ const inventoryItemSchema = new Schema<IInventoryItem>(
     sku: { type: String, required: true, trim: true, uppercase: true, maxlength: MAX_SKU_LENGTH },
     onHand: { type: Number, required: true, default: 0, min: 0, max: MAX_ON_HAND },
     reserved: { type: Number, required: true, default: 0, min: 0 },
+    lowStockThreshold: { type: Number, min: 0, max: MAX_ON_HAND },
+    lastRestockedAt: { type: Date },
   },
   { timestamps: true },
 );

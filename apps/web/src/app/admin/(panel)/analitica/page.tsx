@@ -1,13 +1,11 @@
-import { ChartBar } from "@phosphor-icons/react/ssr";
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { AnaliticaView } from "./AnaliticaView";
 
 export default function AnaliticaPage() {
   return (
-    <PlaceholderPage
-      title="Analítica"
-      subtitle="Ventas, preferencias de modelos/tallas y alertas operativas, con ventana de fechas compartida."
-      icon={ChartBar}
-      milestone="M11"
-    />
+    <>
+      <PageHeader title="Analítica" subtitle="Ventas, preferencias de modelos y tallas, con ventana de fechas compartida." />
+      <AnaliticaView />
+    </>
   );
 }

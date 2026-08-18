@@ -6,9 +6,9 @@ import { config as loadDotenv } from "dotenv";
  * Fail-fast environment loader. Validates every variable this milestone
  * actually depends on and aborts with a clear message if one is missing or
  * malformed — never falls back to a silent default for anything security
- * sensitive. Variables needed only by later milestones (Resend still
- * pending) are added here when the feature that needs them lands, not
- * before — Telegram landed early, ahead of M15, at the owner's request.
+ * sensitive. Variables originally scoped to M15 (Resend, Telegram) landed
+ * early instead, at the owner's request — added here the moment the
+ * adapter behind each was actually wired up, not before.
  *
  * ## Which file is read
  *
@@ -92,8 +92,18 @@ const STRIPE_REQUIRED_VARS = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as c
  */
 const TELEGRAM_REQUIRED_VARS = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"] as const;
 
+/**
+ * Required in production, same policy as Cloudinary/Stripe — unlike
+ * Telegram, this one *is* on a path a customer depends on:
+ * `auth.service.ts` awaits `Mailer` directly (no `.catch()`, unlike the
+ * notifier's best-effort call), so a customer cannot verify their email or
+ * reset a lost password without it. A deploy silently missing it would only
+ * surface the first time someone tries either.
+ */
+const RESEND_REQUIRED_VARS = ["RESEND_API_KEY", "MAIL_FROM"] as const;
+
 /** Every variable that must be present to boot in production. */
-const PRODUCTION_REQUIRED_VARS = [...CLOUDINARY_REQUIRED_VARS, ...STRIPE_REQUIRED_VARS] as const;
+const PRODUCTION_REQUIRED_VARS = [...CLOUDINARY_REQUIRED_VARS, ...STRIPE_REQUIRED_VARS, ...RESEND_REQUIRED_VARS] as const;
 
 type NodeEnv = "development" | "production" | "test";
 
@@ -206,6 +216,9 @@ function buildEnv() {
   const telegramBotToken = process.env["TELEGRAM_BOT_TOKEN"] ?? "";
   const telegramChatId = process.env["TELEGRAM_CHAT_ID"] ?? "";
   const isTelegramConfigured = TELEGRAM_REQUIRED_VARS.every(isSet);
+  const resendApiKey = process.env["RESEND_API_KEY"] ?? "";
+  const mailFrom = process.env["MAIL_FROM"] ?? "";
+  const isResendConfigured = RESEND_REQUIRED_VARS.every(isSet);
   const stripeWebhookToleranceSeconds = parsePositiveInt(
     "STRIPE_WEBHOOK_TOLERANCE_SECONDS",
     DEFAULT_STRIPE_WEBHOOK_TOLERANCE_SECONDS,
@@ -237,6 +250,13 @@ function buildEnv() {
       console.warn(
         "[env] Stripe is not configured — checkout and the payment webhook will be rejected with a clear error. " +
           `Set ${STRIPE_REQUIRED_VARS.join(", ")} in .env.${nodeEnv}.local to enable them.`,
+      );
+    }
+
+    if (!isResendConfigured) {
+      console.warn(
+        "[env] Resend is not configured — verification and password-reset emails will only be logged, never sent. " +
+          `Set ${RESEND_REQUIRED_VARS.join(", ")} in .env.${nodeEnv}.local to enable them.`,
       );
     }
   }
@@ -271,6 +291,9 @@ function buildEnv() {
     telegramBotToken,
     telegramChatId,
     isTelegramConfigured,
+    resendApiKey,
+    mailFrom,
+    isResendConfigured,
     isProduction: nodeEnv === "production",
     isTest: nodeEnv === "test",
   });

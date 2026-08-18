@@ -2,10 +2,12 @@ import type { AdminAccessory, AuditAction, ProductVariant, PublicAccessory, Spec
 import { CURRENCY } from "@bw-bikes/shared";
 import { Types } from "mongoose";
 import { Accessory, AccessoryCategory, type IAccessory } from "../models/index.js";
+import { withOptionalTransaction } from "../utils/index.js";
 import { recordAuditLog } from "./audit-log.service.js";
 import { toPublicBadge } from "./badge.service.js";
 import { toPublicBrand } from "./brand.service.js";
 import { toPublicCategory } from "./category.service.js";
+import { inventoryService } from "./inventory.service.js";
 import { type ActorContext, createProductService } from "./product.service.js";
 import { accessorySizeTemplateService } from "./accessory-size-template.service.js";
 import { learnSpecTemplates } from "./spec-template.service.js";
@@ -106,18 +108,38 @@ async function create(input: AccessoryInput, actor: ActorContext): Promise<IAcce
   const badges = input.badges ?? [];
   await base.assertBadgesExist(badges);
 
-  const accessory = await Accessory.create({
-    name,
-    slug,
-    brand: new Types.ObjectId(input.brand),
-    category: new Types.ObjectId(input.category),
-    description: input.description,
-    price: input.price,
-    compareAtPrice: input.compareAtPrice,
-    variants,
-    specGroups: input.specGroups ?? [],
-    gallery: [],
-    badges: badges.map((id) => new Types.ObjectId(id)),
+  // Same reasoning as `bike.service.ts`'s `create`: two collections when a
+  // variant carries `initialStock`, so both writes go inside a transaction.
+  let seededInventory: Awaited<ReturnType<typeof inventoryService.seedInitialStock>> = [];
+
+  const accessory = await withOptionalTransaction(async (session) => {
+    const [created] = await Accessory.create(
+      [
+        {
+          name,
+          slug,
+          brand: new Types.ObjectId(input.brand),
+          category: new Types.ObjectId(input.category),
+          description: input.description,
+          price: input.price,
+          compareAtPrice: input.compareAtPrice,
+          variants,
+          specGroups: input.specGroups ?? [],
+          gallery: [],
+          badges: badges.map((id) => new Types.ObjectId(id)),
+        },
+      ],
+      { session },
+    );
+
+    seededInventory = await inventoryService.seedInitialStock(
+      "accessory",
+      created!._id as Types.ObjectId,
+      variants,
+      session,
+    );
+
+    return created!;
   });
 
   await recordAuditLog({
@@ -129,6 +151,10 @@ async function create(input: AccessoryInput, actor: ActorContext): Promise<IAcce
     after: { slug: accessory.slug, variants: accessory.variants.length },
     ip: actor.ip,
   });
+
+  for (const item of seededInventory) {
+    await inventoryService.recordItemCreatedAudit(item, actor);
+  }
 
   if (input.specGroups && input.specGroups.length > 0) await learnSpecTemplates(input.specGroups);
   if (variants.length > 0) await accessorySizeTemplateService.learnSizeTemplates(variants);

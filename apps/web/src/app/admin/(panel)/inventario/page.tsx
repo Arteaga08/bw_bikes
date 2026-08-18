@@ -1,13 +1,14 @@
-import { Package } from "@phosphor-icons/react/ssr";
-import { PlaceholderPage } from "@/components/PlaceholderPage";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { InventarioView } from "./InventarioView";
 
 export default function InventarioPage() {
   return (
-    <PlaceholderPage
-      title="Inventario"
-      subtitle="Stock disponible (onHand − reserved) y reservas anti-sobreventa."
-      icon={Package}
-      milestone="M11"
-    />
+    <>
+      <PageHeader
+        title="Inventario"
+        subtitle="Qué reponer, por categoría, con captura de entradas — el stock disponible que la tienda misma usa."
+      />
+      <InventarioView />
+    </>
   );
 }

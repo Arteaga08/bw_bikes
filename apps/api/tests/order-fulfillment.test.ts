@@ -1,10 +1,12 @@
 import { Types } from "mongoose";
 import request from "supertest";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../src/app.js";
 import { AuditLog, Order } from "../src/models/index.js";
+import { stubMailer } from "../src/services/mailer/stub.mailer.js";
 import { createAdminSession, createCustomerSession } from "./helpers/admin-session.js";
 import { createInventoryItemDoc, seedBikeWithVariant } from "./helpers/factories.js";
+import { captureNextShipmentNotification } from "./helpers/mailer.js";
 import { sampleShippingAddress, setShippingAddress } from "./helpers/shipping.js";
 import { paymentIntentObject, signStripeEvent, stubStripe } from "./helpers/stripe.js";
 
@@ -198,6 +200,36 @@ describe("shipping address and fulfillment (M6)", () => {
       // landed together, not as two separate writes.
       expect(after!.statusHistory.length).toBe(historyLengthBefore + 1);
       expect(await AuditLog.findOne({ action: "order.shipped" }).exec()).not.toBeNull();
+    });
+
+    it("emails the customer once, only on the real processing → shipped transition", async () => {
+      const orderId = await processingOrder();
+      const capture = captureNextShipmentNotification();
+
+      await request(app)
+        .patch(`${ADMIN}/orders/${orderId}/shipment`)
+        .set("Cookie", adminCookie)
+        .send({ carrier: "dhl", trackingNumber: "1234567890" });
+
+      const params = capture.getParams();
+      expect(params).toMatchObject({
+        to: "fulfillment-buyer@example.com",
+        trackingNumber: "1234567890",
+        carrierName: "DHL",
+      });
+      expect(params!.trackingUrl).toContain("dhl.com");
+
+      // Correcting the tracking number afterward must not fire a second
+      // "it shipped!" email — the spy above was `mockImplementationOnce`,
+      // so a second real call here would leave `stubMailer` un-spied and
+      // hit the debug-log path instead of throwing, which is why this
+      // asserts the call count directly rather than relying on the spy.
+      const secondSpy = vi.spyOn(stubMailer, "sendShipmentNotification");
+      await request(app)
+        .patch(`${ADMIN}/orders/${orderId}/shipment`)
+        .set("Cookie", adminCookie)
+        .send({ carrier: "dhl", trackingNumber: "0000000000" });
+      expect(secondSpy).not.toHaveBeenCalled();
     });
 
     it("requires carrierName and trackingUrl for an unlisted carrier", async () => {

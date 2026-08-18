@@ -24,6 +24,16 @@ export function captureNextResetLink(): { getUrl: () => string } {
   return { getUrl: () => url };
 }
 
+export function captureNextShipmentNotification(): {
+  getParams: () => Parameters<typeof stubMailer.sendShipmentNotification>[0] | undefined;
+} {
+  let params: Parameters<typeof stubMailer.sendShipmentNotification>[0] | undefined;
+  vi.spyOn(stubMailer, "sendShipmentNotification").mockImplementationOnce(async (input) => {
+    params = input;
+  });
+  return { getParams: () => params };
+}
+
 /** Pulls the `token` query param out of a link produced by the above. */
 export function extractToken(url: string): string {
   const token = new URL(url).searchParams.get("token");
