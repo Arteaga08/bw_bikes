@@ -38,4 +38,9 @@ const auditLogSchema = new Schema<IAuditLog>(
   { timestamps: { createdAt: true, updatedAt: false } },
 );
 
+// The read side's only query shape (M11.5, `GET /admin/orders/:id/activity`):
+// every entry for one document, newest first. `targetId` alone was
+// previously unindexed — a per-order read would have been a collection scan.
+auditLogSchema.index({ module: 1, targetId: 1, createdAt: -1 });
+
 export const AuditLog = model<IAuditLog>("AuditLog", auditLogSchema);

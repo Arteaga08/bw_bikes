@@ -38,13 +38,7 @@ import {
   uploadBrandLogo,
 } from "../controllers/brand.controller.js";
 import { createCategoryController } from "../controllers/category.controller.js";
-import {
-  createSizeTemplate,
-  deleteSizeTemplate,
-  getAdminSizeTemplate,
-  listAdminSizeTemplates,
-  updateSizeTemplate,
-} from "../controllers/size-template.controller.js";
+import { createSizeTemplateController } from "../controllers/size-template.controller.js";
 import {
   createSpecTemplate,
   deleteSpecTemplate,
@@ -54,7 +48,9 @@ import {
 } from "../controllers/spec-template.controller.js";
 import { protect, restrictTo, uploadImages, validate } from "../middlewares/index.js";
 import { accessoryCategoryService } from "../services/accessory-category.service.js";
+import { accessorySizeTemplateService } from "../services/accessory-size-template.service.js";
 import { bikeCategoryService } from "../services/bike-category.service.js";
+import { bikeSizeTemplateService } from "../services/bike-size-template.service.js";
 import {
   adminProductListQuerySchema,
   badgeListQuerySchema,
@@ -183,19 +179,28 @@ router.patch(
 router.delete("/spec-templates/:id", validate(idParamSchema, "params"), deleteSpecTemplate);
 
 // --- Size templates ------------------------------------------------------
-// Also shared, also admin-only — feeds the "Tallas y variantes" step's chip
-// picker, never a public endpoint.
+// Two independent catalogs (bikes, accessories), same split as categories —
+// "M" means something different on a bike than on a jersey. Admin-only, feeds
+// the "Tallas y variantes" step's chip picker, never a public endpoint.
 
-router.get("/size-templates", validate(sizeTemplateListQuerySchema, "query"), listAdminSizeTemplates);
-router.post("/size-templates", validate(createSizeTemplateSchema), createSizeTemplate);
-router.get("/size-templates/:id", validate(idParamSchema, "params"), getAdminSizeTemplate);
-router.patch(
-  "/size-templates/:id",
-  validate(idParamSchema, "params"),
-  validate(updateSizeTemplateSchema),
-  updateSizeTemplate,
-);
-router.delete("/size-templates/:id", validate(idParamSchema, "params"), deleteSizeTemplate);
+const bikeSizeTemplates = createSizeTemplateController(bikeSizeTemplateService);
+const accessorySizeTemplates = createSizeTemplateController(accessorySizeTemplateService);
+
+function mountSizeTemplateRoutes(basePath: string, controller: ReturnType<typeof createSizeTemplateController>): void {
+  router.get(basePath, validate(sizeTemplateListQuerySchema, "query"), controller.listAdmin);
+  router.post(basePath, validate(createSizeTemplateSchema), controller.create);
+  router.get(`${basePath}/:id`, validate(idParamSchema, "params"), controller.getById);
+  router.patch(
+    `${basePath}/:id`,
+    validate(idParamSchema, "params"),
+    validate(updateSizeTemplateSchema),
+    controller.update,
+  );
+  router.delete(`${basePath}/:id`, validate(idParamSchema, "params"), controller.remove);
+}
+
+mountSizeTemplateRoutes("/bike-size-templates", bikeSizeTemplates);
+mountSizeTemplateRoutes("/accessory-size-templates", accessorySizeTemplates);
 
 // --- Bikes ---------------------------------------------------------------
 

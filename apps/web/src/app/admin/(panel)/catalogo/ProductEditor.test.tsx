@@ -68,6 +68,19 @@ const categoryTree: CategoryTreeNode[] = [
     slug: "ruta",
     parent: null,
     order: 0,
+    usesSizes: true,
+    isActive: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    children: [],
+  },
+  {
+    id: "cat-2",
+    name: "Bombas de aire",
+    slug: "bombas-de-aire",
+    parent: null,
+    order: 1,
+    usesSizes: false,
     isActive: true,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -80,7 +93,7 @@ const accessory: AdminAccessory = {
   name: "Casco Aero",
   slug: "casco-aero",
   brand: { id: "brand-1", name: "Canyon", slug: "canyon", order: 0 },
-  category: { id: "cat-1", name: "Ruta", slug: "ruta", parent: null, order: 0 },
+  category: { id: "cat-1", name: "Ruta", slug: "ruta", parent: null, order: 0, usesSizes: true },
   badges: [],
   description: "Casco aerodinámico de fibra de carbono.",
   price: 199_990,
@@ -294,6 +307,21 @@ describe("ProductEditor — step navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Atrás" }));
     expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
+  });
+
+  it("hides SizePicker and shows 'Agregar variante' when the selected category doesn't use sizes", async () => {
+    const user = userEvent.setup();
+    const sizelessAccessory: AdminAccessory = {
+      ...accessory,
+      category: { ...accessory.category, id: "cat-2", usesSizes: false },
+    };
+
+    renderEditor({ initialProduct: sizelessAccessory });
+    await user.click(screen.getByRole("button", { name: "Siguiente" }));
+
+    expect(screen.getByRole("heading", { name: "Tallas y variantes" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Tallas del producto" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agregar variante" })).toBeInTheDocument();
   });
 });
 

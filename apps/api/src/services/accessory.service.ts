@@ -7,7 +7,7 @@ import { toPublicBadge } from "./badge.service.js";
 import { toPublicBrand } from "./brand.service.js";
 import { toPublicCategory } from "./category.service.js";
 import { type ActorContext, createProductService } from "./product.service.js";
-import { learnSizeTemplates } from "./size-template.service.js";
+import { accessorySizeTemplateService } from "./accessory-size-template.service.js";
 import { learnSpecTemplates } from "./spec-template.service.js";
 
 const MODULE_NAME = "catalog.accessories";
@@ -46,7 +46,7 @@ export function toPublicAccessory(accessory: IAccessory): PublicAccessory {
     name: accessory.name,
     slug: accessory.slug,
     brand: brand ?? { id: String(accessory.brand), name: "", slug: "", order: 0 },
-    category: category ?? { id: String(accessory.category), name: "", slug: "", parent: null, order: 0 },
+    category: category ?? { id: String(accessory.category), name: "", slug: "", parent: null, order: 0, usesSizes: false },
     badges: accessory.populated("badges")
       ? (accessory.badges as unknown as Parameters<typeof toPublicBadge>[0][]).map(toPublicBadge)
       : [],
@@ -74,7 +74,7 @@ export function toAdminAccessory(accessory: IAccessory): AdminAccessory {
     name: accessory.name,
     slug: accessory.slug,
     brand: brand ?? { id: String(accessory.brand), name: "", slug: "", order: 0 },
-    category: category ?? { id: String(accessory.category), name: "", slug: "", parent: null, order: 0 },
+    category: category ?? { id: String(accessory.category), name: "", slug: "", parent: null, order: 0, usesSizes: false },
     badges: accessory.populated("badges")
       ? (accessory.badges as unknown as Parameters<typeof toPublicBadge>[0][]).map(toPublicBadge)
       : [],
@@ -131,7 +131,7 @@ async function create(input: AccessoryInput, actor: ActorContext): Promise<IAcce
   });
 
   if (input.specGroups && input.specGroups.length > 0) await learnSpecTemplates(input.specGroups);
-  if (variants.length > 0) await learnSizeTemplates(variants);
+  if (variants.length > 0) await accessorySizeTemplateService.learnSizeTemplates(variants);
 
   return accessory;
 }
@@ -183,7 +183,8 @@ async function update(id: string, input: AccessoryInput, actor: ActorContext): P
   // Unlike `specGroups` (a separate `PUT .../spec-groups`), variants are part
   // of this same PATCH — so, unlike the sheet, learning has to happen here
   // too, not just on create.
-  if (input.variants !== undefined && input.variants.length > 0) await learnSizeTemplates(input.variants);
+  if (input.variants !== undefined && input.variants.length > 0)
+    await accessorySizeTemplateService.learnSizeTemplates(input.variants);
 
   return accessory;
 }

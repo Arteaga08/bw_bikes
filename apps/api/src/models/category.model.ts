@@ -20,6 +20,8 @@ export interface ICategory extends Document {
   parent: Types.ObjectId | null;
   order: number;
   isActive: boolean;
+  /** When `false`, products in this category don't manage sizes — the editor's "Tallas y variantes" step skips `SizePicker` entirely. Default `true`: most categories do use sizes. */
+  usesSizes: boolean;
   /** Optional, single image (M10.2) — set/replaced/cleared via `category.service.ts`'s `setImage`/`removeImage`, never via the plain create/update payload. */
   image?: ICategoryImage;
   createdAt: Date;
@@ -48,6 +50,7 @@ function buildCategorySchema(): Schema<ICategory> {
       parent: { type: Schema.Types.ObjectId, default: null },
       order: { type: Number, default: 0, min: 0 },
       isActive: { type: Boolean, default: true },
+      usesSizes: { type: Boolean, default: true },
       image: { type: categoryImageSchema, required: false },
     },
     { timestamps: true },

@@ -79,6 +79,8 @@ function groupBySize(variants: VariantRow[]): VariantGroup[] {
 export interface VariantsEditorProps {
   variants: VariantRow[];
   onChange: (variants: VariantRow[]) => void;
+  /** True when the product's category doesn't manage sizes — `SizePicker` isn't rendered, so this component owns the empty state and the affordance to add the product's single implicit "Sin talla" group. */
+  sizeless?: boolean;
 }
 
 /**
@@ -90,7 +92,7 @@ export interface VariantsEditorProps {
  * `SizePicker` removes the whole group the instant its last row goes away,
  * so there's nothing here to clean up on this side.
  */
-export function VariantsEditor({ variants, onChange }: VariantsEditorProps) {
+export function VariantsEditor({ variants, onChange, sizeless = false }: VariantsEditorProps) {
   const duplicates = findDuplicateSkuIndices(variants);
   const groups = groupBySize(variants);
 
@@ -108,6 +110,13 @@ export function VariantsEditor({ variants, onChange }: VariantsEditorProps) {
   }
 
   if (groups.length === 0) {
+    if (sizeless) {
+      return (
+        <Button variant="secondary" size="sm" onClick={() => addRowToGroup("")} className="self-start">
+          Agregar variante
+        </Button>
+      );
+    }
     return <p className="font-body text-caption text-grafito">Elige una talla arriba para empezar a capturar variantes.</p>;
   }
 

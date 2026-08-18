@@ -92,4 +92,27 @@ describe("VariantsEditor", () => {
 
     expect(onChange).toHaveBeenCalledWith([variants[1]]);
   });
+
+  describe("sizeless (category doesn't manage sizes)", () => {
+    it("shows an 'Agregar variante' button instead of the 'elige una talla' placeholder when there are no variants yet", () => {
+      render(<VariantsEditor variants={[]} onChange={vi.fn()} sizeless />);
+      expect(screen.getByRole("button", { name: "Agregar variante" })).toBeInTheDocument();
+      expect(screen.queryByText("Elige una talla arriba para empezar a capturar variantes.")).not.toBeInTheDocument();
+    });
+
+    it("adds a row with an empty size on click", () => {
+      const onChange = vi.fn();
+      render(<VariantsEditor variants={[]} onChange={onChange} sizeless />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Agregar variante" }));
+
+      expect(onChange).toHaveBeenCalledWith([{ ...emptyVariantRow(), size: "" }]);
+    });
+
+    it("still shows the original placeholder when sizeless is false (default), no regression", () => {
+      render(<VariantsEditor variants={[]} onChange={vi.fn()} />);
+      expect(screen.getByText("Elige una talla arriba para empezar a capturar variantes.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Agregar variante" })).not.toBeInTheDocument();
+    });
+  });
 });

@@ -22,6 +22,26 @@ export default defineConfig({
     // signature of a scheduling/contention ceiling, not a hung request. Any
     // genuinely stuck request still fails well before this.
     testTimeout: 20_000,
+    // Cap concurrent forks well below the core count (10 here). The comment
+    // above diagnosed the contention correctly but treated it as a *timeout*
+    // problem; raising `testTimeout` only widens the window, it never removes
+    // the contention. At 39 files the ceiling reasserted itself with failures
+    // that are not timeouts at all — four consecutive full runs each failed
+    // exactly one test, in four different files, with three different
+    // symptoms: a spurious 401 (a rate-limited login handing back no cookie),
+    // a plain assertion mismatch, and `socket hang up` (the ephemeral
+    // supertest server dropping the connection). A 20s deadline cannot fix a
+    // dropped socket. The real limit is how many `MongoMemoryReplSet`
+    // instances plus HTTP servers fit in memory at once, so the fix is to run
+    // fewer of them concurrently: 413/413 green, reproducibly, where the
+    // uncapped run failed 1 of 413 on four runs straight. Wall clock goes
+    // ~70s → ~115s, but total *test* time drops (594s → 422s) because each
+    // test stops fighting for CPU — the run is slower only in parallelism, not
+    // in work. Set via `poolOptions.forks`, not the top-level `maxWorkers`:
+    // on vitest 2.1.9 that option silently breaks test discovery (the run
+    // reports "no tests" and exits 0 in 8ms), and so does passing
+    // `--maxWorkers` on the CLI, which is parsed as a filename filter.
+    poolOptions: { forks: { minForks: 1, maxForks: 4 } },
     env: {
       NODE_ENV: "test",
       PORT: "4001",

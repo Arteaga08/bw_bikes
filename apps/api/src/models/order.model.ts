@@ -3,6 +3,7 @@ import type {
   CaptureMethod,
   CURRENCY,
   OrderLineSnapshot,
+  OrderPriority,
   OrderStatus,
   PaymentProviderName,
   PaymentState,
@@ -10,6 +11,7 @@ import type {
 } from "@bw-bikes/shared";
 import { type Document, model, Schema, type Types } from "mongoose";
 import { billingInfoSchema } from "./schemas/billing-info.schema.js";
+import { type IOrderInternalNote, internalNoteSchema, MAX_INTERNAL_NOTES } from "./schemas/internal-note.schema.js";
 import { MAX_PRICE_CENTS } from "./schemas/product-variant.schema.js";
 import { MAX_ORDER_LINES, orderLineSchema } from "./schemas/order-line.schema.js";
 import { type IOrderShipment, shipmentSchema } from "./schemas/shipment.schema.js";
@@ -19,6 +21,9 @@ export const MAX_CANCEL_REASON_LENGTH = 300;
 
 /** Enough history for any real order; a document that grows unbounded is a denial of service on itself. */
 export const MAX_STATUS_HISTORY = 60;
+
+/** Triage only — never validated by `order-state.ts`, never gates a transition. */
+export const ORDER_PRIORITIES = ["normal", "alta", "urgente"] as const satisfies readonly OrderPriority[];
 
 export interface IOrderStatusHistoryEntry {
   status: OrderStatus;
@@ -41,12 +46,16 @@ export interface IOrderPayment {
   refundedAmountCents?: number;
   refundedAt?: Date;
   lastError?: string;
+  /** Brand/last4 only, read back from the gateway once a charge exists — never enough to charge the card again. */
+  card?: { brand: string; last4: string };
 }
 
 export interface IOrder extends Document {
   orderNumber: string;
   userId: Types.ObjectId;
   status: OrderStatus;
+  /** Triage, independent of `status` — see `ORDER_PRIORITIES`. */
+  priority: OrderPriority;
   lines: OrderLineSnapshot[];
   subtotalCents: number;
   taxCents: number;
@@ -61,6 +70,8 @@ export interface IOrder extends Document {
   billingInfo?: BillingInfo;
   idempotencyKey?: string;
   statusHistory: IOrderStatusHistoryEntry[];
+  /** Staff-only, append-only. Never served on a customer route. */
+  internalNotes: IOrderInternalNote[];
   /** Sealed once, when the day-5 warning about the expiring authorization went out. */
   adminAlertedAt?: Date;
   disputedAt?: Date;
@@ -110,6 +121,12 @@ const paymentSchema = new Schema<IOrderPayment>(
     refundedAmountCents: { type: Number, min: 0, max: MAX_PRICE_CENTS },
     refundedAt: { type: Date },
     lastError: { type: String, trim: true, maxlength: 500 },
+    card: {
+      type: new Schema(
+        { brand: { type: String, trim: true, maxlength: 30 }, last4: { type: String, trim: true, match: /^\d{4}$/ } },
+        { _id: false },
+      ),
+    },
   },
   { _id: false },
 );
@@ -142,6 +159,11 @@ const orderSchema = new Schema<IOrder>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
     status: { type: String, required: true, default: "pending_payment" },
+
+    // Never read by `order-state.ts` or any transition — a purely operational
+    // sort key the admin panel changes independent of where the order is in
+    // its lifecycle.
+    priority: { type: String, enum: ORDER_PRIORITIES, default: "normal" },
 
     lines: {
       type: [orderLineSchema],
@@ -201,6 +223,17 @@ const orderSchema = new Schema<IOrder>(
       },
     },
 
+    // Staff-only, append-only — see `internal-note.schema.ts`. Never mapped
+    // onto `PublicOrder`.
+    internalNotes: {
+      type: [internalNoteSchema],
+      default: [],
+      validate: {
+        validator: (entries: unknown[]) => entries.length <= MAX_INTERNAL_NOTES,
+        message: `Una orden no puede tener más de ${MAX_INTERNAL_NOTES} notas internas.`,
+      },
+    },
+
     adminAlertedAt: { type: Date },
     disputedAt: { type: Date },
     cancelReason: { type: String, trim: true, maxlength: MAX_CANCEL_REASON_LENGTH },
@@ -240,5 +273,10 @@ orderSchema.index({ status: 1, "payment.authorizationExpiresAt": 1 });
 
 // The reconciliation sweep: orders stuck unresolved since before a cutoff.
 orderSchema.index({ status: 1, createdAt: 1 });
+
+// The "Todas" tab sorted/filtered by triage — priority first, then the
+// existing status/createdAt shape so an urgent order never gets buried under
+// a page of `normal` ones ahead of it.
+orderSchema.index({ priority: 1, status: 1, createdAt: -1 });
 
 export const Order = model<IOrder>("Order", orderSchema);

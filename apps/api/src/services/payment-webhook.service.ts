@@ -60,6 +60,23 @@ async function resolveOrder(envelope: PaymentEventEnvelope): Promise<IOrder | nu
   }
 }
 
+/**
+ * Best-effort: a gateway hiccup reading the card back must never block
+ * `markPaid` from running — the money was already captured, that fact can't
+ * wait on a display detail.
+ */
+async function fetchCard(
+  intentId: string,
+  order: IOrder,
+): Promise<{ brand: string; last4: string } | undefined> {
+  try {
+    return (await getPaymentProvider().retrievePayment(intentId)).card;
+  } catch (error) {
+    logger.error({ err: error, orderId: String(order._id) }, "Could not read the card details back from the gateway");
+    return undefined;
+  }
+}
+
 async function dispatch(envelope: PaymentEventEnvelope, order: IOrder): Promise<HandlerResult> {
   switch (envelope.type) {
     // Manual capture: the card is authorized and the funds are held. The order
@@ -71,9 +88,18 @@ async function dispatch(envelope: PaymentEventEnvelope, order: IOrder): Promise<
 
     // Money actually taken — automatic capture, or the capture the admin
     // triggered. This is the only path that removes stock from the warehouse.
-    case "payment_intent.succeeded":
-      await orderService.markPaid(order, envelope.occurredAt);
+    //
+    // The webhook payload's own PaymentIntent is never expanded (Stripe
+    // doesn't support `expand` on webhook deliveries), so the card
+    // brand/last4 the admin panel shows isn't on `envelope` at all — one
+    // extra round trip to the gateway on the most important event, rather
+    // than leaving the order's `payment.card` empty for every automatically
+    // captured order.
+    case "payment_intent.succeeded": {
+      const card = envelope.intentId ? await fetchCard(envelope.intentId, order) : undefined;
+      await orderService.markPaid(order, envelope.occurredAt, card);
       return "processed";
+    }
 
     case "payment_intent.payment_failed":
       await orderService.markPaymentFailed(

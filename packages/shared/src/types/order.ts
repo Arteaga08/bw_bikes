@@ -1,3 +1,4 @@
+import type { AuditAction } from "./auth.js";
 import type { BillingInfo } from "./billing.js";
 import type { CURRENCY, FulfillmentMode, ItemType, PriceCents } from "./catalog.js";
 import type { ShipmentSummary, ShippingAddress } from "./shipping.js";
@@ -26,6 +27,14 @@ export type OrderStatus =
   | "delivered"
   | "cancelled"
   | "refunded";
+
+/**
+ * Operational triage, independent of `OrderStatus` — an order can be
+ * `awaiting_supplier_confirmation` and `urgente` at the same time. Never
+ * drives a state transition and never gates what an admin action is allowed
+ * to do; it only changes where an order sorts in the queue.
+ */
+export type OrderPriority = "normal" | "alta" | "urgente";
 
 /**
  * How the payment provider is told to take the money.
@@ -129,6 +138,12 @@ export interface PaymentSummary {
    * admin can both see the clock.
    */
   authorizationExpiresAt?: string;
+  /**
+   * Present once the gateway has a charge to report it from — never before
+   * capture. Brand/last4 only; nothing here is enough to charge the card
+   * again (PCI SAQ-A, same boundary as the rest of this module).
+   */
+  card?: { brand: string; last4: string };
 }
 
 /** One recorded step of the order's life. Append-only, never rewritten. */
@@ -153,6 +168,7 @@ export interface PublicOrder {
   id: string;
   orderNumber: string;
   status: OrderStatus;
+  priority: OrderPriority;
   lines: OrderLineSnapshot[];
   totals: OrderTotals;
   payment: PaymentSummary;
@@ -167,6 +183,32 @@ export interface PublicOrder {
 }
 
 /**
+ * One admin-authored note, append-only like `statusHistory`. Never served on
+ * a customer route — this is staff-to-staff context ("cliente llamó molesto
+ * por retraso"), not something the person it's about should read.
+ */
+export interface OrderInternalNote {
+  body: string;
+  /** Absent only if the authoring account was later deleted. */
+  authorId?: string;
+  authorName: string;
+  createdAt: string;
+}
+
+/**
+ * One audit-trail entry, read back for the admin's benefit — `before`/`after`
+ * are deliberately not included (they're `Mixed` and can carry PII like a
+ * full address); this answers "who did what, when", not "what exactly
+ * changed".
+ */
+export interface OrderActivityEntry {
+  action: AuditAction;
+  actorType: "user" | "system";
+  actorId?: string;
+  createdAt: string;
+}
+
+/**
  * What the admin panel additionally sees: who bought it and the provider's own
  * identifier, so an operator can cross-reference the payment in the Stripe
  * dashboard. Never served on a customer route.
@@ -178,6 +220,21 @@ export interface AdminOrder extends Omit<PublicOrder, "statusHistory"> {
   adminAlertedAt?: string;
   cancelReason?: string;
   statusHistory: AdminOrderStatusHistoryEntry[];
+  internalNotes: OrderInternalNote[];
+}
+
+/**
+ * `/admin/orders/summary` — deliberately **not** windowed by date, unlike
+ * `/admin/stats/orders`: an order stuck waiting on the supplier doesn't stop
+ * being stuck because the admin looked at "last 30 days". Same reasoning as
+ * `OperationalAlerts` in `stats.ts`.
+ */
+export interface AdminOrdersSummary {
+  countsByStatus: Record<OrderStatus, number>;
+  /** Orders with an open chargeback flag (`disputedAt` set), regardless of current status. */
+  disputed: number;
+  /** Authorizations past the alert threshold, not yet swept — same clock the background job acts on. */
+  expiringAuthorizations: number;
 }
 
 /**

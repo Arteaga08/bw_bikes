@@ -12,7 +12,7 @@ export function OrderLineList({ lines }: { lines: OrderLineSnapshot[] }) {
   return (
     <ul className="flex flex-col gap-sm">
       {lines.map((line, index) => (
-        <li key={`${line.itemType}-${line.itemId}-${index}`} className="rounded-card border border-borde p-md">
+        <li key={`${line.itemType}-${line.itemId}-${index}`} className="rounded-card border border-borde bg-surface p-md">
           <div className="flex items-start justify-between gap-sm">
             <div>
               <p className="font-ui text-ui text-negro">{line.name}</p>

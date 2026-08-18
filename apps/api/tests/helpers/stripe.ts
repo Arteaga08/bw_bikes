@@ -40,6 +40,13 @@ export interface StripeStubs {
   lastIntentId(): string;
   /** What `retrievePayment` should answer next — the reconciliation job's input. */
   setRetrievedState(state: PaymentSnapshot["state"]): void;
+  /**
+   * What `retrievePayment` reports as the card on file, next call onward.
+   * Mirrors the real adapter's `payment_intent.succeeded` path
+   * (`payment-webhook.service.ts`'s `fetchCard`), which reads the card back
+   * with a `retrievePayment` call rather than getting it on the event itself.
+   */
+  setCard(card: { brand: string; last4: string } | undefined): void;
 }
 
 /**
@@ -62,6 +69,7 @@ export function stubStripe(options: { intentId?: string } = {}): StripeStubs {
   const byKey = new Map<string, PaymentIntentResult>();
   let lastIntentId = options.intentId ?? "";
   let retrievedState: PaymentSnapshot["state"] = "authorized";
+  let retrievedCard: { brand: string; last4: string } | undefined;
 
   const newIntentId = () => options.intentId ?? `pi_test_${Math.random().toString(16).slice(2, 14)}`;
 
@@ -98,6 +106,7 @@ export function stubStripe(options: { intentId?: string } = {}): StripeStubs {
         state: "captured",
         amountCents: 0,
         capturedAt: new Date(),
+        ...(retrievedCard ? { card: retrievedCard } : {}),
       }),
     );
 
@@ -120,6 +129,7 @@ export function stubStripe(options: { intentId?: string } = {}): StripeStubs {
             }
           : {}),
         ...(retrievedState === "captured" ? { capturedAt: new Date() } : {}),
+        ...(retrievedCard ? { card: retrievedCard } : {}),
       };
     });
 
@@ -136,6 +146,9 @@ export function stubStripe(options: { intentId?: string } = {}): StripeStubs {
     lastIntentId: () => lastIntentId,
     setRetrievedState: (state) => {
       retrievedState = state;
+    },
+    setCard: (card) => {
+      retrievedCard = card;
     },
   };
 }

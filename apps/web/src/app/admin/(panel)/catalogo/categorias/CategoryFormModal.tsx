@@ -31,10 +31,10 @@ export interface CategoryFormModalProps {
 }
 
 /**
- * Create/edit form for one category, in either tree. The five fields the
- * backend accepts (`categoryInput` in `apps/api/src/validators/category.validator.ts`):
- * name, slug, description, parent, order, plus `isActive` — and, once the
- * category exists, its image.
+ * Create/edit form for one category, in either tree. The fields the backend
+ * accepts (`categoryInput` in `apps/api/src/validators/category.validator.ts`):
+ * name, slug, description, parent, order, plus `isActive` and `usesSizes` —
+ * and, once the category exists, its image.
  *
  * Image upload needs an id (Cloudinary attaches to an existing document, same
  * constraint as the product gallery). Rather than making the admin save
@@ -77,6 +77,7 @@ export function CategoryFormModal({
   const [parent, setParent] = useState(initial?.parent ?? defaultParent ?? "");
   const [order, setOrder] = useState(String(initial?.order ?? 0));
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
+  const [usesSizes, setUsesSizes] = useState(initial?.usesSizes ?? true);
   const [submitting, setSubmitting] = useState(false);
   const [nameError, setNameError] = useState<string | undefined>();
 
@@ -127,6 +128,7 @@ export function CategoryFormModal({
         parent: parent || null,
         order: Number.parseInt(order, 10) || 0,
         isActive,
+        usesSizes,
       };
       const wasCreate = !category;
       const saved = category ? await onUpdate(category.id, input) : await onCreate(input);
@@ -207,6 +209,12 @@ export function CategoryFormModal({
         </Select>
         <Input label="Orden" type="number" min={0} value={order} onChange={(event) => setOrder(event.target.value)} />
         <Toggle label="Activa" checked={isActive} onChange={setIsActive} />
+        <div>
+          <Toggle label="Usa tallas" checked={usesSizes} onChange={setUsesSizes} />
+          <p className="mt-xs font-body text-caption text-grafito">
+            Desactívalo para categorías como bombas de aire o timbres, que no manejan tallas.
+          </p>
+        </div>
 
         {category ? (
           <CategoryImageField mode="immediate" image={category.image} onUpload={handleUploadImage} onRemove={handleRemoveImage} />

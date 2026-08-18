@@ -43,7 +43,7 @@ import { ErrorSummary, type ErrorSummaryEntry } from "./ErrorSummary";
 import { PRODUCT_FIELD_IDS } from "./field-ids";
 import { GallerySection, MAX_GALLERY_IMAGES, type StagedGalleryFile } from "./GallerySection";
 import { ProductBasicsSection, type ProductBasicsValue } from "./ProductBasicsSection";
-import { ProductOrganizationFields, type CategoryTreeNode } from "./ProductOrganizationFields";
+import { findCategoryById, ProductOrganizationFields, type CategoryTreeNode } from "./ProductOrganizationFields";
 import { MAX_RELATED_ACCESSORIES, RelatedAccessoriesPicker } from "./RelatedAccessoriesPicker";
 import { SectionHelp } from "./SectionHelp";
 import { SizePicker } from "./SizePicker";
@@ -566,19 +566,31 @@ function ProductEditorContent({
           </>
         );
 
-      case "variants":
+      case "variants": {
+        // No category chosen yet (early in `create`): defaults to `true` so
+        // the picker doesn't flash hidden-then-shown once "Organización" is filled in.
+        const selectedCategory = findCategoryById(categoryTree, basics.category);
+        const categoryUsesSizes = selectedCategory?.usesSizes ?? true;
+
         return (
           <EditorSection
             id="section-variants"
             title="Tallas y variantes"
-            description="Elige las tallas que aplican y captura el SKU, color y disponibilidad de cada una."
+            description={
+              categoryUsesSizes
+                ? "Elige las tallas que aplican y captura el SKU, color y disponibilidad de cada una."
+                : "Esta categoría no maneja tallas — captura el SKU, color y disponibilidad de cada variante."
+            }
             count={{ current: variants.length, max: MAX_VARIANTS }}
           >
             {errors.variants ? <p className="font-body text-caption text-estado-error">{errors.variants}</p> : null}
-            <SizePicker sizeTemplates={sizeTemplates} variants={variants} onChange={setVariants} />
-            <VariantsEditor variants={variants} onChange={setVariants} />
+            {categoryUsesSizes ? (
+              <SizePicker sizeTemplates={sizeTemplates} variants={variants} onChange={setVariants} />
+            ) : null}
+            <VariantsEditor variants={variants} onChange={setVariants} sizeless={!categoryUsesSizes} />
           </EditorSection>
         );
+      }
 
       case "specs":
         return (

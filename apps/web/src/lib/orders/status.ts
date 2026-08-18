@@ -1,4 +1,4 @@
-import type { OrderStatus } from "@bw-bikes/shared";
+import type { OrderPriority, OrderStatus, PaymentState } from "@bw-bikes/shared";
 import type { BadgeVariant } from "@/components/ui/Badge";
 
 /**
@@ -46,6 +46,79 @@ export function orderStatusBadgeVariant(status: OrderStatus): BadgeVariant {
     refunded: "error",
   };
   return variants[status];
+}
+
+/**
+ * Spanish labels for `PaymentState` — the "Pago" column/badge in the "Todas"
+ * tab (M11.5), distinct from `OrderStatus`: an order can be `processing`
+ * while its payment is `captured`, and the table shows both independently
+ * rather than inferring one from the other.
+ */
+export const PAYMENT_STATE_LABELS: Record<PaymentState, string> = {
+  pending: "pendiente",
+  authorized: "autorizado",
+  captured: "cobrado",
+  failed: "fallido",
+  canceled: "cancelado",
+  refunded: "reembolsado",
+};
+
+export function paymentStateBadgeVariant(state: PaymentState): BadgeVariant {
+  const variants: Record<PaymentState, BadgeVariant> = {
+    pending: "neutral",
+    authorized: "advertencia",
+    captured: "exito",
+    failed: "error",
+    canceled: "neutral",
+    refunded: "error",
+  };
+  return variants[state];
+}
+
+/** Spanish labels for `OrderPriority` — the triage `Select` in the detail and the "Todas" column. */
+export const ORDER_PRIORITY_LABELS: Record<OrderPriority, string> = {
+  normal: "normal",
+  alta: "alta",
+  urgente: "urgente",
+};
+
+/** `Object.keys` on `ORDER_PRIORITY_LABELS`, typed — feeds the priority `<select>`s. */
+export const ALL_ORDER_PRIORITIES = Object.keys(ORDER_PRIORITY_LABELS) as OrderPriority[];
+
+export function orderPriorityBadgeVariant(priority: OrderPriority): BadgeVariant {
+  const variants: Record<OrderPriority, BadgeVariant> = {
+    normal: "neutral",
+    alta: "advertencia",
+    urgente: "error",
+  };
+  return variants[priority];
+}
+
+/**
+ * Where an order stands relative to shipment capture — drives whether the
+ * "Logística de envío" card in the detail modal shows the real
+ * `ShipmentForm`/summary, a "not yet" placeholder, or a "never" placeholder,
+ * instead of disappearing outright on any status the form doesn't handle.
+ * Exhaustive by type for the same reason as the labels above: adding an
+ * `OrderStatus` without updating this map fails `pnpm typecheck`.
+ */
+export type ShipmentEligibility = "eligible" | "not_yet" | "never";
+
+/** Mirrors `recordShipment`'s own status guard in `order.service.ts` — `processing`, `shipped`, `delivered` accept a shipment; anything before is too early, anything after `cancelled`/`refunded` never ships. */
+export function shipmentEligibility(status: OrderStatus): ShipmentEligibility {
+  const eligibility: Record<OrderStatus, ShipmentEligibility> = {
+    pending_payment: "not_yet",
+    authorized: "not_yet",
+    awaiting_supplier_confirmation: "not_yet",
+    authorization_expired: "not_yet",
+    paid: "not_yet",
+    processing: "eligible",
+    shipped: "eligible",
+    delivered: "eligible",
+    cancelled: "never",
+    refunded: "never",
+  };
+  return eligibility[status];
 }
 
 /**

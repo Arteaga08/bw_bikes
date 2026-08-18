@@ -11,6 +11,13 @@ export interface ModalProps {
   title: string;
   children: ReactNode;
   footer?: ReactNode;
+  /**
+   * `"md"` (default, `max-w-dialog` = 28rem) fits every confirm/reject and
+   * form dialog in the app. `"lg"` (`max-w-dialog-lg` = 56rem, M11.5) is only
+   * for a detail view dense enough to need two columns on desktop — the order
+   * detail is the first caller.
+   */
+  size?: "md" | "lg";
 }
 
 /**
@@ -29,7 +36,7 @@ export interface ModalProps {
  * axis to `auto` too, and a focus ring drawn 2px outside a control would
  * otherwise get clipped at the dialog's own edge.
  */
-export function Modal({ open, onClose, title, children, footer }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = "md" }: ModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -62,7 +69,10 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
         aria-labelledby={titleId}
         tabIndex={-1}
         onClick={stopPropagation}
-        className="flex max-h-full w-full min-w-0 max-w-dialog flex-col rounded-card-lg bg-surface focus:outline-none"
+        className={cn(
+          "flex max-h-full w-full min-w-0 flex-col rounded-card-lg bg-surface focus:outline-none",
+          size === "lg" ? "max-w-dialog-lg" : "max-w-dialog",
+        )}
       >
         <h2 id={titleId} className="shrink-0 px-lg pt-lg font-display text-h3 text-negro">
           {title}

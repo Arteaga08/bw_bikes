@@ -1,6 +1,8 @@
-import type { OrderStatus } from "@bw-bikes/shared";
+import type { OrderPriority, OrderStatus } from "@bw-bikes/shared";
 import Joi from "joi";
 import { MAX_CANCEL_REASON_LENGTH } from "../models/index.js";
+import { MAX_INTERNAL_NOTE_LENGTH } from "../models/schemas/internal-note.schema.js";
+import { ORDER_PRIORITIES } from "../models/order.model.js";
 import { BULK_ALLOWED_STATUSES } from "../services/order.service.js";
 import { ORDER_STATUSES } from "../services/order-state.js";
 import { objectId } from "./common.validator.js";
@@ -9,6 +11,10 @@ import { pagination } from "./list-query.validator.js";
 const status = Joi.string()
   .valid(...(ORDER_STATUSES as readonly OrderStatus[]))
   .messages({ "any.only": "El estatus de orden no es válido." });
+
+const priority = Joi.string()
+  .valid(...(ORDER_PRIORITIES as readonly OrderPriority[]))
+  .messages({ "any.only": "La prioridad de la orden no es válida." });
 
 /**
  * Checkout takes **no body at all**.
@@ -31,7 +37,26 @@ export const orderListQuerySchema = Joi.object({
 export const adminOrderListQuerySchema = Joi.object({
   ...pagination,
   status: status.optional(),
+  priority: priority.optional(),
   orderNumber: Joi.string().trim().uppercase().max(40).optional(),
+});
+
+export const updateOrderPrioritySchema = Joi.object({
+  priority: priority.required().messages({ "any.required": "La prioridad es obligatoria." }),
+});
+
+/** Mirrors `internal-note.schema.ts`'s own limit — the client-side counter in `OrderInternalNotes.tsx` reads it too. */
+export const addOrderNoteSchema = Joi.object({
+  body: Joi.string()
+    .trim()
+    .min(1)
+    .max(MAX_INTERNAL_NOTE_LENGTH)
+    .required()
+    .messages({
+      "string.empty": "La nota no puede estar vacía.",
+      "string.max": `La nota no puede exceder ${MAX_INTERNAL_NOTE_LENGTH} caracteres.`,
+      "any.required": "La nota es obligatoria.",
+    }),
 });
 
 /**

@@ -11,6 +11,7 @@ function makeCategory(overrides: Partial<AdminCategory> = {}): AdminCategory {
     slug: "montana",
     parent: null,
     order: 0,
+    usesSizes: true,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -52,6 +53,35 @@ describe("CategoryFormModal", () => {
     expect(screen.queryByText("Guarda la categoría para poder subir una imagen.")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Subir imagen")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
+  });
+
+  it("defaults 'Usa tallas' to on when creating, and sends it in the payload", async () => {
+    const onCreate = vi.fn().mockResolvedValue(makeCategory());
+
+    render(
+      <ToastProvider>
+        <CategoryFormModal
+          onClose={vi.fn()}
+          onCreate={onCreate}
+          onUpdate={vi.fn()}
+          onUploadImage={vi.fn()}
+          onRemoveImage={vi.fn()}
+          onChanged={vi.fn()}
+          rootOptions={[]}
+        />
+      </ToastProvider>,
+    );
+
+    const toggle = screen.getByRole("switch", { name: "Usa tallas" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Bombas de aire" } });
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ usesSizes: false })));
   });
 
   it("creating a category with a pending image saves it and uploads the image right after", async () => {

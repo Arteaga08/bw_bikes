@@ -65,12 +65,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         icon: ListChecks,
         keywords: ["fichas", "tecnicas", "plantillas", "especificaciones"],
       },
-      {
-        label: "Tallas",
-        href: "/admin/catalogo/tallas",
-        icon: Ruler,
-        keywords: ["tallas", "sizes", "plantillas", "variantes"],
-      },
     ],
   },
   {
@@ -81,6 +75,12 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         href: "/admin/catalogo/categorias/bicicletas",
         icon: Tag,
         keywords: ["categorias", "bicicletas"],
+      },
+      {
+        label: "Tallas",
+        href: "/admin/catalogo/tallas/bicicletas",
+        icon: Ruler,
+        keywords: ["tallas", "sizes", "plantillas", "variantes", "bicicletas"],
       },
       {
         label: "Bicicletas",
@@ -98,6 +98,12 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         href: "/admin/catalogo/categorias/accesorios",
         icon: Tag,
         keywords: ["categorias", "accesorios"],
+      },
+      {
+        label: "Tallas",
+        href: "/admin/catalogo/tallas/accesorios",
+        icon: Ruler,
+        keywords: ["tallas", "sizes", "plantillas", "variantes", "accesorios"],
       },
       {
         label: "Accesorios",
@@ -126,13 +132,21 @@ export const NAV_ITEMS_FLAT: readonly NavItem[] = NAV_SECTIONS.flatMap((section)
 
 /**
  * Feeds `Breadcrumbs` — {slug: label} for every path segment under `/admin`.
- * Two labels share the `bicicletas`/`accesorios` slug on purpose (both the
- * catalog and the category-tree routes use it); since both resolve to the
- * same human label the collision is harmless.
+ * Three routes now share the `bicicletas`/`accesorios` slug on purpose (the
+ * product catalog, the category tree, and the size catalog all use it);
+ * since all resolve to the same human label the collision is harmless.
+ *
+ * `categorias` and `tallas` need an explicit override here for the same
+ * reason: since M10.1/this split, no nav item's href ends in the bare
+ * segment anymore (every one goes one level deeper, to `.../bicicletas` or
+ * `.../accesorios`), so `NAV_ITEMS_FLAT` alone can't derive a label for it —
+ * without the override the breadcrumb would fall back to the raw, lowercase
+ * slug instead of the intended section name.
  */
 export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
   ...Object.fromEntries(NAV_ITEMS_FLAT.map((item) => [item.href.split("/").pop() ?? item.href, item.label])),
   catalogo: "Catálogo",
   categorias: "Categorías",
+  tallas: "Tallas",
   nueva: "Nueva",
 };

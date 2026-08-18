@@ -17,6 +17,16 @@ function flattenCategoryOptions(tree: CategoryTreeNode[]): ComboboxOption[] {
   ]);
 }
 
+/** Finds a root or child node by id — used by `ProductEditor` to resolve the selected category's `usesSizes` before deciding whether to render `SizePicker`. */
+export function findCategoryById(tree: CategoryTreeNode[], id: string): CategoryTreeNode | undefined {
+  for (const root of tree) {
+    if (root.id === id) return root;
+    const child = root.children.find((candidate) => candidate.id === id);
+    if (child) return { ...child, children: [] };
+  }
+  return undefined;
+}
+
 export interface ProductOrganizationFieldsProps {
   value: Pick<ProductBasicsValue, "brand" | "category">;
   onChange: (value: Pick<ProductBasicsValue, "brand" | "category">) => void;

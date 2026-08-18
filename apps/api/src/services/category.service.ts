@@ -15,6 +15,7 @@ interface CategoryInput {
   parent?: string | null;
   order?: number;
   isActive?: boolean;
+  usesSizes?: boolean;
 }
 
 interface ActorContext {
@@ -39,6 +40,7 @@ export function toPublicCategory(category: ICategory): PublicCategory {
     ...(category.description ? { description: category.description } : {}),
     parent: category.parent ? String(category.parent) : null,
     order: category.order,
+    usesSizes: category.usesSizes,
     ...(category.image ? { image: category.image } : {}),
   };
 }
@@ -203,6 +205,7 @@ export function createCategoryService(
       parent: input.parent ?? null,
       order: input.order ?? 0,
       isActive: input.isActive ?? true,
+      usesSizes: input.usesSizes ?? true,
     });
 
     await recordAuditLog({
@@ -249,6 +252,7 @@ export function createCategoryService(
     if (input.description !== undefined) category.description = input.description;
     if (input.order !== undefined) category.order = input.order;
     if (input.isActive !== undefined) category.isActive = input.isActive;
+    if (input.usesSizes !== undefined) category.usesSizes = input.usesSizes;
 
     await category.save();
 

@@ -1,4 +1,4 @@
-import type { OrderStatus, ShippingAddress } from "@bw-bikes/shared";
+import type { OrderPriority, OrderStatus, ShippingAddress } from "@bw-bikes/shared";
 import type { Request, Response } from "express";
 import type { RecordShipmentInput } from "../services/order.service.js";
 import { orderService } from "../services/order.service.js";
@@ -50,9 +50,20 @@ export const listOrdersForAdmin = asyncHandler(async (req: Request, res: Respons
   sendResponse(res, 200, "Órdenes obtenidas.", { orders }, meta);
 });
 
+/** Unwindowed KPI counts for the four summary tiles — see `orderService.getSummary`'s doc comment. */
+export const getOrdersSummaryForAdmin = asyncHandler(async (_req: Request, res: Response) => {
+  const summary = await orderService.getSummary();
+  sendResponse(res, 200, "Resumen de órdenes obtenido.", { summary });
+});
+
 export const getOrderForAdmin = asyncHandler(async (req: Request, res: Response) => {
   const order = await orderService.getForAdmin(routeParam(req, "id"));
   sendResponse(res, 200, "Orden obtenida.", { order });
+});
+
+export const getOrderActivityForAdmin = asyncHandler(async (req: Request, res: Response) => {
+  const activity = await orderService.getActivity(routeParam(req, "id"));
+  sendResponse(res, 200, "Bitácora obtenida.", { activity });
 });
 
 /** Supplier confirmed: capture the held funds. */
@@ -93,4 +104,16 @@ export const bulkUpdateOrderStatus = asyncHandler(async (req: Request, res: Resp
   const { orderIds, status, reason } = req.body as { orderIds: string[]; status: OrderStatus; reason?: string };
   const result = await orderService.bulkUpdateStatus(orderIds, status, reason, requireActor(req));
   sendResponse(res, 200, "Actualización masiva procesada.", result);
+});
+
+export const updateOrderPriority = asyncHandler(async (req: Request, res: Response) => {
+  const { priority } = req.body as { priority: OrderPriority };
+  const order = await orderService.updatePriority(routeParam(req, "id"), priority, requireActor(req));
+  sendResponse(res, 200, "Prioridad actualizada.", { order });
+});
+
+export const addOrderInternalNote = asyncHandler(async (req: Request, res: Response) => {
+  const { body } = req.body as { body: string };
+  const note = await orderService.addInternalNote(routeParam(req, "id"), body, requireActor(req));
+  sendResponse(res, 201, "Nota agregada.", { note });
 });

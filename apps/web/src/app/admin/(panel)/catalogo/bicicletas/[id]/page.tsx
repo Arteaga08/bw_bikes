@@ -28,7 +28,7 @@ export default async function EditarBicicletaPage({ params }: { params: Promise<
       // an already-used-but-deactivated size still shows fine — `SizePicker`
       // falls back to rendering any size already on a variant as its own
       // chip regardless of whether it came back in this list.
-      serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/size-templates?isActive=true&limit=100&sort=order"),
+      serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/bike-size-templates?isActive=true&limit=100&sort=order"),
       serverApiFetch<{ bike: AdminBike }>(`/admin/bikes/${id}`),
     ]);
   } catch (error) {

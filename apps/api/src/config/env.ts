@@ -6,8 +6,9 @@ import { config as loadDotenv } from "dotenv";
  * Fail-fast environment loader. Validates every variable this milestone
  * actually depends on and aborts with a clear message if one is missing or
  * malformed — never falls back to a silent default for anything security
- * sensitive. Variables needed only by later milestones (Resend, Telegram...)
- * are added here when the feature that needs them lands, not before.
+ * sensitive. Variables needed only by later milestones (Resend still
+ * pending) are added here when the feature that needs them lands, not
+ * before — Telegram landed early, ahead of M15, at the owner's request.
  *
  * ## Which file is read
  *
@@ -81,6 +82,15 @@ const CLOUDINARY_REQUIRED_VARS = [
  * would make "Stripe is missing" read as "images are missing".
  */
 const STRIPE_REQUIRED_VARS = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as const;
+
+/**
+ * Unlike Cloudinary/Stripe, never added to `PRODUCTION_REQUIRED_VARS`: the
+ * shop's own `.env.production.example` documents this as "correo como
+ * respaldo" — an internal ops alert with a fallback already, not a path a
+ * customer transaction depends on. A production deploy must not be unbootable
+ * because nobody finished wiring the warehouse team's chat yet.
+ */
+const TELEGRAM_REQUIRED_VARS = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"] as const;
 
 /** Every variable that must be present to boot in production. */
 const PRODUCTION_REQUIRED_VARS = [...CLOUDINARY_REQUIRED_VARS, ...STRIPE_REQUIRED_VARS] as const;
@@ -193,6 +203,9 @@ function buildEnv() {
   const stripeSecretKey = process.env["STRIPE_SECRET_KEY"] ?? "";
   const stripeWebhookSecret = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
   const isStripeConfigured = STRIPE_REQUIRED_VARS.every(isSet);
+  const telegramBotToken = process.env["TELEGRAM_BOT_TOKEN"] ?? "";
+  const telegramChatId = process.env["TELEGRAM_CHAT_ID"] ?? "";
+  const isTelegramConfigured = TELEGRAM_REQUIRED_VARS.every(isSet);
   const stripeWebhookToleranceSeconds = parsePositiveInt(
     "STRIPE_WEBHOOK_TOLERANCE_SECONDS",
     DEFAULT_STRIPE_WEBHOOK_TOLERANCE_SECONDS,
@@ -228,6 +241,16 @@ function buildEnv() {
     }
   }
 
+  // Warned in every environment, including production — Telegram is never in
+  // `PRODUCTION_REQUIRED_VARS` (see that array's comment), so this is the
+  // only place a deploy running without it becomes visible.
+  if (!isTelegramConfigured) {
+    console.warn(
+      "[env] Telegram is not configured — admin alerts will only be logged, never sent. " +
+        `Set ${TELEGRAM_REQUIRED_VARS.join(", ")} to enable them.`,
+    );
+  }
+
   return Object.freeze({
     nodeEnv,
     port,
@@ -245,6 +268,9 @@ function buildEnv() {
     stripeWebhookSecret,
     isStripeConfigured,
     stripeWebhookToleranceSeconds,
+    telegramBotToken,
+    telegramChatId,
+    isTelegramConfigured,
     isProduction: nodeEnv === "production",
     isTest: nodeEnv === "test",
   });

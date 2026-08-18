@@ -282,6 +282,7 @@ export interface CategoryInput {
   parent?: string | null;
   order?: number;
   isActive?: boolean;
+  usesSizes?: boolean;
 }
 
 export interface CategoryTreeNode extends AdminCategory {
@@ -572,9 +573,10 @@ export const adminSpecTemplatesApi = {
 };
 
 // --- Size template API -------------------------------------------------------
-// Same shape as the spec template API, one level simpler — a saved size
-// (no fields, just its value). Feeds the "Tallas y variantes" step's chip
-// picker; its own CRUD screen (`/admin/catalogo/tallas`) manages it directly.
+// Two independent catalogs (bikes, accessories), same factory split as
+// `createCategoryApi` — "M" means something different on a bike than on a
+// jersey accessory. Feeds the "Tallas y variantes" step's chip picker; its own
+// CRUD screens (`/admin/catalogo/tallas/bicicletas`, `/accesorios`) manage it directly.
 
 export interface AdminSizeTemplateListParams {
   page?: number;
@@ -602,42 +604,39 @@ export interface SizeTemplateInput {
   isActive?: boolean;
 }
 
-async function listSizeTemplates(params: AdminSizeTemplateListParams = {}): Promise<ParsedResponse<SizeTemplate[]>> {
-  const res = await apiFetch<{ sizeTemplates: SizeTemplate[] }>(
-    `/admin/size-templates${buildSizeTemplateListQuery(params)}`,
-  );
-  return { data: res.data.sizeTemplates, ...(res.meta ? { meta: res.meta } : {}) };
+function createSizeTemplateApi(basePath: string) {
+  async function list(params: AdminSizeTemplateListParams = {}): Promise<ParsedResponse<SizeTemplate[]>> {
+    const res = await apiFetch<{ sizeTemplates: SizeTemplate[] }>(`${basePath}${buildSizeTemplateListQuery(params)}`);
+    return { data: res.data.sizeTemplates, ...(res.meta ? { meta: res.meta } : {}) };
+  }
+
+  async function getById(id: string): Promise<SizeTemplate> {
+    const res = await apiFetch<{ sizeTemplate: SizeTemplate }>(`${basePath}/${id}`);
+    return res.data.sizeTemplate;
+  }
+
+  async function create(input: SizeTemplateInput): Promise<SizeTemplate> {
+    const res = await apiFetch<{ sizeTemplate: SizeTemplate }>(basePath, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    return res.data.sizeTemplate;
+  }
+
+  async function update(id: string, input: Partial<SizeTemplateInput>): Promise<SizeTemplate> {
+    const res = await apiFetch<{ sizeTemplate: SizeTemplate }>(`${basePath}/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+    return res.data.sizeTemplate;
+  }
+
+  async function remove(id: string): Promise<void> {
+    await apiFetch<undefined>(`${basePath}/${id}`, { method: "DELETE" });
+  }
+
+  return { list, getById, create, update, remove };
 }
 
-async function getSizeTemplateById(id: string): Promise<SizeTemplate> {
-  const res = await apiFetch<{ sizeTemplate: SizeTemplate }>(`/admin/size-templates/${id}`);
-  return res.data.sizeTemplate;
-}
-
-async function createSizeTemplate(input: SizeTemplateInput): Promise<SizeTemplate> {
-  const res = await apiFetch<{ sizeTemplate: SizeTemplate }>("/admin/size-templates", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-  return res.data.sizeTemplate;
-}
-
-async function updateSizeTemplate(id: string, input: Partial<SizeTemplateInput>): Promise<SizeTemplate> {
-  const res = await apiFetch<{ sizeTemplate: SizeTemplate }>(`/admin/size-templates/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(input),
-  });
-  return res.data.sizeTemplate;
-}
-
-async function removeSizeTemplate(id: string): Promise<void> {
-  await apiFetch<undefined>(`/admin/size-templates/${id}`, { method: "DELETE" });
-}
-
-export const adminSizeTemplatesApi = {
-  list: listSizeTemplates,
-  getById: getSizeTemplateById,
-  create: createSizeTemplate,
-  update: updateSizeTemplate,
-  remove: removeSizeTemplate,
-};
+export const adminBikeSizeTemplatesApi = createSizeTemplateApi("/admin/bike-size-templates");
+export const adminAccessorySizeTemplatesApi = createSizeTemplateApi("/admin/accessory-size-templates");

@@ -1,25 +1,29 @@
 import { randomInt } from "node:crypto";
 import type {
   AdminOrder,
+  AdminOrdersSummary,
   AdminOrderStatusHistoryEntry,
   BillingInfo,
   Carrier,
   CheckoutResult,
+  OrderActivityEntry,
   OrderLineSnapshot,
+  OrderPriority,
   OrderStatus,
   PublicOrder,
   ShippingAddress,
 } from "@bw-bikes/shared";
 import { Types } from "mongoose";
 import { logger } from "../config/logger.js";
+import { MAX_INTERNAL_NOTES } from "../models/schemas/internal-note.schema.js";
 import type { IOrder, IUser } from "../models/index.js";
-import { Order } from "../models/index.js";
+import { Order, User } from "../models/index.js";
 import { AppError, buildMeta, parseListQuery } from "../utils/index.js";
-import { recordAuditLog } from "./audit-log.service.js";
+import { listForTarget, recordAuditLog } from "./audit-log.service.js";
 import { cartService } from "./cart.service.js";
 import type { ReservationLine } from "./inventory.service.js";
 import { inventoryService } from "./inventory.service.js";
-import { assertTransition, canTransition, isTerminal } from "./order-state.js";
+import { assertTransition, canTransition, isTerminal, ORDER_STATUSES } from "./order-state.js";
 import { buildLineSnapshots, calculateTotals, resolveCaptureMethod } from "./order-pricing.js";
 import { assertPaymentsConfigured, getPaymentProvider } from "./payments/index.js";
 import type { ActorContext } from "./product.service.js";
@@ -28,7 +32,10 @@ import { shippingService } from "./shipping.service.js";
 
 const MODULE_NAME = "orders";
 
-const SORTABLE_FIELDS = ["createdAt", "totalCents", "status"] as const;
+const SORTABLE_FIELDS = ["createdAt", "totalCents", "status", "priority"] as const;
+
+/** How many entries `GET /admin/orders/:id/activity` returns — matches `listForTarget`'s own default. */
+const ACTIVITY_LIMIT = 100;
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_MINUTE = 60 * 1000;
@@ -85,6 +92,10 @@ function toPublicOrder(order: IOrder): PublicOrder {
     id: String(order._id),
     orderNumber: order.orderNumber,
     status: order.status,
+    // Defensive fallback for orders written before this field existed —
+    // Mongoose only applies a schema `default` to documents constructed
+    // fresh, not to existing rows read back without the path set.
+    priority: order.priority ?? "normal",
     lines: order.lines,
     totals: {
       subtotalCents: order.subtotalCents,
@@ -102,6 +113,7 @@ function toPublicOrder(order: IOrder): PublicOrder {
       ...(order.payment.authorizationExpiresAt
         ? { authorizationExpiresAt: order.payment.authorizationExpiresAt.toISOString() }
         : {}),
+      ...(order.payment.card ? { card: order.payment.card } : {}),
     },
     shippingAddress: order.shippingAddress,
     ...(order.billingInfo ? { billingInfo: order.billingInfo } : {}),
@@ -160,6 +172,12 @@ function toAdminOrder(order: IOrder, customer?: Pick<IUser, "_id" | "email" | "f
     ...(order.disputedAt ? { disputedAt: order.disputedAt.toISOString() } : {}),
     ...(order.adminAlertedAt ? { adminAlertedAt: order.adminAlertedAt.toISOString() } : {}),
     ...(order.cancelReason !== undefined ? { cancelReason: order.cancelReason } : {}),
+    internalNotes: (order.internalNotes ?? []).map((note) => ({
+      body: note.body,
+      authorId: String(note.authorId),
+      authorName: note.authorName,
+      createdAt: note.createdAt.toISOString(),
+    })),
   };
 }
 
@@ -542,11 +560,16 @@ async function markAuthorized(order: IOrder, authorizedAt: Date): Promise<void> 
  * Money captured. This is the only place inventory actually leaves the
  * warehouse (`commit`), and it is reached from a webhook or from the gateway's
  * synchronous response to an admin capture — never from a browser redirect.
+ *
+ * `card` is optional and best-effort (see `payment-webhook.service.ts`'s
+ * `fetchCard`): a gateway hiccup reading it back must never block the capture
+ * itself from being recorded.
  */
-async function markPaid(order: IOrder, capturedAt: Date): Promise<void> {
+async function markPaid(order: IOrder, capturedAt: Date, card?: { brand: string; last4: string }): Promise<void> {
   const updated = await applyTransition(order, "paid", { actorType: "system" }, {
     "payment.state": "captured",
     "payment.capturedAt": capturedAt,
+    ...(card ? { "payment.card": card } : {}),
   });
 
   if (!updated) return;
@@ -660,7 +683,7 @@ async function confirmSupplierStock(orderId: string, actor: ActorContext): Promi
     throw new AppError("El proveedor de pagos no confirmó la captura.", 502);
   }
 
-  await markPaid(order, snapshot.capturedAt ?? new Date());
+  await markPaid(order, snapshot.capturedAt ?? new Date(), snapshot.card);
 
   await recordAuditLog({
     actorId: actor.actorId,
@@ -924,6 +947,85 @@ async function bulkUpdateStatus(
   return { results, summary };
 }
 
+/**
+ * Free-standing triage, not part of `order-state.ts` — no transition, no
+ * history entry, no restriction by the order's current status. Returns
+ * `PublicOrder`, the same narrow surface as `confirmSupplierStock`/
+ * `updateShippingAddress`/`recordShipment`: the caller refetches the full
+ * `AdminOrder` detail afterward (M9's "refetch, never optimistic update"
+ * pattern), so this only needs to prove the write happened.
+ */
+async function updatePriority(orderId: string, priority: OrderPriority, actor: ActorContext): Promise<PublicOrder> {
+  const order = await findByIdOrFail(orderId);
+  if (order.priority === priority) return toPublicOrder(order);
+
+  const before = order.priority;
+  order.priority = priority;
+  await order.save();
+
+  await recordAuditLog({
+    actorId: actor.actorId,
+    actorType: "user",
+    action: "order.priority_updated",
+    module: MODULE_NAME,
+    targetId: String(order._id),
+    before: { priority: before },
+    after: { priority },
+    ip: actor.ip,
+  });
+
+  return toPublicOrder(order);
+}
+
+interface AddedOrderNote {
+  body: string;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+}
+
+/**
+ * Appends a staff note. `authorName` is resolved here, once, and frozen onto
+ * the note — `requireActor` only carries `{ actorId, ip }` (see
+ * `protect.ts`'s `req.user`), and the note must still read correctly if this
+ * admin's account is later renamed or removed.
+ *
+ * The note's own body is **not** duplicated into the audit log's `after` —
+ * it already lives on the order, and `AuditLog.before`/`after` must never
+ * carry the same free-text content twice (BACKEND_SECURITY_GUIDELINES.md
+ * §11 reasoning: fewer places a sensitive string can leak from).
+ */
+async function addInternalNote(orderId: string, body: string, actor: ActorContext): Promise<AddedOrderNote> {
+  const order = await findByIdOrFail(orderId);
+
+  if (order.internalNotes.length >= MAX_INTERNAL_NOTES) {
+    throw new AppError("Esta orden ya tiene el máximo de notas internas permitido.", 409);
+  }
+
+  const author = await User.findById(actor.actorId).select("firstName lastName").exec();
+  const authorName = author ? `${author.firstName} ${author.lastName}` : "Administrador";
+  const createdAt = new Date();
+
+  order.internalNotes.push({
+    body,
+    authorId: new Types.ObjectId(actor.actorId),
+    authorName,
+    createdAt,
+  });
+  await order.save();
+
+  await recordAuditLog({
+    actorId: actor.actorId,
+    actorType: "user",
+    action: "order.note_added",
+    module: MODULE_NAME,
+    targetId: String(order._id),
+    ip: actor.ip,
+  });
+
+  return { body, authorId: actor.actorId, authorName, createdAt: createdAt.toISOString() };
+}
+
 // --- Reads ----------------------------------------------------------------
 
 async function findByIdOrFail(orderId: string): Promise<IOrder> {
@@ -984,6 +1086,9 @@ async function listForAdmin(query: Record<string, unknown>) {
   const status = query["status"];
   if (typeof status === "string") filter["status"] = status;
 
+  const priority = query["priority"];
+  if (typeof priority === "string") filter["priority"] = priority;
+
   const orderNumber = query["orderNumber"];
   if (typeof orderNumber === "string") filter["orderNumber"] = orderNumber.toUpperCase();
 
@@ -1016,6 +1121,54 @@ async function findByIntentId(intentId: string): Promise<IOrder | null> {
   return Order.findOne({ "payment.intentId": intentId }).exec();
 }
 
+/**
+ * The order detail's "Bitácora" section — `before`/`after` deliberately
+ * dropped here, not just left off the shared type: `AuditLog` is `Mixed` and
+ * can carry a full shipping address or similar PII, and this endpoint answers
+ * "who did what, when", not "what exactly changed".
+ */
+async function getActivity(orderId: string): Promise<OrderActivityEntry[]> {
+  await findByIdOrFail(orderId);
+  const entries = await listForTarget({ module: MODULE_NAME, targetId: orderId, limit: ACTIVITY_LIMIT });
+
+  return entries.map((entry) => ({
+    action: entry.action,
+    actorType: entry.actorType,
+    ...(entry.actorId !== undefined ? { actorId: String(entry.actorId) } : {}),
+    createdAt: entry.createdAt.toISOString(),
+  }));
+}
+
+/**
+ * The four KPI tiles on `/admin/ordenes` — deliberately **not** windowed by
+ * `createdAt`, same reasoning as `stats/alerts.stats.ts`'s
+ * `getOperationalAlerts`: an order stuck waiting on the supplier doesn't stop
+ * being stuck because the admin is looking at "last 30 days". A separate
+ * endpoint from `/admin/stats/orders` on purpose, rather than an unwindowed
+ * mode bolted onto that one — the two answer genuinely different questions.
+ */
+async function getSummary(): Promise<AdminOrdersSummary> {
+  const [statusRows, disputed, settings] = await Promise.all([
+    Order.aggregate<{ _id: OrderStatus; count: number }>([{ $group: { _id: "$status", count: { $sum: 1 } } }]).exec(),
+    Order.countDocuments({ disputedAt: { $exists: true } }).exec(),
+    settingsService.get(),
+  ]);
+
+  const countsByStatus = {} as Record<OrderStatus, number>;
+  for (const s of ORDER_STATUSES) countsByStatus[s] = 0;
+  for (const row of statusRows) countsByStatus[row._id] = row.count;
+
+  // Reuses the exact threshold the background job acts on
+  // (`order-maintenance.service.ts`), never a second definition of "about to
+  // expire" that could quietly drift from it.
+  const expiringAuthorizations = await Order.countDocuments({
+    status: { $in: ["authorized", "awaiting_supplier_confirmation"] },
+    "payment.authorizedAt": { $lte: alertThreshold(new Date(), settings.orders.orderAuthAlertHours) },
+  }).exec();
+
+  return { countsByStatus, disputed, expiringAuthorizations };
+}
+
 // --- Deadlines (used by the background jobs) -----------------------------
 
 /**
@@ -1045,10 +1198,14 @@ export const orderService = {
   updateShippingAddress,
   recordShipment,
   bulkUpdateStatus,
+  updatePriority,
+  addInternalNote,
   getForUser,
   listForUser,
   getForAdmin,
   listForAdmin,
+  getActivity,
+  getSummary,
   findByIdOrFail,
   findByIntentId,
   markAuthorized,
@@ -1060,7 +1217,7 @@ export const orderService = {
   applyTransition,
 };
 
-export type { BulkStatusResult, CreateOrderInput, RecordShipmentInput, TransitionActor };
+export type { AddedOrderNote, BulkStatusResult, CreateOrderInput, RecordShipmentInput, TransitionActor };
 export {
   alertThreshold,
   BULK_ALLOWED_STATUSES,

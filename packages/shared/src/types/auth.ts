@@ -47,6 +47,10 @@ export interface AuthUser {
  * `settings.updated` — because a section write is exactly the granularity
  * the section-scoped `$set` operates at, and the audit trail should read at
  * the same resolution as the write it records.
+ *
+ * M11.5 adds the two order fields the queue was missing: `priority_updated`
+ * (triage, independent of the state machine) and `note_added` (append-only
+ * staff notes). Both are read back by `GET /admin/orders/:id/activity`.
  */
 export type AuditAction =
   | "admin.login"
@@ -95,6 +99,8 @@ export type AuditAction =
   | "order.shipped"
   | "order.shipment_updated"
   | "order.bulk_status_updated"
+  | "order.priority_updated"
+  | "order.note_added"
   | "application.submitted"
   | "application.approved"
   | "application.rejected"

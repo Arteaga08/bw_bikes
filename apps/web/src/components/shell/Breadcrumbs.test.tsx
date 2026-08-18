@@ -33,4 +33,14 @@ describe("Breadcrumbs", () => {
     expect(screen.getByRole("link", { name: "Categorías" })).toHaveAttribute("href", "/admin/catalogo/categorias");
     expect(screen.getByText("Bicicletas").tagName).toBe("SPAN");
   });
+
+  it("labels the split size-catalog route, not the raw 'tallas' slug", () => {
+    usePathnameMock.mockReturnValue("/admin/catalogo/tallas/accesorios");
+    render(<Breadcrumbs />);
+
+    expect(screen.getByRole("link", { name: "Catálogo" })).toHaveAttribute("href", "/admin/catalogo");
+    expect(screen.getByRole("link", { name: "Tallas" })).toHaveAttribute("href", "/admin/catalogo/tallas");
+    expect(screen.queryByText("tallas")).not.toBeInTheDocument();
+    expect(screen.getByText("Accesorios").tagName).toBe("SPAN");
+  });
 });

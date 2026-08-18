@@ -47,6 +47,27 @@ describe("category CRUD (both trees)", () => {
     expect(await BikeCategory.countDocuments()).toBe(0);
   });
 
+  it("defaults usesSizes to true and lets it be turned off explicitly", async () => {
+    const withDefault = await request(app)
+      .post(`${ADMIN}/bike-categories`)
+      .set("Cookie", adminCookie)
+      .send({ name: "Ruta" });
+    expect(withDefault.status).toBe(201);
+    expect(withDefault.body.data.category.usesSizes).toBe(true);
+
+    const withoutSizes = await request(app)
+      .post(`${ADMIN}/accessory-categories`)
+      .set("Cookie", adminCookie)
+      .send({ name: "Bombas de aire", usesSizes: false });
+    expect(withoutSizes.status).toBe(201);
+    expect(withoutSizes.body.data.category.usesSizes).toBe(false);
+
+    const read = await request(app)
+      .get(`${ADMIN}/accessory-categories/${withoutSizes.body.data.category.id}`)
+      .set("Cookie", adminCookie);
+    expect(read.body.data.category.usesSizes).toBe(false);
+  });
+
   it("keeps the two trees independent: the same slug is free in each", async () => {
     const bikeSide = await request(app)
       .post(`${ADMIN}/bike-categories`)

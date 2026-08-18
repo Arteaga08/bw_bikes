@@ -1,6 +1,8 @@
+import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
 import type { Notifier } from "./notifier.interface.js";
 import { stubNotifier } from "./stub.notifier.js";
+import { telegramNotifier } from "./telegram.notifier.js";
 
 export type { AdminNotification, Notifier } from "./notifier.interface.js";
 
@@ -8,12 +10,15 @@ export type { AdminNotification, Notifier } from "./notifier.interface.js";
 let warnedOnce = false;
 
 /**
- * Only one adapter exists at this milestone. Same factory shape as
- * `mailer/index.ts`: today there is exactly one branch (no provider
- * configured → stub), structured so M15 can add the real Telegram adapter
- * behind it — selected by env config — without any caller changing.
+ * Same factory shape as `mailer/index.ts`, selected by env config
+ * (`env.isTelegramConfigured`) — no caller changes when the adapter behind
+ * it does. The real Telegram adapter landed ahead of M15, at the owner's
+ * request; the stub remains the fallback wherever it isn't configured
+ * (local dev without a test bot, CI, `test` env).
  */
 export function createNotifier(): Notifier {
+  if (env.isTelegramConfigured) return telegramNotifier;
+
   if (!warnedOnce) {
     warnedOnce = true;
     logger.warn("[notifier] no provider configured — admin notifications will only be logged.");

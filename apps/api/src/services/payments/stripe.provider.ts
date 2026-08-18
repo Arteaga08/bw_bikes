@@ -91,10 +91,26 @@ function mapState(intent: Stripe.PaymentIntent): PaymentState {
   }
 }
 
+/**
+ * Reads brand/last4 off the intent's charge, when the caller asked for it
+ * expanded (`expand: ["latest_charge"]` — a webhook payload never carries
+ * this, only the direct capture/retrieve calls do). `undefined` on any of
+ * "not expanded" / "no charge yet" / "not a card" — all three are the normal
+ * shape of an intent that hasn't been captured yet, not an error.
+ */
+function extractCard(intent: Stripe.PaymentIntent): { brand: string; last4: string } | undefined {
+  const charge = intent.latest_charge;
+  if (!charge || typeof charge === "string") return undefined;
+  const card = charge.payment_method_details?.card;
+  if (!card?.brand || !card.last4) return undefined;
+  return { brand: card.brand, last4: card.last4 };
+}
+
 /** Stripe reports amounts in the smallest currency unit, which is what we store too. */
 function toSnapshot(intent: Stripe.PaymentIntent): PaymentSnapshot {
   const state = mapState(intent);
   const authorizedAt = intent.status === "requires_capture" ? new Date(intent.created * 1000) : undefined;
+  const card = extractCard(intent);
 
   return {
     intentId: intent.id,
@@ -108,6 +124,7 @@ function toSnapshot(intent: Stripe.PaymentIntent): PaymentSnapshot {
     ...(intent.last_payment_error?.message !== undefined
       ? { lastError: intent.last_payment_error.message }
       : {}),
+    ...(card ? { card } : {}),
   };
 }
 
@@ -215,8 +232,13 @@ async function capturePayment(intentId: string, idempotencyKey: string): Promise
   try {
     // No `amount_to_capture`: the shop captures exactly what it authorized.
     // Partial capture would break the invariant that `order.totalCents` is what
-    // the customer was charged.
-    const intent = await stripeClient().paymentIntents.capture(intentId, {}, { idempotencyKey });
+    // the customer was charged. `expand: ["latest_charge"]` so `toSnapshot`
+    // can read the card brand/last4 off the charge this capture just created.
+    const intent = await stripeClient().paymentIntents.capture(
+      intentId,
+      { expand: ["latest_charge"] },
+      { idempotencyKey },
+    );
     return toSnapshot(intent);
   } catch (error) {
     throw toAppError(error, "No se pudo capturar el pago.");
@@ -234,7 +256,12 @@ async function cancelPayment(intentId: string, idempotencyKey: string): Promise<
 
 async function retrievePayment(intentId: string): Promise<PaymentSnapshot> {
   try {
-    return toSnapshot(await stripeClient().paymentIntents.retrieve(intentId));
+    // Expanded for the same reason as `capturePayment` — the reconciliation
+    // job and the webhook's `succeeded` handler (which gets an unexpanded
+    // charge id on the event payload itself) both need the card off this call.
+    return toSnapshot(
+      await stripeClient().paymentIntents.retrieve(intentId, { expand: ["latest_charge"] }),
+    );
   } catch (error) {
     throw toAppError(error, "No se pudo consultar el estado del pago.");
   }

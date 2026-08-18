@@ -12,6 +12,7 @@ export * from "./payment-event.model.js";
 export * from "./product-view.model.js";
 export * from "./schemas/billing-info.schema.js";
 export * from "./schemas/category-image.schema.js";
+export * from "./schemas/internal-note.schema.js";
 export * from "./schemas/order-line.schema.js";
 export * from "./schemas/product-image.schema.js";
 export * from "./schemas/product-summary.schema.js";

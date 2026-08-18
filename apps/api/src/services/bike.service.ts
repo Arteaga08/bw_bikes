@@ -10,7 +10,7 @@ import { toPublicBrand } from "./brand.service.js";
 import { toPublicCategory } from "./category.service.js";
 import { toPublicAccessory } from "./accessory.service.js";
 import { type ActorContext, createProductService } from "./product.service.js";
-import { learnSizeTemplates } from "./size-template.service.js";
+import { bikeSizeTemplateService } from "./bike-size-template.service.js";
 import { learnSpecTemplates } from "./spec-template.service.js";
 
 const MODULE_NAME = "catalog.bikes";
@@ -104,7 +104,7 @@ export function toPublicBike(bike: IBike): PublicBike {
     name: bike.name,
     slug: bike.slug,
     brand: brand ?? { id: String(bike.brand), name: "", slug: "", order: 0 },
-    category: category ?? { id: String(bike.category), name: "", slug: "", parent: null, order: 0 },
+    category: category ?? { id: String(bike.category), name: "", slug: "", parent: null, order: 0, usesSizes: false },
     badges: bike.populated("badges")
       ? (bike.badges as unknown as Parameters<typeof toPublicBadge>[0][]).map(toPublicBadge)
       : [],
@@ -144,7 +144,7 @@ export function toAdminBike(bike: IBike): AdminBike {
     name: bike.name,
     slug: bike.slug,
     brand: brand ?? { id: String(bike.brand), name: "", slug: "", order: 0 },
-    category: category ?? { id: String(bike.category), name: "", slug: "", parent: null, order: 0 },
+    category: category ?? { id: String(bike.category), name: "", slug: "", parent: null, order: 0, usesSizes: false },
     badges: bike.populated("badges")
       ? (bike.badges as unknown as Parameters<typeof toPublicBadge>[0][]).map(toPublicBadge)
       : [],
@@ -223,7 +223,7 @@ async function create(input: BikeInput, actor: ActorContext): Promise<IBike> {
   // doc comment) — learn from it here, same best-effort discipline as
   // `replaceSpecGroups`.
   if (input.specGroups && input.specGroups.length > 0) await learnSpecTemplates(input.specGroups);
-  if (variants.length > 0) await learnSizeTemplates(variants);
+  if (variants.length > 0) await bikeSizeTemplateService.learnSizeTemplates(variants);
 
   return bike;
 }
@@ -281,7 +281,8 @@ async function update(id: string, input: BikeInput, actor: ActorContext): Promis
   // Unlike `specGroups` (a separate `PUT .../spec-groups`), variants are part
   // of this same PATCH — so, unlike the sheet, learning has to happen here
   // too, not just on create.
-  if (input.variants !== undefined && input.variants.length > 0) await learnSizeTemplates(input.variants);
+  if (input.variants !== undefined && input.variants.length > 0)
+    await bikeSizeTemplateService.learnSizeTemplates(input.variants);
 
   return bike;
 }

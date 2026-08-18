@@ -127,6 +127,9 @@
      produce max-width: 8px/16px en vez de 384px/448px. */
   --container-card: 24rem;
   --container-dialog: 28rem;
+  /* El detalle de una orden (M11.5) necesita dos columnas en escritorio —
+     `Modal`'s `size="lg"` usa este token en vez de `container-dialog`. */
+  --container-dialog-lg: 56rem;
 
   /* ---- Radios y controles ----
      Casi rectos en controles (precisión); mayores en superficies grandes

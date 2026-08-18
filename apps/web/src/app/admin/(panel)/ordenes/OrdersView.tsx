@@ -1,7 +1,8 @@
 "use client";
 
-import type { AdminOrder, OrderStatus, ShippingAddress } from "@bw-bikes/shared";
+import type { AdminOrder, OrderActivityEntry, OrderPriority, OrderStatus, ShippingAddress } from "@bw-bikes/shared";
 import dynamic from "next/dynamic";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, DataTableSkeleton, type DataTableColumn } from "@/components/ui/DataTable";
@@ -11,30 +12,40 @@ import { Pagination } from "@/components/ui/Pagination";
 import { Tab, TabList } from "@/components/ui/Tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
+  addOrderInternalNote,
   bulkUpdateOrderStatus,
   confirmSupplierStock,
   getAdminOrder,
+  getOrderActivity,
   listAdminOrders,
   rejectSupplierStock,
   recordOrderShipment,
+  updateOrderPriority,
   updateOrderShippingAddress,
   type RecordShipmentInput,
 } from "@/lib/api/admin-orders";
 import { ApiError } from "@/lib/api/error";
 import { formatCurrencyCents } from "@/lib/format";
-import { formatDateTime } from "@/lib/orders/format";
-import { AuthorizationCountdown } from "./AuthorizationCountdown";
 import { BulkStatusBar } from "./BulkStatusBar";
 import { ConfirmSupplierDialog } from "./ConfirmSupplierDialog";
 import { OrderFilters, type OrderFiltersValue } from "./OrderFilters";
+import { OrderPriorityBadge } from "./OrderPriorityBadge";
 import { OrderRowActions } from "./OrderRowActions";
 import { OrderStatusBadge } from "./OrderStatusBadge";
+import {
+  OrderCustomerCell,
+  OrderDateCell,
+  OrderNumberCell,
+  OrderStateCell,
+  OrderTotalsCell,
+  OrderTrackingCell,
+} from "./OrderTableCells";
+import { OrdersSummaryCards, type OrdersSummaryNavigation } from "./OrdersSummaryCards";
 import { RejectSupplierDialog } from "./RejectSupplierDialog";
 
-const OrderDetailSlideOver = dynamic(
-  () => import("./OrderDetailSlideOver").then((mod) => mod.OrderDetailSlideOver),
-  { ssr: false },
-);
+const OrderDetailModal = dynamic(() => import("./OrderDetailModal").then((mod) => mod.OrderDetailModal), {
+  ssr: false,
+});
 
 // Ids that wire each tab to the region it controls (WAI-ARIA tabs pattern).
 const QUEUE_TAB_ID = "orders-tab-queue";
@@ -75,7 +86,12 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
   const { toast } = useToast();
 
   const [tab, setTab] = useState<OrdersTab>("queue");
-  const [filters, setFilters] = useState<OrderFiltersValue>({ status: "", orderNumber: "", sort: "-createdAt" });
+  const [filters, setFilters] = useState<OrderFiltersValue>({
+    status: "",
+    priority: "",
+    orderNumber: "",
+    sort: "-createdAt",
+  });
   const [page, setPage] = useState(1);
 
   const [orders, setOrders] = useState<AdminOrder[]>([]);
@@ -94,6 +110,7 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
 
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
   const [detailOrder, setDetailOrder] = useState<AdminOrder | null>(null);
+  const [detailActivity, setDetailActivity] = useState<OrderActivityEntry[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [everOpenedDetail, setEverOpenedDetail] = useState(false);
 
@@ -110,6 +127,7 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
             limit: PAGE_SIZE,
             sort: filters.sort,
             ...(filters.status ? { status: filters.status } : {}),
+            ...(filters.priority ? { priority: filters.priority } : {}),
             ...(filters.orderNumber.trim() ? { orderNumber: filters.orderNumber.trim().toUpperCase() } : {}),
           },
     [tab, page, filters],
@@ -166,6 +184,12 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
     setPage(1);
   }
 
+  /**
+   * The order itself is the critical fetch — its failure closes the panel.
+   * Activity ("Bitácora") is fetched right after, separately, and fails soft
+   * into an empty list: it's supplementary context, not worth blocking or
+   * closing an otherwise-loaded detail over.
+   */
   async function loadDetail(id: string): Promise<void> {
     setDetailLoading(true);
     try {
@@ -174,8 +198,15 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
     } catch (error) {
       toast({ variant: "error", title: "No se pudo cargar la orden", description: apiErrorMessage(error, "Intenta de nuevo.") });
       setDetailOrderId(null);
-    } finally {
       setDetailLoading(false);
+      return;
+    }
+    setDetailLoading(false);
+
+    try {
+      setDetailActivity(await getOrderActivity(id));
+    } catch {
+      setDetailActivity([]);
     }
   }
 
@@ -183,12 +214,14 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
     if (!everOpenedDetail) setEverOpenedDetail(true);
     setDetailOrderId(id);
     setDetailOrder(null);
+    setDetailActivity([]);
     void loadDetail(id);
   }
 
   function closeDetail(): void {
     setDetailOrderId(null);
     setDetailOrder(null);
+    setDetailActivity([]);
   }
 
   async function refetchDetailIfOpen(id: string): Promise<void> {
@@ -273,6 +306,51 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
     }
   }
 
+  /** Triage only — never touches `status`, so no bulk-endpoint detour like the "mark as X" buttons need. */
+  async function handleUpdatePriority(id: string, priority: OrderPriority): Promise<boolean> {
+    try {
+      await updateOrderPriority(id, priority);
+      toast({ variant: "success", title: "Prioridad actualizada" });
+      refetch();
+      await refetchDetailIfOpen(id);
+      return true;
+    } catch (error) {
+      toast({
+        variant: "error",
+        title: "No se pudo actualizar la prioridad",
+        description: apiErrorMessage(error, "Intenta de nuevo."),
+      });
+      return false;
+    }
+  }
+
+  /** No list refetch — a note doesn't change anything a table column shows, only the detail's own state. */
+  async function handleAddNote(id: string, body: string): Promise<boolean> {
+    try {
+      await addOrderInternalNote(id, body);
+      toast({ variant: "success", title: "Nota agregada" });
+      await refetchDetailIfOpen(id);
+      return true;
+    } catch (error) {
+      toast({
+        variant: "error",
+        title: "No se pudo agregar la nota",
+        description: apiErrorMessage(error, "Intenta de nuevo."),
+      });
+      return false;
+    }
+  }
+
+  /** The four `StatCard`s jump straight to the view they summarize, rather than only informing. */
+  function handleSummaryNavigate(target: OrdersSummaryNavigation): void {
+    if (target.tab === "queue") {
+      switchTab("queue");
+      return;
+    }
+    switchTab("all");
+    updateFilters({ ...filters, status: target.status ?? "" });
+  }
+
   async function handleBulkStatus(status: "processing" | "delivered"): Promise<void> {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
@@ -302,78 +380,107 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
 
   const isQueue = tab === "queue";
 
-  const columns: DataTableColumn<AdminOrder>[] = [
-    ...(!isQueue
-      ? [
-          {
-            key: "select",
-            header: <span className="sr-only">Seleccionar</span>,
-            className: "w-px",
-            render: (order: AdminOrder) => (
-              <input
-                type="checkbox"
-                checked={selectedIds.has(order.id)}
-                onChange={() => toggleSelected(order.id)}
-                aria-label={`Seleccionar ${order.orderNumber}`}
-              />
-            ),
-          },
-        ]
-      : []),
-    {
-      key: "order",
-      header: "Orden",
-      kind: "text",
-      render: (order) => (
-        <div>
-          <p className="font-ui text-ui text-negro">{order.orderNumber}</p>
-          <p className="font-body text-caption text-grafito">{formatDateTime(order.createdAt)}</p>
-        </div>
-      ),
-    },
-    {
-      key: "customer",
-      header: "Cliente",
-      kind: "text",
-      render: (order) => (order.customer ? `${order.customer.firstName} ${order.customer.lastName}` : "—"),
-    },
-    { key: "status", header: "Estatus", kind: "status", render: (order) => <OrderStatusBadge status={order.status} /> },
-    {
-      key: "authorization",
-      header: "Autorización",
-      render: (order) => (
-        <AuthorizationCountdown
-          authorizedAt={order.payment.authorizedAt}
-          alertHours={orderAuthAlertHours}
-          cancelHours={orderAuthCancelHours}
-          adminAlertedAt={order.adminAlertedAt}
-        />
-      ),
-    },
-    { key: "total", header: "Total", kind: "number", render: (order) => formatCurrencyCents(order.totals.totalCents) },
-    {
-      key: "actions",
-      header: "Acciones",
-      kind: "actions",
-      className: "w-px whitespace-nowrap",
-      render: (order) => (
-        <OrderRowActions
-          showSupplierActions={isQueue}
-          busy={confirmDialogOrder?.id === order.id || rejectDialogOrder?.id === order.id}
-          onConfirm={() => setConfirmDialogOrder({ id: order.id, orderNumber: order.orderNumber, totalCents: order.totals.totalCents })}
-          onReject={() => setRejectDialogOrder({ id: order.id, orderNumber: order.orderNumber })}
-          onViewDetail={() => openDetail(order.id)}
-        />
-      ),
-    },
+  // The queue folds `AuthorizationCountdown` into the folio cell (the clock
+  // the operator is actually working against); "Todas" spans every status,
+  // most of which have nothing to count down, so it drops the clock.
+  function orderCell(order: AdminOrder): ReactNode {
+    return (
+      <OrderNumberCell
+        order={order}
+        showCountdown={isQueue}
+        alertHours={orderAuthAlertHours}
+        cancelHours={orderAuthCancelHours}
+      />
+    );
+  }
+
+  const actionsColumn: DataTableColumn<AdminOrder> = {
+    key: "actions",
+    header: "Acciones",
+    kind: "actions",
+    className: "w-px whitespace-nowrap",
+    render: (order) => (
+      <OrderRowActions
+        showSupplierActions={isQueue}
+        busy={confirmDialogOrder?.id === order.id || rejectDialogOrder?.id === order.id}
+        onConfirm={() => setConfirmDialogOrder({ id: order.id, orderNumber: order.orderNumber, totalCents: order.totals.totalCents })}
+        onReject={() => setRejectDialogOrder({ id: order.id, orderNumber: order.orderNumber })}
+        onViewDetail={() => openDetail(order.id)}
+      />
+    ),
+  };
+
+  // Two genuinely different column sets, not one set with a conditional
+  // column: the queue is five fields an operator triages at a glance;
+  // "Todas" is the operational record (payment folded under status, items
+  // folded into the folio, tracking, total) the reference's 10-column table
+  // was reaching for, now at nine.
+  const queueColumns: DataTableColumn<AdminOrder>[] = [
+    { key: "order", header: "Orden", kind: "text", render: orderCell },
+    { key: "date", header: "Fecha", kind: "text", render: (order) => <OrderDateCell iso={order.createdAt} /> },
+    { key: "customer", header: "Cliente", kind: "text", render: (order) => <OrderCustomerCell order={order} /> },
+    { key: "priority", header: "Prioridad", kind: "status", render: (order) => <OrderPriorityBadge priority={order.priority} /> },
+    { key: "total", header: "Total", kind: "number", render: (order) => <OrderTotalsCell order={order} /> },
+    actionsColumn,
   ];
+
+  const allColumns: DataTableColumn<AdminOrder>[] = [
+    {
+      key: "select",
+      header: <span className="sr-only">Seleccionar</span>,
+      className: "w-px",
+      render: (order) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(order.id)}
+          onChange={() => toggleSelected(order.id)}
+          aria-label={`Seleccionar ${order.orderNumber}`}
+        />
+      ),
+    },
+    { key: "order", header: "Orden", kind: "text", render: orderCell },
+    { key: "date", header: "Fecha", kind: "text", render: (order) => <OrderDateCell iso={order.createdAt} /> },
+    { key: "customer", header: "Cliente", kind: "text", render: (order) => <OrderCustomerCell order={order} /> },
+    { key: "priority", header: "Prioridad", kind: "status", render: (order) => <OrderPriorityBadge priority={order.priority} /> },
+    { key: "tracking", header: "Guía", kind: "text", render: (order) => <OrderTrackingCell order={order} /> },
+    { key: "state", header: "Estatus", kind: "status", render: (order) => <OrderStateCell order={order} /> },
+    { key: "total", header: "Total", kind: "number", render: (order) => <OrderTotalsCell order={order} /> },
+    actionsColumn,
+  ];
+
+  const columns = isQueue ? queueColumns : allColumns;
+
+  function mobileRow(order: AdminOrder): ReactNode {
+    return (
+      <button
+        type="button"
+        onClick={() => openDetail(order.id)}
+        className="flex w-full items-center gap-sm px-md py-sm text-left"
+      >
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-ui text-ui text-negro">{order.orderNumber}</p>
+          <p className="truncate font-body text-caption text-grafito">
+            {order.customer ? `${order.customer.firstName} ${order.customer.lastName}` : "—"}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-xs">
+          <OrderStatusBadge status={order.status} />
+          <span className="font-ui text-ui text-negro">{formatCurrencyCents(order.totals.totalCents)}</span>
+        </div>
+      </button>
+    );
+  }
 
   return (
     <>
+      <div className="pt-md sm:pt-lg">
+        <OrdersSummaryCards refetchToken={refetchToken} onNavigate={handleSummaryNavigate} />
+      </div>
+
       {/* Real tab semantics, not `aria-current`: these swap the table in place,
           they don't navigate — a screen reader used to announce "current page"
           for a control that changes nothing about the page it's on. */}
-      <TabList label="Vistas de órdenes" className="px-md sm:px-lg">
+      <TabList label="Vistas de órdenes" className="mt-lg px-md sm:px-lg">
         <Tab
           id={QUEUE_TAB_ID}
           panelId={ORDERS_PANEL_ID}
@@ -406,7 +513,11 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
       <ErrorBoundary>
         <div className="p-md sm:p-lg">
           {loading ? (
-            <DataTableSkeleton columns={columns} />
+            <DataTableSkeleton
+              columns={columns}
+              mobile
+              minWidthClassName={isQueue ? "min-w-[46rem]" : "min-w-[64rem]"}
+            />
           ) : loadError ? (
             <EmptyState
               title="No se pudieron cargar las órdenes"
@@ -423,7 +534,13 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
               description={isQueue ? "La cola de proveedor está al día." : "Ajusta los filtros para ver más resultados."}
             />
           ) : (
-            <DataTable columns={columns} rows={orders} getRowKey={(order) => order.id} />
+            <DataTable
+              columns={columns}
+              rows={orders}
+              getRowKey={(order) => order.id}
+              mobileRow={mobileRow}
+              minWidthClassName={isQueue ? "min-w-[46rem]" : "min-w-[64rem]"}
+            />
           )}
         </div>
       </ErrorBoundary>
@@ -434,9 +551,10 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
       </div>
 
       {everOpenedDetail ? (
-        <OrderDetailSlideOver
+        <OrderDetailModal
           order={detailOrder}
           loading={detailLoading}
+          activity={detailActivity}
           onClose={closeDetail}
           alertHours={orderAuthAlertHours}
           cancelHours={orderAuthCancelHours}
@@ -454,6 +572,10 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
           onUpdateShippingAddress={(address) =>
             detailOrderId ? handleUpdateAddress(detailOrderId, address) : Promise.resolve(false)
           }
+          onUpdatePriority={(priority) =>
+            detailOrderId ? handleUpdatePriority(detailOrderId, priority) : Promise.resolve(false)
+          }
+          onAddNote={(body) => (detailOrderId ? handleAddNote(detailOrderId, body) : Promise.resolve(false))}
         />
       ) : null}
 

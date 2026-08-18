@@ -12,6 +12,7 @@ function makeCategory(overrides: Partial<AdminCategory> = {}): AdminCategory {
     slug: "montana",
     parent: null,
     order: 0,
+    usesSizes: true,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

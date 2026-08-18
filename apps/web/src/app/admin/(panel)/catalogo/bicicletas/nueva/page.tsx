@@ -13,7 +13,7 @@ export default async function NuevaBicicletaPage() {
     serverApiFetch<{ badges: AdminBadge[] }>("/admin/badges?isActive=true&limit=100&sort=order"),
     serverApiFetch<{ templates: SpecTemplate[] }>("/admin/spec-templates?isActive=true&limit=100&sort=title"),
     // Same isActive-only reasoning as badges: nothing is assigned yet.
-    serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/size-templates?isActive=true&limit=100&sort=order"),
+    serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/bike-size-templates?isActive=true&limit=100&sort=order"),
   ]);
 
   return (

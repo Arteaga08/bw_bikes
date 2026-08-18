@@ -15,7 +15,7 @@ function makeBike(overrides: Partial<AdminBike> = {}): AdminBike {
     name: "Tarmac SL8 Pro",
     slug: "tarmac-sl8-pro",
     brand: { id: "brand-1", name: "Specialized", slug: "specialized", order: 0 },
-    category: { id: "cat-1", name: "Ruta", slug: "ruta", parent: null, order: 0 },
+    category: { id: "cat-1", name: "Ruta", slug: "ruta", parent: null, order: 0, usesSizes: true },
     shortDescription: "Bici de ruta",
     summary: [],
     description: "Descripción",

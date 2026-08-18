@@ -38,6 +38,7 @@ export const createCategorySchema = Joi.object({
   parent: parent.default(null),
   order: order.default(0),
   isActive: Joi.boolean().default(true),
+  usesSizes: Joi.boolean().default(true),
 });
 
 /** Every field optional, but at least one required — an empty PATCH is a client bug, not a no-op. */
@@ -48,6 +49,7 @@ export const updateCategorySchema = Joi.object({
   parent: parent.optional(),
   order: order.optional(),
   isActive: Joi.boolean().optional(),
+  usesSizes: Joi.boolean().optional(),
 })
   .min(1)
   .messages({ "object.min": "Envía al menos un campo para actualizar." });

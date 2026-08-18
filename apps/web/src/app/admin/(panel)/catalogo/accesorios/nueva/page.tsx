@@ -10,7 +10,7 @@ export default async function NuevoAccesorioPage() {
     serverApiFetch<{ brands: AdminBrand[] }>("/admin/brands?limit=100&sort=name"),
     serverApiFetch<{ badges: AdminBadge[] }>("/admin/badges?isActive=true&limit=100&sort=order"),
     serverApiFetch<{ templates: SpecTemplate[] }>("/admin/spec-templates?isActive=true&limit=100&sort=title"),
-    serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/size-templates?isActive=true&limit=100&sort=order"),
+    serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/accessory-size-templates?isActive=true&limit=100&sort=order"),
   ]);
 
   return (

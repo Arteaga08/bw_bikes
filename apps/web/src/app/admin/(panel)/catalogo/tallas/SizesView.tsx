@@ -14,10 +14,16 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useToast } from "@/hooks/use-toast";
-import { adminSizeTemplatesApi, type AdminSizeTemplateListParams } from "@/lib/api/admin-catalog";
+import {
+  adminAccessorySizeTemplatesApi,
+  adminBikeSizeTemplatesApi,
+  type AdminSizeTemplateListParams,
+} from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
 import { cn } from "@/lib/cn";
 import { SizeFormModal } from "./SizeFormModal";
+
+export type SizesKind = "bike" | "accessory";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -48,15 +54,24 @@ function sourceBadge(source: SizeTemplate["source"]) {
   return source === "auto" ? <Badge variant="neutral">Automática</Badge> : <Badge variant="exito">Manual</Badge>;
 }
 
+export interface SizesViewProps {
+  kind: SizesKind;
+}
+
 /**
  * One flat list, calcada de `SpecTemplatesView` (M10.3) — mismo shape de
  * recurso, un nivel más simple: una talla es solo su `value`, sin campos
  * propios. El mismo par de badges "Manual"/"Automática" distingue lo que un
- * admin escribió a propósito aquí de lo que `learnSizeTemplates` (M10.7 S1)
- * aprendió solo al guardar un producto con una talla nueva.
+ * admin escribió a propósito aquí de lo que `learnSizeTemplates` aprendió solo
+ * al guardar un producto con una talla nueva.
+ *
+ * Dos catálogos independientes (bicis / accesorios), mismo split que
+ * `CategoriesView` — "M" significa algo distinto en una bici que en un
+ * accesorio, así que cada catálogo tiene su propia memoria.
  */
-export function SizesView() {
+export function SizesView({ kind }: SizesViewProps) {
   const { toast } = useToast();
+  const api = kind === "bike" ? adminBikeSizeTemplatesApi : adminAccessorySizeTemplatesApi;
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
@@ -99,7 +114,7 @@ export function SizesView() {
 
   useEffect(() => {
     let cancelled = false;
-    adminSizeTemplatesApi
+    api
       .list(effectiveParams)
       .then((result) => {
         if (cancelled) return;
@@ -116,7 +131,7 @@ export function SizesView() {
     return () => {
       cancelled = true;
     };
-  }, [effectiveParams, refetchToken]);
+  }, [api, effectiveParams, refetchToken]);
 
   function refetch(): void {
     setRefetchToken((token) => token + 1);
@@ -126,7 +141,7 @@ export function SizesView() {
     if (!deleteDialog) return;
     setDeleteSubmitting(true);
     try {
-      await adminSizeTemplatesApi.remove(deleteDialog.id);
+      await api.remove(deleteDialog.id);
       toast({ variant: "success", title: "Talla eliminada" });
       setDeleteDialog(null);
       refetch();
@@ -163,11 +178,17 @@ export function SizesView() {
     },
   ];
 
+  const title = kind === "bike" ? "Tallas de bicicletas" : "Tallas de accesorios";
+  const subtitle =
+    kind === "bike"
+      ? "Tallas reutilizables que el editor de bicicletas ofrece como chips al armar variantes, independientes de las de accesorios."
+      : "Tallas reutilizables que el editor de accesorios ofrece como chips al armar variantes, independientes de las de bicicletas.";
+
   return (
     <>
       <PageHeader
-        title="Tallas"
-        subtitle="Tallas reutilizables que el editor de producto ofrece como chips al armar las variantes de bicicletas y accesorios."
+        title={title}
+        subtitle={subtitle}
         actions={
           <div className="hidden sm:block">
             <Button variant="primary" onClick={() => setFormDialog({ mode: "create" })}>
@@ -253,6 +274,7 @@ export function SizesView() {
       {formDialog ? (
         <SizeFormModal
           key={formDialog.template?.id ?? "create"}
+          api={api}
           initial={formDialog.template}
           onClose={() => setFormDialog(null)}
           onSaved={() => refetch()}

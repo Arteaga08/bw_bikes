@@ -15,6 +15,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const createMock = vi.fn();
+const captureMock = vi.fn();
+const retrieveMock = vi.fn();
 
 vi.mock("stripe", () => {
   class FakeStripe {
@@ -23,7 +25,7 @@ vi.mock("stripe", () => {
       StripeCardError: class StripeCardError extends Error {},
       StripeInvalidRequestError: class StripeInvalidRequestError extends Error {},
     };
-    paymentIntents = { create: createMock };
+    paymentIntents = { create: createMock, capture: captureMock, retrieve: retrieveMock };
   }
   return { default: FakeStripe };
 });
@@ -107,5 +109,66 @@ describe("stripeProvider.createPayment", () => {
 
     const [params] = createMock.mock.calls[0]!;
     expect(params.shipping).toBeUndefined();
+  });
+});
+
+/**
+ * Regression coverage for M11.5's card-on-file surface (the admin detail's
+ * "•••• 4242" line). Both calls are asserted at the same SDK boundary as
+ * above, because the bug this guards against — forgetting `expand:
+ * ["latest_charge"]` — would otherwise pass silently: `latest_charge` comes
+ * back as a bare string id without it, and `toSnapshot` already treats that
+ * shape as "no card", the same as an intent that hasn't been captured yet.
+ */
+describe("stripeProvider — card details (M11.5)", () => {
+  beforeEach(() => {
+    captureMock.mockReset();
+    retrieveMock.mockReset();
+  });
+
+  const chargedIntent = (overrides: { id: string; status: string }) => ({
+    ...overrides,
+    created: Math.floor(Date.now() / 1000),
+    last_payment_error: null,
+    latest_charge: {
+      payment_method_details: { card: { brand: "visa", last4: "4242" } },
+    },
+  });
+
+  it("capturePayment asks Stripe to expand latest_charge, and reads the card back", async () => {
+    captureMock.mockResolvedValue(chargedIntent({ id: "pi_capture_1", status: "succeeded" }));
+    const { stripeProvider } = await import("../src/services/payments/stripe.provider.js");
+
+    const snapshot = await stripeProvider.capturePayment("pi_capture_1", "capture_key_1");
+
+    const [, params] = captureMock.mock.calls[0]!;
+    expect(params).toMatchObject({ expand: ["latest_charge"] });
+    expect(snapshot.card).toEqual({ brand: "visa", last4: "4242" });
+  });
+
+  it("retrievePayment likewise expands latest_charge and reads the card back", async () => {
+    retrieveMock.mockResolvedValue(chargedIntent({ id: "pi_retrieve_1", status: "succeeded" }));
+    const { stripeProvider } = await import("../src/services/payments/stripe.provider.js");
+
+    const snapshot = await stripeProvider.retrievePayment("pi_retrieve_1");
+
+    const [, params] = retrieveMock.mock.calls[0]!;
+    expect(params).toMatchObject({ expand: ["latest_charge"] });
+    expect(snapshot.card).toEqual({ brand: "visa", last4: "4242" });
+  });
+
+  it("omits card entirely when latest_charge isn't expanded (webhook-shaped payload)", async () => {
+    retrieveMock.mockResolvedValue({
+      id: "pi_retrieve_2",
+      status: "succeeded",
+      created: Math.floor(Date.now() / 1000),
+      last_payment_error: null,
+      latest_charge: "ch_not_expanded",
+    });
+    const { stripeProvider } = await import("../src/services/payments/stripe.provider.js");
+
+    const snapshot = await stripeProvider.retrievePayment("pi_retrieve_2");
+
+    expect(snapshot.card).toBeUndefined();
   });
 });

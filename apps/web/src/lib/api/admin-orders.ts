@@ -1,4 +1,13 @@
-import type { AdminOrder, Carrier, OrderStatus, PublicOrder, ShippingAddress } from "@bw-bikes/shared";
+import type {
+  AdminOrder,
+  AdminOrdersSummary,
+  Carrier,
+  OrderActivityEntry,
+  OrderPriority,
+  OrderStatus,
+  PublicOrder,
+  ShippingAddress,
+} from "@bw-bikes/shared";
 import type { BULK_ALLOWED_STATUSES } from "@/lib/orders/status";
 import { apiFetch } from "./client";
 import type { ParsedResponse } from "./parse-response";
@@ -6,9 +15,10 @@ import type { ParsedResponse } from "./parse-response";
 export interface AdminOrderListParams {
   page?: number;
   limit?: number;
-  /** Whitelisted by the backend to `createdAt` | `totalCents` | `status`, `-` prefix for descending. */
+  /** Whitelisted by the backend to `createdAt` | `totalCents` | `status` | `priority`, `-` prefix for descending. */
   sort?: string;
   status?: OrderStatus;
+  priority?: OrderPriority;
   /** Exact match, case-insensitive on the wire (the backend uppercases it) — never a free-text search. */
   orderNumber?: string;
 }
@@ -26,6 +36,7 @@ function buildOrderListQuery(params: AdminOrderListParams): string {
   if (params.limit !== undefined) entries.push(["limit", String(params.limit)]);
   if (params.sort) entries.push(["sort", params.sort]);
   if (params.status) entries.push(["status", params.status]);
+  if (params.priority) entries.push(["priority", params.priority]);
   if (params.orderNumber) entries.push(["orderNumber", params.orderNumber]);
 
   const query = new URLSearchParams(entries).toString();
@@ -125,4 +136,46 @@ export async function bulkUpdateOrderStatus(
     body: JSON.stringify({ orderIds, status, ...(reason ? { reason } : {}) }),
   });
   return data;
+}
+
+/** The unwindowed KPI counts behind the four `StatCard`s atop `/admin/ordenes` — see `getSummary`'s doc comment. */
+export async function getAdminOrdersSummary(): Promise<AdminOrdersSummary> {
+  const { data } = await apiFetch<{ summary: AdminOrdersSummary }>("/admin/orders/summary");
+  return data.summary;
+}
+
+/**
+ * Returns `PublicOrder`, same "tipado honesto" reasoning as
+ * `confirmSupplierStock` above — `updatePriority` is a free-standing write,
+ * not part of the state machine, and the caller refetches the full
+ * `AdminOrder` detail afterward rather than trusting this response for it.
+ */
+export async function updateOrderPriority(id: string, priority: OrderPriority): Promise<PublicOrder> {
+  const { data } = await apiFetch<{ order: PublicOrder }>(`/admin/orders/${id}/priority`, {
+    method: "PATCH",
+    body: JSON.stringify({ priority }),
+  });
+  return data.order;
+}
+
+/** The note the server just created — `authorName` and `createdAt` are resolved server-side, never client-supplied. */
+export interface AddedOrderNote {
+  body: string;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+}
+
+export async function addOrderInternalNote(id: string, body: string): Promise<AddedOrderNote> {
+  const { data } = await apiFetch<{ note: AddedOrderNote }>(`/admin/orders/${id}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+  return data.note;
+}
+
+/** Who-did-what-when for the detail's "Bitácora" — never `before`/`after`, which the endpoint doesn't serialize. */
+export async function getOrderActivity(id: string): Promise<OrderActivityEntry[]> {
+  const { data } = await apiFetch<{ activity: OrderActivityEntry[] }>(`/admin/orders/${id}/activity`);
+  return data.activity;
 }

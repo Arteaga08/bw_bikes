@@ -5,9 +5,10 @@ export function Skeleton({ className }: { className?: string }) {
   return <div aria-hidden="true" className={cn("skeleton", className)} />;
 }
 
+/** Same shell as `StatCard` (`ui/StatCard.tsx`), left-border width included, so loading → loaded never shifts layout. */
 export function StatCardSkeleton() {
   return (
-    <div className="flex flex-col gap-sm rounded-card border border-borde bg-surface p-lg">
+    <div className="flex flex-col gap-sm rounded-card border-t border-r border-b border-l-4 border-borde bg-surface p-lg">
       <Skeleton className="h-3 w-24" />
       <Skeleton className="h-8 w-32" />
     </div>

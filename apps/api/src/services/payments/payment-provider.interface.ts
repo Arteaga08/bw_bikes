@@ -65,6 +65,12 @@ export interface PaymentIntentResult {
   /** When an uncaptured authorization lapses on its own. */
   authorizationExpiresAt?: Date;
   lastError?: string;
+  /**
+   * Brand/last4 only, present once the gateway has a charge to read it from
+   * (never before capture). Domain vocabulary, not Stripe's — a future
+   * Mercado Pago adapter reports the same shape.
+   */
+  card?: { brand: string; last4: string };
 }
 
 /** A payment as read back from the gateway, without a client secret to hand out. */

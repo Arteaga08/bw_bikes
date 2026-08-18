@@ -133,6 +133,8 @@ export interface PublicCategory {
   description?: string;
   parent: string | null;
   order: number;
+  /** When `false`, products in this category don't manage sizes — the admin editor skips the size picker entirely. */
+  usesSizes: boolean;
   image?: CategoryImage;
 }
 

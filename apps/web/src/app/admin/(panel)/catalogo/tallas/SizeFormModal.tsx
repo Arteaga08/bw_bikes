@@ -7,10 +7,17 @@ import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Toggle } from "@/components/ui/Toggle";
 import { useToast } from "@/hooks/use-toast";
-import { adminSizeTemplatesApi, type SizeTemplateInput } from "@/lib/api/admin-catalog";
+import type { SizeTemplateInput } from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
 
+export interface SizeFormModalApi {
+  create: (input: SizeTemplateInput) => Promise<SizeTemplate>;
+  update: (id: string, input: Partial<SizeTemplateInput>) => Promise<SizeTemplate>;
+}
+
 export interface SizeFormModalProps {
+  /** Either `adminBikeSizeTemplatesApi` or `adminAccessorySizeTemplatesApi` — picked by the caller, which already knows which catalog it's showing. */
+  api: SizeFormModalApi;
   onClose: () => void;
   onSaved: () => void;
   initial?: SizeTemplate;
@@ -23,7 +30,7 @@ export interface SizeFormModalProps {
  * the same manual "Orden" number and "Activa" toggle the ficha técnica's
  * own templates use.
  */
-export function SizeFormModal({ onClose, onSaved, initial }: SizeFormModalProps) {
+export function SizeFormModal({ api, onClose, onSaved, initial }: SizeFormModalProps) {
   const { toast } = useToast();
   const [value, setValue] = useState(initial?.value ?? "");
   const [order, setOrder] = useState(String(initial?.order ?? 0));
@@ -44,8 +51,8 @@ export function SizeFormModal({ onClose, onSaved, initial }: SizeFormModalProps)
         order: Number.parseInt(order, 10) || 0,
         isActive,
       };
-      if (initial) await adminSizeTemplatesApi.update(initial.id, input);
-      else await adminSizeTemplatesApi.create(input);
+      if (initial) await api.update(initial.id, input);
+      else await api.create(input);
       toast({ variant: "success", title: initial ? "Cambios guardados" : "Talla creada" });
       onSaved();
       onClose();

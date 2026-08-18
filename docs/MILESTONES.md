@@ -15,7 +15,7 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M7 — Settings, analítica y adapters | 1 | ✅ Hecho (mergeado) | `feat/m07-settings-analitica` | Cierra la fase 1. Ver detalle abajo |
 | M8 — Shell del dashboard | 2 | ✅ Hecho (mergeado) | `feat/m08-dashboard-shell` | Arranca la fase 2. Ver detalle abajo |
 | M9 — Órdenes y cola de confirmación | 2 | ✅ Hecho (mergeado); verificación Stripe pospuesta a M10 | `feat/m09-ordenes` (mergeado) | Ver `docs/DESIGN_REFERENCES.md`. Ver detalle abajo |
-| M10 — Catálogo en admin | 2 | ⏳ Pendiente | — | |
+| M10 — Catálogo en admin | 2 | ✅ Funcionalmente hecho; ⚠️ verificación Stripe en curso | `feat/m10-catalogo-admin` (en `main`, commit directo sin `merge:` propio) | Ver detalle abajo |
 | M11 — Inventario, solicitudes, settings, analítica, auditoría | 2 | ⏳ Pendiente | — | Ver `docs/DESIGN_REFERENCES.md` |
 | M12 — Catálogo público | 3 | ⏳ Pendiente | — | |
 | M13 — Carrito, checkout y cuenta | 3 | ⏳ Pendiente | — | |
@@ -1051,3 +1051,97 @@ visuales (M11); gráficos/KPIs de la referencia de Dribbble (M11 — librería d
 rediseño del Sidebar a dos columnas (cambio transversal al shell, se decide aparte); reembolsos y
 cancelación de órdenes ya pagadas (el backend no los expone al admin); búsqueda libre, filtro por
 fecha/cliente/monto (el backend no los soporta); correos al cliente (M15).
+
+---
+
+## M10 — Catálogo en admin
+
+**Backend:** dos colecciones nuevas independientes de bicis/accesorios (`Brand`, `Badge`), dos
+sistemas de plantilla (`SpecTemplate`, `SizeTemplate`) y una migración one-off (`migrate-brands.ts`,
+de la marca como string libre a referencia). Todo sobre el patrón CRUD ya establecido en M3.
+
+**Entregado:**
+- **`Brand`** (`apps/api/src/models/brand.model.ts`): nombre, slug, logo opcional en Cloudinary. Bike
+  y Accessory pasan de `brand: string` a `brand: ObjectId` (`ref: "Brand"`) — de ahí el script de
+  migración, que resuelve cada string existente a una marca nueva o reutilizada.
+- **`Badge`** (`apps/api/src/models/badge.model.ts`): catálogo de insignias ("Nuevo", "E-Bike") con
+  variante visual, reutilizable entre productos. `MAX_PRODUCT_BADGES = 1` — bajado de 3 a 1 durante
+  la iteración de diseño de M10.5, con `BadgesPicker.tsx` como selector único en el editor.
+- **`SpecTemplate`** (`apps/api/src/models/spec-template.model.ts`): plantillas de ficha técnica por
+  categoría, con `source: "manual" | "auto"` — una plantilla `auto` se aprende sola la primera vez
+  que un producto de esa categoría guarda un grupo de ficha que no existía, sin bloquear nunca la
+  escritura que la dispara. El editor de ficha técnica (`SpecSheetEditor.tsx`) permite agregar,
+  renombrar, reordenar y borrar grupos y campos libremente; la plantilla solo sugiere.
+- **`SizeTemplate`** (`apps/api/src/models/size-template.model.ts`): plantillas de talla, con el
+  mismo patrón de auto-aprendizaje, separadas por catálogo (bicis / accesorios) porque sus rangos de
+  talla no tienen nada en común. `Category.usesSizes: boolean` (default `true`) marca qué categorías
+  ofrecen selector de talla al crear un producto — una categoría de "Herramientas" no lo necesita.
+- **Editor de ficha técnica y de variantes** (`SpecSheetEditor.tsx`, `VariantsEditor.tsx`): grupos y
+  campos libres para la ficha; variantes con SKU, talla, color, `fulfillmentMode`
+  (`in_stock`/`on_request`/`preorder`) y tope de `MAX_VARIANTS = 40`.
+- **Galería** (`ProductImage[]`, tope `MAX_GALLERY_IMAGES`) más, solo en bicis, una **imagen de
+  geometría** separada (`geometryImage`) — deliberadamente fuera de la galería general, con sus
+  propios endpoints de subir/reemplazar/borrar.
+- **Selector de accesorios sugeridos** (`relatedAccessories: ObjectId[]` en `Bike`): validado contra
+  el catálogo real de accesorios (`bike.service.ts`), no una lista libre.
+- **Los dos CRUD de categorías**, independientes (`BikeCategory` / `AccessoryCategory`), cada uno con
+  su propio árbol de máximo dos niveles (raíz + hijas, sin recursión más profunda —
+  `category.service.ts` lo rechaza en el servicio, no en el esquema) y su propio namespace de slugs.
+- **Archivar/restaurar** en vez de borrado directo (`isActive` + `archivedAt`), con `DELETE`
+  disponible aparte para el borrado real; `catalog-product-deletion.test.ts` cubre ambos caminos.
+- **La página** (`apps/web/src/app/admin/(panel)/catalogo/`): listas de bicicletas y accesorios como
+  **rejilla de tarjetas con foto** (imagen 4:3, nombre, marca · categoría, badge, precio, pie con
+  Editar/Archivar) — las únicas dos listas del catálogo con foto; marcas, badges, fichas técnicas y
+  categorías siguen siendo tabla, que es lo correcto para listas densas sin imagen. El editor de
+  producto se presenta como flujo de **5 pasos** (`EditorStepper.tsx`) en vez de un formulario largo.
+- **Sistema de botones ampliado**: de 4 a **5 variantes × 4 tonos × 6 estados** — se suma `bare`
+  (controles repetidos en una fila, sin el borde de `ghost`) y los tonos `danger`/`danger-strong`
+  (dos intensidades del mismo rojo: suave y reversible para Archivar, sólido e irreversible para
+  Eliminar) y `inverse` (controles sobre superficie oscura). Componentes nuevos: `ButtonGroup`,
+  `ButtonLink` (un `<a>` con estilo de botón, nunca `<Link><Button/></Link>` anidando `<button>` en
+  `<a>`), `CloseButton`, `Tabs`/`TabList`. Cuarta capa de profundidad `inset` (#EAEAE6) agregada al
+  sistema para paneles anidados dentro de una tarjeta.
+- **`Combobox`** (`components/ui/Combobox.tsx`): selector de categoría con búsqueda, reemplaza el
+  `<Select>` que duplicaba la raíz como opción y como etiqueta de `<optgroup>`.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm -r exec tsc --noEmit              → limpio
+pnpm --filter @bw-bikes/api lint && pnpm --filter @bw-bikes/web lint   → limpio
+pnpm --filter @bw-bikes/api test       → 39 archivos, 413/413
+pnpm --filter @bw-bikes/web test       → 45 archivos, 272/272
+pnpm -r build (con API_URL)            → limpio
+pnpm audit --prod                      → sin vulnerabilidades conocidas (override de nanoid a ^3.3.18,
+                                          ver decisiones abajo)
+```
+**⚠️ Verificación manual pendiente de M9, en curso al cerrar M10:** confirmar/rechazar contra Stripe
+test desde el panel, sembrando el producto `on_request` desde el CRUD real en vez de un script
+sintético — el criterio que M9 dejó pospuesto explícitamente (`MILESTONES.md`, sección M9). Manuel la
+está corriendo; este renglón se actualiza con el resultado al terminar.
+
+**Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
+- **`brakeType` salió del sistema por completo** — nunca filtró nada en la práctica (ausente del
+  validador de lista, de `buildFilter` y de cualquier índice), era un enum obligatorio decorativo.
+  Sin migración de datos: el valor queda huérfano en documentos existentes y se recaptura como fila
+  de ficha técnica libre.
+- **Tope de badges bajado de 3 a 1**, decisión visual tomada viendo la rejilla de tarjetas en
+  navegador: tres badges dorados diluían el único acento de la vista.
+- **Flake de la suite de API, diagnosticado y corregido en esta sesión de cierre**: no era timeout
+  (`testTimeout` ya estaba en 20s) — cuatro corridas completas fallaron cada una en un archivo
+  distinto, con tres síntomas distintos (401 espurio, aserción, `socket hang up`). La causa real es
+  que cada uno de los 39 archivos levanta su propio `MongoMemoryReplSet` más un servidor HTTP; en 10
+  núcleos eso agota recursos bajo paralelismo completo. Arreglo:
+  `poolOptions.forks.maxForks: 4` en `apps/api/vitest.config.ts` — 413/413 verde, reproducible en
+  corridas sucesivas.
+- **Override de `nanoid` a `^3.3.18`** (`pnpm.overrides` en `package.json`), por una vulnerabilidad
+  alta transitiva vía `next → postcss → nanoid@3.3.17` (GHSA-2v37-7h3g-55p8). Pineado a la línea 3.x
+  a propósito: un rango abierto `>=3.3.18` resuelve a nanoid 6, que es ESM-only, mientras postcss 8
+  lo requiere como CJS `^3`.
+
+**Fuera de este milestone:** inventario, solicitudes, settings y analítica visuales (M11); visor de
+auditoría restringido a `superadmin` (M11); campanita de notificaciones (descartada, ver M11 —
+sustituida por tarjetas de alerta); rediseño del Sidebar a dos columnas (cambio transversal, se
+decide aparte); arreglar el `search` roto de `/admin/applications` (no tocado por M10, deuda
+existente); reconciliar la fila de inventario cuando se renombra un SKU (la clave es
+`{itemType,itemId,sku}`, un rename deja la fila huérfana — conocido, sin resolver).
