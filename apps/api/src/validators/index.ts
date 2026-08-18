@@ -1,4 +1,5 @@
 export * from "./application.validator.js";
+export * from "./audit-log.validator.js";
 export * from "./auth.validator.js";
 export * from "./badge.validator.js";
 export * from "./billing.validator.js";

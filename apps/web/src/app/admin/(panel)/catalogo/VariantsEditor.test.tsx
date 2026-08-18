@@ -23,13 +23,13 @@ describe("findDuplicateSkuIndices", () => {
 
 describe("VariantsEditor", () => {
   it("shows a placeholder instead of any group when there are no variants yet", () => {
-    render(<VariantsEditor variants={[]} onChange={vi.fn()} />);
+    render(<VariantsEditor variants={[]} onChange={vi.fn()} mode="edit" />);
     expect(screen.getByText("Elige una talla arriba para empezar a capturar variantes.")).toBeInTheDocument();
   });
 
   it("groups rows under their size instead of repeating a 'Talla' field", () => {
     const variants = [row({ size: "54", sku: "A" }), row({ size: "M", sku: "B" })];
-    render(<VariantsEditor variants={variants} onChange={vi.fn()} />);
+    render(<VariantsEditor variants={variants} onChange={vi.fn()} mode="edit" />);
 
     expect(screen.getByText("54")).toBeInTheDocument();
     expect(screen.getByText("M")).toBeInTheDocument();
@@ -37,37 +37,39 @@ describe("VariantsEditor", () => {
   });
 
   it("labels a variant with no size 'Sin talla' instead of an empty heading", () => {
-    render(<VariantsEditor variants={[row({ size: "" })]} onChange={vi.fn()} />);
+    render(<VariantsEditor variants={[row({ size: "" })]} onChange={vi.fn()} mode="edit" />);
     expect(screen.getByText("Sin talla")).toBeInTheDocument();
   });
 
   it("shows a duplicate-SKU error on both rows once two variants collide, even across different sizes", () => {
     const variants = [row({ size: "54", sku: "BK-DUP" }), row({ size: "M", sku: "BK-DUP" })];
-    render(<VariantsEditor variants={variants} onChange={vi.fn()} />);
+    render(<VariantsEditor variants={variants} onChange={vi.fn()} mode="edit" />);
 
     expect(screen.getAllByText("SKU repetido entre variantes.")).toHaveLength(2);
   });
 
   it("does not show the duplicate error when SKUs are unique", () => {
     const variants = [row({ size: "54", sku: "BK-A" }), row({ size: "54", sku: "BK-B" })];
-    render(<VariantsEditor variants={variants} onChange={vi.fn()} />);
+    render(<VariantsEditor variants={variants} onChange={vi.fn()} mode="edit" />);
 
     expect(screen.queryByText("SKU repetido entre variantes.")).not.toBeInTheDocument();
   });
 
   it("only shows the estimated-date field when fulfillmentMode is preorder", () => {
     const { rerender } = render(
-      <VariantsEditor variants={[row({ size: "54", fulfillmentMode: "in_stock" })]} onChange={vi.fn()} />,
+      <VariantsEditor variants={[row({ size: "54", fulfillmentMode: "in_stock" })]} onChange={vi.fn()} mode="edit" />,
     );
     expect(screen.queryByLabelText("Fecha estimada")).not.toBeInTheDocument();
 
-    rerender(<VariantsEditor variants={[row({ size: "54", fulfillmentMode: "preorder" })]} onChange={vi.fn()} />);
+    rerender(
+      <VariantsEditor variants={[row({ size: "54", fulfillmentMode: "preorder" })]} onChange={vi.fn()} mode="edit" />,
+    );
     expect(screen.getByLabelText("Fecha estimada")).toBeInTheDocument();
   });
 
   it("adds a new row under the same size on 'Agregar variante en esta talla'", () => {
     const onChange = vi.fn();
-    render(<VariantsEditor variants={[row({ size: "54" })]} onChange={onChange} />);
+    render(<VariantsEditor variants={[row({ size: "54" })]} onChange={onChange} mode="edit" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Agregar variante en esta talla" }));
 
@@ -76,7 +78,7 @@ describe("VariantsEditor", () => {
 
   it("uppercases the SKU as it's typed", () => {
     const onChange = vi.fn();
-    render(<VariantsEditor variants={[row({ size: "54", sku: "" })]} onChange={onChange} />);
+    render(<VariantsEditor variants={[row({ size: "54", sku: "" })]} onChange={onChange} mode="edit" />);
 
     fireEvent.change(screen.getByLabelText("SKU"), { target: { value: "bk-tarmac-m" } });
 
@@ -86,7 +88,7 @@ describe("VariantsEditor", () => {
   it("removes only the clicked row, not the whole size group", () => {
     const onChange = vi.fn();
     const variants = [row({ size: "54", sku: "A" }), row({ size: "54", sku: "B" })];
-    render(<VariantsEditor variants={variants} onChange={onChange} />);
+    render(<VariantsEditor variants={variants} onChange={onChange} mode="edit" />);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Eliminar variante" })[0]!);
 
@@ -95,14 +97,14 @@ describe("VariantsEditor", () => {
 
   describe("sizeless (category doesn't manage sizes)", () => {
     it("shows an 'Agregar variante' button instead of the 'elige una talla' placeholder when there are no variants yet", () => {
-      render(<VariantsEditor variants={[]} onChange={vi.fn()} sizeless />);
+      render(<VariantsEditor variants={[]} onChange={vi.fn()} sizeless mode="edit" />);
       expect(screen.getByRole("button", { name: "Agregar variante" })).toBeInTheDocument();
       expect(screen.queryByText("Elige una talla arriba para empezar a capturar variantes.")).not.toBeInTheDocument();
     });
 
     it("adds a row with an empty size on click", () => {
       const onChange = vi.fn();
-      render(<VariantsEditor variants={[]} onChange={onChange} sizeless />);
+      render(<VariantsEditor variants={[]} onChange={onChange} sizeless mode="edit" />);
 
       fireEvent.click(screen.getByRole("button", { name: "Agregar variante" }));
 
@@ -110,9 +112,50 @@ describe("VariantsEditor", () => {
     });
 
     it("still shows the original placeholder when sizeless is false (default), no regression", () => {
-      render(<VariantsEditor variants={[]} onChange={vi.fn()} />);
+      render(<VariantsEditor variants={[]} onChange={vi.fn()} mode="edit" />);
       expect(screen.getByText("Elige una talla arriba para empezar a capturar variantes.")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Agregar variante" })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("initial stock (M11, create-only)", () => {
+    it("shows Stock inicial for an in_stock variant only in create mode", () => {
+      const { rerender } = render(
+        <VariantsEditor variants={[row({ size: "54", fulfillmentMode: "in_stock" })]} onChange={vi.fn()} mode="edit" />,
+      );
+      expect(screen.queryByLabelText("Stock inicial")).not.toBeInTheDocument();
+
+      rerender(
+        <VariantsEditor variants={[row({ size: "54", fulfillmentMode: "in_stock" })]} onChange={vi.fn()} mode="create" />,
+      );
+      expect(screen.getByLabelText("Stock inicial")).toBeInTheDocument();
+    });
+
+    it("does not show Stock inicial for on_request or preorder, even in create mode", () => {
+      const { rerender } = render(
+        <VariantsEditor variants={[row({ size: "54", fulfillmentMode: "on_request" })]} onChange={vi.fn()} mode="create" />,
+      );
+      expect(screen.queryByLabelText("Stock inicial")).not.toBeInTheDocument();
+
+      rerender(
+        <VariantsEditor variants={[row({ size: "54", fulfillmentMode: "preorder" })]} onChange={vi.fn()} mode="create" />,
+      );
+      expect(screen.queryByLabelText("Stock inicial")).not.toBeInTheDocument();
+    });
+
+    it("carries the typed value into the row via onChange", () => {
+      const onChange = vi.fn();
+      render(
+        <VariantsEditor
+          variants={[row({ size: "54", fulfillmentMode: "in_stock" })]}
+          onChange={onChange}
+          mode="create"
+        />,
+      );
+
+      fireEvent.change(screen.getByLabelText("Stock inicial"), { target: { value: "5" } });
+
+      expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ initialStock: "5" })]);
     });
   });
 });

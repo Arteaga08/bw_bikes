@@ -38,9 +38,18 @@ const auditLogSchema = new Schema<IAuditLog>(
   { timestamps: { createdAt: true, updatedAt: false } },
 );
 
-// The read side's only query shape (M11.5, `GET /admin/orders/:id/activity`):
-// every entry for one document, newest first. `targetId` alone was
-// previously unindexed — a per-order read would have been a collection scan.
+// The read side's first query shape (`GET /admin/orders/:id/activity`): every
+// entry for one document, newest first. `targetId` alone was previously
+// unindexed — a per-order read would have been a collection scan.
 auditLogSchema.index({ module: 1, targetId: 1, createdAt: -1 });
+
+// The superadmin audit viewer's two remaining shapes (M11, `GET
+// /admin/audit-logs`): newest-first with no filter at all, and newest-first
+// filtered to one `module` without a `targetId`. Neither is served by the
+// index above — a compound index only helps a sort when every key before the
+// sorted one is bound by the query, and `targetId` sits between `module` and
+// `createdAt` there.
+auditLogSchema.index({ createdAt: -1 });
+auditLogSchema.index({ module: 1, createdAt: -1 });
 
 export const AuditLog = model<IAuditLog>("AuditLog", auditLogSchema);

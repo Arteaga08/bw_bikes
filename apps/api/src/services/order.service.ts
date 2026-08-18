@@ -21,6 +21,7 @@ import { Order, User } from "../models/index.js";
 import { AppError, buildMeta, parseListQuery } from "../utils/index.js";
 import { listForTarget, recordAuditLog } from "./audit-log.service.js";
 import { cartService } from "./cart.service.js";
+import { createMailer } from "./mailer/index.js";
 import type { ReservationLine } from "./inventory.service.js";
 import { inventoryService } from "./inventory.service.js";
 import { assertTransition, canTransition, isTerminal, ORDER_STATUSES } from "./order-state.js";
@@ -829,6 +830,30 @@ async function recordShipment(orderId: string, input: RecordShipmentInput, actor
       after: { orderNumber: updated.orderNumber, carrier: input.carrier, trackingNumber: input.trackingNumber },
       ip: actor.ip,
     });
+
+    // Best-effort, same reasoning as the admin `notifier` in
+    // `order-maintenance.service.ts`: the shipment is already committed
+    // above, and a flaky mailer must not undo that or fail this request —
+    // the customer can still see the tracking info by signing in. Fires
+    // only here, on the real `processing` → `shipped` transition, never on
+    // the correction branch below (nobody wants a second "it shipped!"
+    // email because someone fixed a typo in the tracking number).
+    const customer = await User.findById(updated.userId).select("email firstName").exec();
+    if (customer) {
+      const carrierName = input.carrierName ?? input.carrier.toUpperCase();
+      await createMailer()
+        .sendShipmentNotification({
+          to: customer.email,
+          firstName: customer.firstName,
+          orderNumber: updated.orderNumber,
+          carrierName,
+          trackingNumber: input.trackingNumber,
+          trackingUrl,
+        })
+        .catch((error: unknown) => {
+          logger.error({ err: error, orderId: String(updated._id) }, "Failed to send the shipment notification email");
+        });
+    }
 
     return toPublicOrder(updated);
   }

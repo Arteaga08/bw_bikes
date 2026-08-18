@@ -3,6 +3,7 @@ import {
   adjustInventoryStock,
   createInventoryItem,
   getInventoryItem,
+  getInventorySummary,
   listInventory,
 } from "../controllers/inventory.controller.js";
 import { protect, restrictTo, validate } from "../middlewares/index.js";
@@ -30,6 +31,12 @@ router.use(protect, restrictTo("admin", "superadmin"));
 
 router.get("/inventory", validate(inventoryListQuerySchema, "query"), listInventory);
 router.post("/inventory", validate(createInventoryItemSchema), createInventoryItem);
+
+// Registered ahead of `/inventory/:id`, same reasoning as `/orders/summary`:
+// a fixed segment must win over the wildcard param, or this would be read as
+// a lookup for the item whose id is literally "summary".
+router.get("/inventory/summary", getInventorySummary);
+
 router.get("/inventory/:id", validate(idParamSchema, "params"), getInventoryItem);
 
 // Physical stock only. `reserved` has no endpoint on purpose — it moves only

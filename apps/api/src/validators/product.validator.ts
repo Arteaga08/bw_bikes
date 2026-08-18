@@ -3,6 +3,7 @@ import Joi from "joi";
 import {
   MAX_COLOR_LENGTH,
   MAX_DESCRIPTION_LENGTH,
+  MAX_ON_HAND,
   MAX_PRODUCT_BADGES,
   MAX_PRODUCT_NAME_LENGTH,
   MAX_RELATED_ACCESSORIES,
@@ -65,6 +66,30 @@ const variant = Joi.object({
 });
 
 const variants = Joi.array().items(variant).max(MAX_VARIANTS).messages({
+  "array.max": `No se pueden registrar más de ${MAX_VARIANTS} variantes.`,
+});
+
+/**
+ * Create-only: `initialStock` seeds `InventoryItem.onHand` for an `in_stock`
+ * variant at product creation (M11) — see `bike.service.ts`'s `create`. Kept
+ * out of the plain `variant`/`variants` schemas above (shared by every
+ * update route) on purpose: accepting it on `PATCH` would let an edit
+ * silently overwrite whatever `/admin/inventario` adjusted in the meantime,
+ * which is exactly the stale-write bug the read-only field in the editor's
+ * edit mode exists to avoid. `fulfillmentMode` isn't cross-validated against
+ * it here — a value sent for `on_request`/`preorder` is simply ignored at
+ * the service layer, same as the UI never renders the field for those modes.
+ */
+const initialStock = Joi.number().integer().min(0).max(MAX_ON_HAND).messages({
+  "number.base": "El stock inicial debe ser un número.",
+  "number.integer": "El stock inicial debe ser un número entero de unidades.",
+  "number.min": "El stock inicial no puede ser negativo.",
+  "number.max": `El stock inicial no puede exceder ${MAX_ON_HAND} unidades.`,
+});
+
+const variantForCreate = variant.keys({ initialStock: initialStock.optional() });
+
+const variantsForCreate = Joi.array().items(variantForCreate).max(MAX_VARIANTS).messages({
   "array.max": `No se pueden registrar más de ${MAX_VARIANTS} variantes.`,
 });
 
@@ -153,6 +178,7 @@ export const createBikeSchema = Joi.object({
   price: priceCents.required(),
   summary: summary.default([]),
   relatedAccessories: relatedAccessories.default([]),
+  variants: variantsForCreate.optional(),
 });
 
 export const updateBikeSchema = Joi.object({
@@ -171,6 +197,7 @@ export const createAccessorySchema = Joi.object({
   category: productBase.category.required(),
   description: description.required(),
   price: priceCents.required(),
+  variants: variantsForCreate.optional(),
 });
 
 export const updateAccessorySchema = Joi.object(productBase)

@@ -2,13 +2,14 @@ import type { AdminBike, AuditAction, CategoryImage, PublicBike, ProductVariant,
 import { CURRENCY } from "@bw-bikes/shared";
 import { Types } from "mongoose";
 import { Accessory, Bike, BikeCategory, type IBike } from "../models/index.js";
-import { AppError } from "../utils/index.js";
+import { AppError, withOptionalTransaction } from "../utils/index.js";
 import { deleteImage } from "./storage/storage.service.js";
 import { recordAuditLog } from "./audit-log.service.js";
 import { toPublicBadge } from "./badge.service.js";
 import { toPublicBrand } from "./brand.service.js";
 import { toPublicCategory } from "./category.service.js";
 import { toPublicAccessory } from "./accessory.service.js";
+import { inventoryService } from "./inventory.service.js";
 import { type ActorContext, createProductService } from "./product.service.js";
 import { bikeSizeTemplateService } from "./bike-size-template.service.js";
 import { learnSpecTemplates } from "./spec-template.service.js";
@@ -187,26 +188,50 @@ async function create(input: BikeInput, actor: ActorContext): Promise<IBike> {
   const badges = input.badges ?? [];
   await base.assertBadgesExist(badges);
 
-  // Explicit field list — never `{...input}`. `isActive`/`archivedAt` are
-  // server-owned and can't be set at creation.
-  const bike = await Bike.create({
-    name,
-    slug,
-    brand: new Types.ObjectId(input.brand),
-    category: new Types.ObjectId(input.category),
-    shortDescription: input.shortDescription,
-    description: input.description,
-    price: input.price,
-    compareAtPrice: input.compareAtPrice,
-    variants,
-    summary: input.summary ?? [],
-    specGroups: input.specGroups ?? [],
-    // Both image fields are server-owned and set only through their own
-    // endpoints, never from a create payload.
-    geometryImage: null,
-    gallery: [],
-    relatedAccessories: relatedAccessories.map((id) => new Types.ObjectId(id)),
-    badges: badges.map((id) => new Types.ObjectId(id)),
+  // Two collections now, when any variant carries `initialStock` — the
+  // product document and one `InventoryItem` per `in_stock` row — so both
+  // writes go inside a transaction: a failure seeding stock must not leave a
+  // bike saved with no inventory behind it, and vice versa. `recordAuditLog`
+  // stays outside on purpose, same discipline as everywhere else in this
+  // codebase — it never runs inside the transaction it's auditing.
+  let seededInventory: Awaited<ReturnType<typeof inventoryService.seedInitialStock>> = [];
+
+  const bike = await withOptionalTransaction(async (session) => {
+    // Explicit field list — never `{...input}`. `isActive`/`archivedAt` are
+    // server-owned and can't be set at creation.
+    const [created] = await Bike.create(
+      [
+        {
+          name,
+          slug,
+          brand: new Types.ObjectId(input.brand),
+          category: new Types.ObjectId(input.category),
+          shortDescription: input.shortDescription,
+          description: input.description,
+          price: input.price,
+          compareAtPrice: input.compareAtPrice,
+          variants,
+          summary: input.summary ?? [],
+          specGroups: input.specGroups ?? [],
+          // Both image fields are server-owned and set only through their own
+          // endpoints, never from a create payload.
+          geometryImage: null,
+          gallery: [],
+          relatedAccessories: relatedAccessories.map((id) => new Types.ObjectId(id)),
+          badges: badges.map((id) => new Types.ObjectId(id)),
+        },
+      ],
+      { session },
+    );
+
+    seededInventory = await inventoryService.seedInitialStock(
+      "bike",
+      created!._id as Types.ObjectId,
+      variants,
+      session,
+    );
+
+    return created!;
   });
 
   await recordAuditLog({
@@ -218,6 +243,10 @@ async function create(input: BikeInput, actor: ActorContext): Promise<IBike> {
     after: { slug: bike.slug, variants: bike.variants.length },
     ip: actor.ip,
   });
+
+  for (const item of seededInventory) {
+    await inventoryService.recordItemCreatedAudit(item, actor);
+  }
 
   // The sheet can ride along on create too (see `ProductEditor.tsx`'s own
   // doc comment) — learn from it here, same best-effort discipline as

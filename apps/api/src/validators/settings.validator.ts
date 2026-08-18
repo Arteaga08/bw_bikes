@@ -29,6 +29,7 @@ const nonNegativeInt = (label: string) =>
 export const settingsInventorySchema = Joi.object({
   stockReservationTtlMinutes: positiveInt("El TTL de reserva de stock"),
   reservationRetentionDays: positiveInt("Los días de retención de reservas"),
+  lowStockThresholdUnits: nonNegativeInt("El umbral de stock bajo"),
 });
 
 export const settingsOrdersSchema = Joi.object({

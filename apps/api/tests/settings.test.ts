@@ -17,7 +17,7 @@ describe("Settings — singleton editable by section", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.settings).toMatchObject({
-      inventory: { stockReservationTtlMinutes: 30, reservationRetentionDays: 30 },
+      inventory: { stockReservationTtlMinutes: 30, reservationRetentionDays: 30, lowStockThresholdUnits: 5 },
       orders: {
         orderPaymentTtlMinutes: 15,
         orderAuthAlertHours: 120,
@@ -188,5 +188,31 @@ describe("Settings — singleton editable by section", () => {
     const stored = await Settings.findOne({ key: "global" }).exec();
     // Still the default — the invalid write never landed.
     expect(stored?.orders.orderAuthAlertHours ?? 120).toBe(120);
+  });
+
+  it("requires lowStockThresholdUnits on an inventory write — the field the stats module used to hardcode", async () => {
+    const app: App = buildApp();
+    const adminCookie = await createAdminSession(app);
+
+    const missing = await request(app)
+      .put(`${ADMIN}/settings/inventory`)
+      .set("Cookie", adminCookie)
+      .send({ stockReservationTtlMinutes: 30, reservationRetentionDays: 30 });
+    expect(missing.status).toBe(400);
+
+    const ok = await request(app)
+      .put(`${ADMIN}/settings/inventory`)
+      .set("Cookie", adminCookie)
+      .send({ stockReservationTtlMinutes: 45, reservationRetentionDays: 30, lowStockThresholdUnits: 8 });
+
+    expect(ok.status).toBe(200);
+    const stored = await Settings.findOne({ key: "global" }).exec();
+    expect(stored?.inventory).toMatchObject({
+      stockReservationTtlMinutes: 45,
+      reservationRetentionDays: 30,
+      lowStockThresholdUnits: 8,
+    });
+    // The section-scoped write didn't touch anything outside `inventory`.
+    expect(stored?.pricing).toMatchObject({ taxRateBps: 1600 });
   });
 });

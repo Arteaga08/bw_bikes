@@ -33,6 +33,7 @@ const inventorySchema = new Schema<InventorySettings>(
   {
     stockReservationTtlMinutes: { type: Number, required: true, min: 1 },
     reservationRetentionDays: { type: Number, required: true, min: 1 },
+    lowStockThresholdUnits: { type: Number, required: true, min: 0 },
   },
   { _id: false },
 );

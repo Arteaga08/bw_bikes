@@ -1,6 +1,7 @@
 export * from "./types/analytics.js";
 export * from "./types/api-response.js";
 export * from "./types/application.js";
+export * from "./types/audit.js";
 export * from "./types/auth.js";
 export * from "./types/billing.js";
 export * from "./types/cart.js";

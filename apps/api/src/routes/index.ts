@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { adminApplicationRouter } from "./admin-application.route.js";
+import { adminAuditLogRouter } from "./admin-audit-log.route.js";
 import { adminCatalogRouter } from "./admin-catalog.route.js";
 import { adminInventoryRouter } from "./admin-inventory.route.js";
 import { adminOrderRouter } from "./admin-order.route.js";
@@ -36,5 +37,6 @@ v1Router.use("/admin", adminOrderRouter);
 v1Router.use("/admin", adminApplicationRouter);
 v1Router.use("/admin", adminSettingsRouter);
 v1Router.use("/admin", adminStatsRouter);
+v1Router.use("/admin", adminAuditLogRouter);
 
 export { v1Router, webhookRouter };

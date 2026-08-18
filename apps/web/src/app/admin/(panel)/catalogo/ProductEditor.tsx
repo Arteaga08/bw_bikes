@@ -404,6 +404,13 @@ function ProductEditorContent({
 
     const resolvedVariants = variants.map((row) => {
       const overridePrice = row.priceInput.trim() ? parsePriceToCents(row.priceInput) : null;
+      // Create-only, `in_stock`-only — mirrors what `VariantsEditor` even
+      // renders the field for. `mode === "edit"` never reaches this branch,
+      // so stock capture only ever happens once, at creation.
+      const initialStock =
+        mode === "create" && row.fulfillmentMode === "in_stock" && row.initialStock?.trim()
+          ? Number.parseInt(row.initialStock, 10)
+          : null;
       return {
         sku: row.sku.trim().toUpperCase(),
         ...(row.size.trim() ? { size: row.size.trim() } : {}),
@@ -414,6 +421,7 @@ function ProductEditorContent({
           ? { preorderReleaseDate: row.preorderReleaseDate }
           : {}),
         isActive: row.isActive,
+        ...(initialStock !== null && Number.isInteger(initialStock) && initialStock >= 0 ? { initialStock } : {}),
       };
     });
 
@@ -587,7 +595,7 @@ function ProductEditorContent({
             {categoryUsesSizes ? (
               <SizePicker sizeTemplates={sizeTemplates} variants={variants} onChange={setVariants} />
             ) : null}
-            <VariantsEditor variants={variants} onChange={setVariants} sizeless={!categoryUsesSizes} />
+            <VariantsEditor variants={variants} onChange={setVariants} sizeless={!categoryUsesSizes} mode={mode} />
           </EditorSection>
         );
       }

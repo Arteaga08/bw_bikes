@@ -12,10 +12,18 @@
  * other, because their writes touch disjoint paths.
  */
 
-/** How long a checkout may hold stock, and how long a finished hold is kept for forensics. */
+/**
+ * How long a checkout may hold stock, how long a finished hold is kept for
+ * forensics, and the store-wide low-stock cutoff (M11) — the number of units
+ * at or below which a SKU surfaces on the inventory panel's reorder list. A
+ * single `InventoryItem` may override this with its own `lowStockThreshold`
+ * (a bike worth reordering at 3 units, an accessory at 20); this is the
+ * fallback everything else uses.
+ */
 export interface InventorySettings {
   stockReservationTtlMinutes: number;
   reservationRetentionDays: number;
+  lowStockThresholdUnits: number;
 }
 
 /**

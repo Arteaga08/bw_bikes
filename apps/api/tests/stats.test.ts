@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { Order } from "../src/models/index.js";
 import { createAdminSession, createCustomerSession } from "./helpers/admin-session.js";
+import { createInventoryItemDoc } from "./helpers/factories.js";
 
 const ADMIN = "/api/v1/admin";
 
@@ -148,5 +149,27 @@ describe("Admin stats", () => {
       .set("Cookie", adminCookie);
 
     expect(res.status).toBe(400);
+  });
+});
+
+describe("Admin stats — inventory.lowStockSkus reads Settings, not a constant", () => {
+  it("moves when the store-wide threshold is edited, without touching the row itself", async () => {
+    const app: App = buildApp();
+    const adminCookie = await createAdminSession(app);
+
+    // 8 available units: healthy under the original default (5), low once the
+    // threshold is raised to 10 — same row, same data, different Settings.
+    await createInventoryItemDoc({ sku: "BK-STATS-LOW", onHand: 8, reserved: 0 });
+
+    const before = await request(app).get(`${ADMIN}/stats/inventory`).set("Cookie", adminCookie);
+    expect(before.body.data.stats.lowStockSkus).toBe(0);
+
+    await request(app)
+      .put(`${ADMIN}/settings/inventory`)
+      .set("Cookie", adminCookie)
+      .send({ stockReservationTtlMinutes: 30, reservationRetentionDays: 30, lowStockThresholdUnits: 10 });
+
+    const after = await request(app).get(`${ADMIN}/stats/inventory`).set("Cookie", adminCookie);
+    expect(after.body.data.stats.lowStockSkus).toBe(1);
   });
 });

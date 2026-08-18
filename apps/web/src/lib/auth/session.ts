@@ -44,3 +44,23 @@ export async function requireAdminSession(): Promise<AuthUser> {
 
   return user;
 }
+
+/**
+ * The audit viewer's route guard (M11) — same three checks as
+ * `requireAdminSession`, plus a fourth: the session must be `superadmin`,
+ * not merely `admin`. This is cosmetic, not the real barrier: the API's
+ * `GET /admin/audit-logs` is itself `restrictTo("superadmin")`, so a request
+ * that somehow reached this page without going through here would still get
+ * a 403 from the server. This exists only so an `admin` who guesses the URL
+ * gets the same "sin acceso" page as every other unauthorized route, instead
+ * of a raw fetch failure.
+ */
+export async function requireSuperadminSession(): Promise<AuthUser> {
+  const user = await requireAdminSession();
+
+  if (user.role !== "superadmin") {
+    redirect(FORBIDDEN_PATH);
+  }
+
+  return user;
+}

@@ -59,3 +59,23 @@ que no tienen foto y donde la densidad importa más que lo visual.
 **Pendiente al retomar:** tres variantes de tarjeta se maquetaron en `/admin/mockups/tarjetas`
 (andamio temporal, se borra al cerrar M10.5) para elegir la composición exacta antes de tocar
 `CatalogView.tsx`.
+
+**Nota de cierre de M11 — lectura del Inicio:** de la misma captura, la fila de acceso rápido arriba,
+el selector de rango a la derecha, la fila de 4 KPIs con ícono en la esquina y la pareja
+gráfico-temporal + lista-rankeada sí se retomaron, en `/admin` (Inicio) y `/admin/analitica`. Otra
+vez composición, no paleta: los fondos crema/rosa/azul de la referencia se tradujeron a tarjetas
+`bg-surface` blancas con filete `border-borde`, y el tinte `estado-*-soft` se reservó para el único
+lugar donde de verdad significa estado — las tarjetas de alerta del Inicio, no los KPIs neutrales.
+
+**Cierre de Flup Furniture — dos patrones descartados formalmente:** de la lista original de
+patrones a retomar, dos no aplicaron y no van a aplicar:
+- **Gráfico de barras de doble serie** (ej. Gross margin / Revenue): imposible con los datos reales
+  del proyecto — no hay ingresos por día, solo conteo de órdenes, y dos escalas distintas nunca
+  comparten eje. Los gráficos de M11 son de una sola serie sin excepción.
+- **Donut chart con leyenda lateral**: descartado por conteo de clases. `countsByStatus` tiene 10
+  estatus posibles; con más de 7 clases significativas una dona es ilegible. Se resolvió como tabla
+  rankeada en `/admin/analitica` en su lugar.
+
+El resto de la lista original de Flup (KPI cards + gráficos, lista rankeada, rediseño de Sidebar a
+dos columnas) sigue como estaba: los KPIs/gráficos ya se cerraron arriba vía Casa de Cristal, y el
+Sidebar de dos columnas sigue pendiente, sin decisión, como cambio transversal aparte.

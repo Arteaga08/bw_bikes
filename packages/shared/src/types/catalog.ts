@@ -109,6 +109,18 @@ export interface ProductVariant {
    */
   preorderReleaseDate?: string;
   isActive: boolean;
+  /**
+   * Physical stock to seed on creation (M11) — write-only. Accepted only in a
+   * `POST` create payload, and only takes effect for `fulfillmentMode:
+   * "in_stock"`; `on_request`/`preorder` variants hold no stock so it is
+   * silently ignored for them, same as it is on every `PATCH` update (stock
+   * capture only happens once, at creation — afterward it moves through
+   * `PATCH /admin/inventory/:id/stock`, which carries a reason and an audit
+   * entry an initial value never needs). Never persisted on the variant
+   * itself and never present on a read: the number of record afterward lives
+   * on `InventoryItem.onHand`.
+   */
+  initialStock?: number;
 }
 
 /**

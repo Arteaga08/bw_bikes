@@ -384,11 +384,6 @@ export function OrderDetailModal({
                 ) : (
                   <p className="font-body text-body text-grafito">Aún no se ha capturado guía.</p>
                 )}
-                {eligibility === "eligible" && !order.shipment ? (
-                  <p className="mt-xs font-body text-caption text-grafito">
-                    Capturar la guía todavía no envía un correo al cliente — llega en M15.
-                  </p>
-                ) : null}
               </OrderDetailCard>
 
               <OrderDetailCard icon={User} title="Cliente">

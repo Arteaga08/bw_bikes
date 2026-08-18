@@ -44,7 +44,7 @@ export default async function AdminPanelLayout({ children }: { children: ReactNo
             </main>
           </div>
         </div>
-        <CommandPaletteWrapper />
+        <CommandPaletteWrapper role={user.role} />
       </MobileNavProvider>
     </ToastProvider>
   );
