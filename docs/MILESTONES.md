@@ -16,7 +16,7 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M8 — Shell del dashboard | 2 | ✅ Hecho (mergeado) | `feat/m08-dashboard-shell` | Arranca la fase 2. Ver detalle abajo |
 | M9 — Órdenes y cola de confirmación | 2 | ✅ Hecho (mergeado); verificación Stripe pospuesta a M10 | `feat/m09-ordenes` (mergeado) | Ver `docs/DESIGN_REFERENCES.md`. Ver detalle abajo |
 | M10 — Catálogo en admin | 2 | ✅ Funcionalmente hecho; ⚠️ verificación Stripe en curso | `feat/m10-catalogo-admin` (en `main`, commit directo sin `merge:` propio) | Ver detalle abajo |
-| M11 — Inventario, solicitudes, settings, analítica, auditoría | 2 | ✅ Funcionalmente hecho; cierra la fase 2 | `feat/m10-catalogo-admin` (aún no ramificado a `feat/m11-...`, ver notas) | Ver detalle abajo y `docs/DESIGN_REFERENCES.md` |
+| M11 — Inventario, solicitudes, settings, analítica, auditoría | 2 | ✅ Hecho (mergeado); cierra la fase 2 | `feat/m11-inventario-settings` (mergeado, rama borrada) | Ver detalle abajo y `docs/DESIGN_REFERENCES.md` |
 | M12 — Catálogo público | 3 | ⏳ Pendiente | — | |
 | M13 — Carrito, checkout y cuenta | 3 | ⏳ Pendiente | — | |
 | M14 — Embajadores, patrocinios y SEO | 3 | ⏳ Pendiente | — | |
