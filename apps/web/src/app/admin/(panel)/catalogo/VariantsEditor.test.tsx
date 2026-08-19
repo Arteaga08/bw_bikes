@@ -8,7 +8,7 @@ function row(overrides: Partial<VariantRow> = {}): VariantRow {
 }
 
 function colorTemplate(overrides: Partial<ColorTemplate> = {}): ColorTemplate {
-  return { id: "ct-1", value: "Negro", hex: "#0A0A0A", source: "manual", order: 0, isActive: true, ...overrides };
+  return { id: "ct-1", value: "Negro", hex: "#0A0A0A", secondaryHex: null, source: "manual", order: 0, isActive: true, ...overrides };
 }
 
 describe("findDuplicateSkuIndices", () => {

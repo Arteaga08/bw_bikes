@@ -13,6 +13,10 @@ const hex = Joi.string().trim().pattern(HEX_PATTERN).messages({
   "any.required": "El color es obligatorio.",
 });
 
+const secondaryHex = hex.allow(null).messages({
+  "string.pattern.base": "El segundo color debe ser un hexadecimal válido (#RRGGBB).",
+});
+
 const order = Joi.number().integer().min(0).max(9999).messages({
   "number.base": "El orden debe ser un número.",
   "number.integer": "El orden debe ser un número entero.",
@@ -22,6 +26,7 @@ const order = Joi.number().integer().min(0).max(9999).messages({
 export const createColorTemplateSchema = Joi.object({
   value: value.required(),
   hex: hex.required(),
+  secondaryHex: secondaryHex.optional(),
   order: order.default(0),
   isActive: Joi.boolean().default(true),
 });
@@ -29,6 +34,7 @@ export const createColorTemplateSchema = Joi.object({
 export const updateColorTemplateSchema = Joi.object({
   value: value.optional(),
   hex: hex.optional(),
+  secondaryHex: secondaryHex.optional(),
   order: order.optional(),
   isActive: Joi.boolean().optional(),
 })

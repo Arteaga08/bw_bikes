@@ -10,6 +10,7 @@ const SORTABLE_FIELDS = ["order", "value", "createdAt"] as const;
 interface ColorTemplateInput {
   value?: string;
   hex?: string;
+  secondaryHex?: string | null;
   order?: number;
   isActive?: boolean;
 }
@@ -25,6 +26,7 @@ export function toColorTemplateDto(template: IColorTemplate): PublicColorTemplat
     id: String(template._id),
     value: template.value,
     hex: template.hex,
+    secondaryHex: template.secondaryHex,
     source: template.source,
     order: template.order,
     isActive: template.isActive,
@@ -91,6 +93,7 @@ async function create(input: ColorTemplateInput, actor: ActorContext): Promise<I
   const template = await ColorTemplate.create({
     value,
     hex: input.hex!,
+    secondaryHex: input.secondaryHex ?? null,
     source: "manual",
     order: input.order ?? 0,
     isActive: input.isActive ?? true,
@@ -102,7 +105,7 @@ async function create(input: ColorTemplateInput, actor: ActorContext): Promise<I
     action: "catalog.color_template_created" satisfies AuditAction,
     module: MODULE_NAME,
     targetId: String(template._id),
-    after: { value: template.value, hex: template.hex },
+    after: { value: template.value, hex: template.hex, secondaryHex: template.secondaryHex },
     ip: actor.ip,
   });
 
@@ -111,13 +114,14 @@ async function create(input: ColorTemplateInput, actor: ActorContext): Promise<I
 
 async function update(id: string, input: ColorTemplateInput, actor: ActorContext): Promise<IColorTemplate> {
   const template = await findByIdOrFail(id);
-  const before = { value: template.value, hex: template.hex };
+  const before = { value: template.value, hex: template.hex, secondaryHex: template.secondaryHex };
 
   if (input.value !== undefined && input.value !== template.value) {
     await assertValueIsFree(input.value, id);
     template.value = input.value;
   }
   if (input.hex !== undefined) template.hex = input.hex;
+  if (input.secondaryHex !== undefined) template.secondaryHex = input.secondaryHex;
   if (input.order !== undefined) template.order = input.order;
   if (input.isActive !== undefined) template.isActive = input.isActive;
 
@@ -130,7 +134,7 @@ async function update(id: string, input: ColorTemplateInput, actor: ActorContext
     module: MODULE_NAME,
     targetId: id,
     before,
-    after: { value: template.value, hex: template.hex },
+    after: { value: template.value, hex: template.hex, secondaryHex: template.secondaryHex },
     ip: actor.ip,
   });
 

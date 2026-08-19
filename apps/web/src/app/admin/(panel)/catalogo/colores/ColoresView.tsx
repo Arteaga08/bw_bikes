@@ -5,6 +5,7 @@ import { PencilSimple, Trash } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ColorSwatch } from "@/components/ui/ColorSwatch";
 import { DataTable, DataTableSkeleton, TableRowActions, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
@@ -16,7 +17,6 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useToast } from "@/hooks/use-toast";
 import { adminColorTemplatesApi, type AdminColorTemplateListParams } from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
-import { cn } from "@/lib/cn";
 import { ColorFormModal } from "./ColorFormModal";
 
 const PAGE_SIZE = 20;
@@ -46,17 +46,6 @@ function statusBadge(isActive: boolean) {
 
 function sourceBadge(source: ColorTemplate["source"]) {
   return source === "auto" ? <Badge variant="neutral">Automática</Badge> : <Badge variant="exito">Manual</Badge>;
-}
-
-/** Solid dot for a real hex, dashed-ring placeholder for a not-yet-edited auto-learned entry (`hex: null`) — same idiom `ColorFormModal`'s preview and `VariantsEditor`'s row swatch use. */
-function colorSwatch(hex: string | null) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("inline-block h-4 w-4 shrink-0 rounded-full border", hex ? "border-borde" : "border-dashed border-grafito")}
-      style={hex ? { backgroundColor: hex } : undefined}
-    />
-  );
 }
 
 /**
@@ -165,7 +154,7 @@ export function ColoresView() {
       kind: "text",
       render: (row) => (
         <span className="inline-flex items-center gap-xs">
-          {colorSwatch(row.hex)}
+          <ColorSwatch hex={row.hex} secondaryHex={row.secondaryHex} className="inline-block h-4 w-4" />
           {row.value}
         </span>
       ),
@@ -187,11 +176,9 @@ export function ColoresView() {
         title="Colores"
         subtitle="Colores reutilizables que el editor de bicicletas y accesorios ofrece al armar variantes — un solo catálogo compartido entre ambos."
         actions={
-          <div className="hidden sm:block">
-            <Button variant="primary" onClick={() => setFormDialog({ mode: "create" })}>
-              Nuevo color
-            </Button>
-          </div>
+          <Button variant="primary" className="w-full sm:w-auto" onClick={() => setFormDialog({ mode: "create" })}>
+            Nuevo color
+          </Button>
         }
       />
 
@@ -200,7 +187,6 @@ export function ColoresView() {
         searchPlaceholder="Color"
         value={search}
         onChange={setSearch}
-        action={{ label: "Nuevo color", onClick: () => setFormDialog({ mode: "create" }) }}
         count={!loading && !loadError ? formatCount(meta.total) : undefined}
       />
 
@@ -230,7 +216,7 @@ export function ColoresView() {
               getRowKey={(row) => row.id}
               mobileRow={(row) => (
                 <div className="flex items-center gap-sm px-md py-xs">
-                  {colorSwatch(row.hex)}
+                  <ColorSwatch hex={row.hex} secondaryHex={row.secondaryHex} className="h-4 w-4" />
                   <span className="min-w-0 truncate font-ui text-ui text-negro">{row.value}</span>
                   <span className="ml-auto shrink-0 font-body text-caption text-grafito">
                     {row.isActive ? "Activa" : "Inactiva"}

@@ -98,6 +98,51 @@ describe("color template CRUD (one shared collection)", () => {
     expect(updated.status).toBe(200);
     expect(updated.body.data.colorTemplate.hex).toBe("#00FF00");
   });
+
+  it("creates a two-tone color with a secondaryHex", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/color-templates`)
+      .set("Cookie", adminCookie)
+      .send({ value: "Negro/Rojo", hex: "#0A0A0A", secondaryHex: "#D0021B" });
+
+    expect(created.status).toBe(201);
+    expect(created.body.data.colorTemplate.secondaryHex).toBe("#D0021B");
+  });
+
+  it("defaults secondaryHex to null when not provided", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/color-templates`)
+      .set("Cookie", adminCookie)
+      .send({ value: "Solo", hex: "#0A0A0A" });
+
+    expect(created.status).toBe(201);
+    expect(created.body.data.colorTemplate.secondaryHex).toBeNull();
+  });
+
+  it("sets and then clears secondaryHex, covering the admin turning the bicolor toggle off", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/color-templates`)
+      .set("Cookie", adminCookie)
+      .send({ value: "Gris/Blanco", hex: "#808080", secondaryHex: "#FFFFFF" });
+    const id = created.body.data.colorTemplate.id as string;
+
+    const cleared = await request(app)
+      .patch(`${ADMIN}/color-templates/${id}`)
+      .set("Cookie", adminCookie)
+      .send({ secondaryHex: null });
+
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data.colorTemplate.secondaryHex).toBeNull();
+  });
+
+  it("rejects a malformed secondaryHex value", async () => {
+    const response = await request(app)
+      .post(`${ADMIN}/color-templates`)
+      .set("Cookie", adminCookie)
+      .send({ value: "Malo", hex: "#0A0A0A", secondaryHex: "not-a-hex" });
+
+    expect(response.status).toBe(400);
+  });
 });
 
 describe("learning colors from a product's variants (shared across catalogs)", () => {
@@ -154,7 +199,7 @@ describe("learning colors from a product's variants (shared across catalogs)", (
 
     const templates = await ColorTemplate.find({}).sort({ value: 1 }).exec();
     expect(templates.map((t) => t.value)).toEqual(["Blanco", "Negro"]);
-    expect(templates.every((t) => t.source === "auto" && t.hex === null)).toBe(true);
+    expect(templates.every((t) => t.source === "auto" && t.hex === null && t.secondaryHex === null)).toBe(true);
   });
 
   it("shares the same template collection between bikes and accessories — a bike-learned color is available without an accessory relearning it", async () => {

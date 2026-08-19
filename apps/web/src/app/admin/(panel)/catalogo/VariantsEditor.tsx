@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import type { ColorTemplate, FulfillmentMode } from "@bw-bikes/shared";
 import { Button } from "@/components/ui/Button";
+import { ColorSwatch } from "@/components/ui/ColorSwatch";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Toggle } from "@/components/ui/Toggle";
 import { buildSkuBase, ensureUniqueSku } from "@/lib/catalog/sku";
-import { cn } from "@/lib/cn";
 import { ALL_FULFILLMENT_MODES, FULFILLMENT_MODE_LABELS } from "@/lib/catalog/labels";
 
 /** Mirrors `MAX_VARIANTS` in `apps/api/src/models/schemas/product-variant.schema.ts`. */
@@ -228,7 +228,9 @@ export function VariantsEditor({
           <div className="flex flex-col divide-y divide-borde">
             {group.indices.map((index) => {
               const row = variants[index]!;
-              const currentColorHex = colorTemplates.find((template) => template.value === row.color)?.hex ?? null;
+              const currentColorTemplate = colorTemplates.find((template) => template.value === row.color);
+              const currentColorHex = currentColorTemplate?.hex ?? null;
+              const currentSecondaryHex = currentColorTemplate?.secondaryHex ?? null;
               return (
                 <div key={index} className="flex flex-col gap-sm py-sm first:pt-0 last:pb-0">
                   <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
@@ -271,14 +273,7 @@ export function VariantsEditor({
                             <option value={row.color}>{row.color} (nuevo)</option>
                           ) : null}
                         </Select>
-                        <span
-                          aria-hidden="true"
-                          className={cn(
-                            "mb-0.5 h-11 w-11 shrink-0 rounded-full border",
-                            currentColorHex ? "border-borde" : "border-dashed border-grafito",
-                          )}
-                          style={currentColorHex ? { backgroundColor: currentColorHex } : undefined}
-                        />
+                        <ColorSwatch hex={currentColorHex} secondaryHex={currentSecondaryHex} className="mb-0.5 h-11 w-11" />
                         <Button variant="ghost" size="sm" onClick={() => enterCustomColor(index)}>
                           Nuevo color…
                         </Button>

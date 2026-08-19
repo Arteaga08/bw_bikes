@@ -13,6 +13,8 @@ export interface IColorTemplate extends Document {
   value: string;
   /** `null` for an entry `learnColorTemplates` auto-created from a variant that was never typed through the admin CRUD — an admin fills this in later on `/admin/catalogo/colores`. Required for `source: "manual"`, enforced at the validator, not here. */
   hex: string | null;
+  /** Second color of a two-tone swatch (e.g. "Negro/Rojo"), rendered as a top/bottom split circle. `secondaryHex !== null` is itself the "is two-tone" signal — there is no separate `isBicolor` boolean, to avoid duplicating derived state. `null` for a solid color. */
+  secondaryHex: string | null;
   /** `manual`: an admin created/edited it explicitly. `auto`: learned the first time a variant saved this color. Never downgraded once `manual`. */
   source: ColorTemplateSource;
   order: number;
@@ -32,6 +34,7 @@ const colorTemplateSchema = new Schema<IColorTemplate>(
   {
     value: { type: String, required: true, trim: true, unique: true, maxlength: MAX_COLOR_LENGTH },
     hex: { type: String, default: null, match: HEX_PATTERN },
+    secondaryHex: { type: String, default: null, match: HEX_PATTERN },
     source: { type: String, enum: ["manual", "auto"] satisfies ColorTemplateSource[], required: true },
     order: { type: Number, default: 0, min: 0 },
     isActive: { type: Boolean, default: true },
