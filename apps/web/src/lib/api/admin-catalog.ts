@@ -683,6 +683,7 @@ function buildColorTemplateListQuery(params: AdminColorTemplateListParams): stri
 export interface ColorTemplateInput {
   value: string;
   hex: string;
+  secondaryHex?: string | null;
   order?: number;
   isActive?: boolean;
 }

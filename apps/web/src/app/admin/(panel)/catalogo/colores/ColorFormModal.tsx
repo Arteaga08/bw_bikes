@@ -3,13 +3,14 @@
 import type { ColorTemplate } from "@bw-bikes/shared";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { ColorSwatch } from "@/components/ui/ColorSwatch";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Toggle } from "@/components/ui/Toggle";
 import { useToast } from "@/hooks/use-toast";
 import type { ColorTemplateInput } from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
-import { cn } from "@/lib/cn";
+import { HexPicker } from "./HexPicker";
 
 const HEX_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 
@@ -27,30 +28,33 @@ export interface ColorFormModalProps {
 
 /**
  * Create/edit form for a color template — same shape as `SizeFormModal` plus
- * a `hex` field. A validated text `Input` (not `<input type="color">`): this
- * component's label/error/helper wiring and focus-ring styling are built
- * around a text-like control, and a native color picker's OS-chrome can't
- * represent an in-progress invalid string the way a regex-checked `Input`
- * does. The swatch beside it gives the same visual confirmation instead.
- * `hex` is always required through this form, even when editing an
- * auto-learned entry that started life with `hex: null` — the nullable case
- * only exists for a color nobody has opened this modal for yet.
+ * `hex`/`secondaryHex`. `HexPicker` handles the actual color entry (curated
+ * palette + native `<input type="color">` + a de-emphasized text fallback),
+ * so this component only owns validation and the bicolor toggle. `hex` is
+ * always required through this form, even when editing an auto-learned
+ * entry that started life with `hex: null` — the nullable case only exists
+ * for a color nobody has opened this modal for yet.
  */
 export function ColorFormModal({ api, onClose, onSaved, initial }: ColorFormModalProps) {
   const { toast } = useToast();
   const [value, setValue] = useState(initial?.value ?? "");
   const [hex, setHex] = useState(initial?.hex ?? "");
+  const [isBicolor, setIsBicolor] = useState(initial?.secondaryHex != null);
+  const [secondaryHex, setSecondaryHex] = useState(initial?.secondaryHex ?? "");
   const [order, setOrder] = useState(String(initial?.order ?? 0));
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
   const [submitting, setSubmitting] = useState(false);
-  const [errors, setErrors] = useState<{ value?: string; hex?: string }>({});
+  const [errors, setErrors] = useState<{ value?: string; hex?: string; secondaryHex?: string }>({});
 
   const isValidHex = HEX_PATTERN.test(hex);
 
   async function handleSubmit(): Promise<void> {
-    const nextErrors: { value?: string; hex?: string } = {};
+    const nextErrors: { value?: string; hex?: string; secondaryHex?: string } = {};
     if (!value.trim()) nextErrors.value = "El color es obligatorio.";
     if (!isValidHex) nextErrors.hex = "Captura un hexadecimal válido (#RRGGBB).";
+    if (isBicolor && !HEX_PATTERN.test(secondaryHex)) {
+      nextErrors.secondaryHex = "Captura un hexadecimal válido (#RRGGBB).";
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -59,6 +63,7 @@ export function ColorFormModal({ api, onClose, onSaved, initial }: ColorFormModa
       const input: ColorTemplateInput = {
         value: value.trim(),
         hex,
+        secondaryHex: isBicolor ? secondaryHex : null,
         order: Number.parseInt(order, 10) || 0,
         isActive,
       };
@@ -103,21 +108,14 @@ export function ColorFormModal({ api, onClose, onSaved, initial }: ColorFormModa
           onChange={(event) => setValue(event.target.value)}
           error={errors.value}
         />
-        <div className="flex items-end gap-sm">
-          <Input
-            label="Hex"
-            required
-            placeholder="#3B82F6"
-            value={hex}
-            onChange={(event) => setHex(event.target.value)}
-            error={errors.hex}
-            wrapperClassName="min-w-0 flex-1"
-          />
-          <span
-            aria-hidden="true"
-            className={cn("mb-0.5 h-9 w-9 shrink-0 rounded-full border", isValidHex ? "border-borde" : "border-dashed border-grafito")}
-            style={isValidHex ? { backgroundColor: hex } : undefined}
-          />
+        <HexPicker label="Hex" value={hex} onChange={setHex} error={errors.hex} />
+        <Toggle label="Es bicolor" checked={isBicolor} onChange={setIsBicolor} />
+        {isBicolor ? (
+          <HexPicker label="Segundo color" value={secondaryHex} onChange={setSecondaryHex} error={errors.secondaryHex} />
+        ) : null}
+        <div className="flex items-center gap-sm">
+          <ColorSwatch hex={isValidHex ? hex : null} secondaryHex={isBicolor ? secondaryHex : null} className="h-9 w-9" />
+          <span className="font-body text-caption text-grafito">Vista previa</span>
         </div>
         <Input label="Orden" type="number" min={0} value={order} onChange={(event) => setOrder(event.target.value)} />
         <Toggle label="Activa" checked={isActive} onChange={setIsActive} />

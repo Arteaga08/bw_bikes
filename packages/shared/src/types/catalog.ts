@@ -249,6 +249,8 @@ export interface ColorTemplate {
   value: string;
   /** `#RRGGBB`, or `null` for an entry auto-learned from a variant that was never typed through the admin CRUD. */
   hex: string | null;
+  /** Second hex of a two-tone swatch, rendered as a top/bottom split circle. `null` for a solid color. */
+  secondaryHex: string | null;
   /** `manual`: an admin created/edited it explicitly. `auto`: learned the first time a variant saved this color. */
   source: "manual" | "auto";
   order: number;
