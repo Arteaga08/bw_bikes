@@ -1,4 +1,4 @@
-import type { AdminAccessory, AdminBadge, AdminBrand, SizeTemplate, SpecTemplate } from "@bw-bikes/shared";
+import type { AdminAccessory, AdminBadge, AdminBrand, ColorTemplate, SizeTemplate, SpecTemplate } from "@bw-bikes/shared";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { serverApiFetch } from "@/lib/api/server";
@@ -14,16 +14,19 @@ export default async function EditarAccesorioPage({ params }: { params: Promise<
   let badgesResult: Awaited<ReturnType<typeof serverApiFetch<{ badges: AdminBadge[] }>>>;
   let templatesResult: Awaited<ReturnType<typeof serverApiFetch<{ templates: SpecTemplate[] }>>>;
   let sizeTemplatesResult: Awaited<ReturnType<typeof serverApiFetch<{ sizeTemplates: SizeTemplate[] }>>>;
+  let colorTemplatesResult: Awaited<ReturnType<typeof serverApiFetch<{ colorTemplates: ColorTemplate[] }>>>;
   let accessoryResult: Awaited<ReturnType<typeof serverApiFetch<{ accessory: AdminAccessory }>>>;
   try {
-    [treeResult, brandsResult, badgesResult, templatesResult, sizeTemplatesResult, accessoryResult] = await Promise.all([
-      serverApiFetch<{ tree: CategoryTreeNode[] }>("/admin/accessory-categories/tree"),
-      serverApiFetch<{ brands: AdminBrand[] }>("/admin/brands?limit=100&sort=name"),
-      serverApiFetch<{ badges: AdminBadge[] }>("/admin/badges?limit=100&sort=order"),
-      serverApiFetch<{ templates: SpecTemplate[] }>("/admin/spec-templates?isActive=true&limit=100&sort=title"),
-      serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/accessory-size-templates?isActive=true&limit=100&sort=order"),
-      serverApiFetch<{ accessory: AdminAccessory }>(`/admin/accessories/${id}`),
-    ]);
+    [treeResult, brandsResult, badgesResult, templatesResult, sizeTemplatesResult, colorTemplatesResult, accessoryResult] =
+      await Promise.all([
+        serverApiFetch<{ tree: CategoryTreeNode[] }>("/admin/accessory-categories/tree"),
+        serverApiFetch<{ brands: AdminBrand[] }>("/admin/brands?limit=100&sort=name"),
+        serverApiFetch<{ badges: AdminBadge[] }>("/admin/badges?limit=100&sort=order"),
+        serverApiFetch<{ templates: SpecTemplate[] }>("/admin/spec-templates?isActive=true&limit=100&sort=title"),
+        serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/accessory-size-templates?isActive=true&limit=100&sort=order"),
+        serverApiFetch<{ colorTemplates: ColorTemplate[] }>("/admin/color-templates?isActive=true&limit=100&sort=order"),
+        serverApiFetch<{ accessory: AdminAccessory }>(`/admin/accessories/${id}`),
+      ]);
   } catch (error) {
     if (error instanceof ApiError && error.httpStatus === 404) notFound();
     throw error;
@@ -44,6 +47,7 @@ export default async function EditarAccesorioPage({ params }: { params: Promise<
         availableBadges={badgesResult.data.badges}
         specTemplates={templatesResult.data.templates}
         sizeTemplates={sizeTemplatesResult.data.sizeTemplates}
+        colorTemplates={colorTemplatesResult.data.colorTemplates}
         listPath="/admin/catalogo/accesorios"
       />
     </>

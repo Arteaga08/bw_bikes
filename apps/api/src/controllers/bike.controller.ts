@@ -69,12 +69,12 @@ export const replaceBikeSpecGroups = asyncHandler(async (req: Request, res: Resp
 export const uploadBikeGallery = asyncHandler(async (req: Request, res: Response) => {
   sanitizeMultipartBody(req);
   const files = readUploadedFiles(req);
-  const { alt } = req.body as { alt?: string };
+  const { alt, color } = req.body as { alt?: string; color?: string };
 
   const uploaded = await uploadImages(files, CLOUDINARY_FOLDER);
   const bike = await bikeService.addGalleryImages(
     routeParam(req, "id"),
-    uploaded.map((image) => ({ ...image, ...(alt ? { alt } : {}) })),
+    uploaded.map((image) => ({ ...image, ...(alt ? { alt } : {}), ...(color ? { color } : {}) })),
     requireActor(req),
   );
 
@@ -85,6 +85,12 @@ export const deleteBikeGalleryImage = asyncHandler(async (req: Request, res: Res
   const { publicId } = req.body as { publicId: string };
   const bike = await bikeService.removeGalleryImage(routeParam(req, "id"), publicId, requireActor(req));
   sendResponse(res, 200, "Imagen eliminada.", { gallery: bike.gallery });
+});
+
+export const updateBikeGalleryImageColor = asyncHandler(async (req: Request, res: Response) => {
+  const { publicId, color } = req.body as { publicId: string; color?: string };
+  const bike = await bikeService.updateGalleryImageColor(routeParam(req, "id"), publicId, color, requireActor(req));
+  sendResponse(res, 200, "Color de la imagen actualizado.", { gallery: bike.gallery });
 });
 
 export const reorderBikeGallery = asyncHandler(async (req: Request, res: Response) => {

@@ -77,4 +77,5 @@ export const settingsJobsSchema = Joi.object({
   reservationReaperIntervalMs: jobIntervalMs("El intervalo del reaper de reservas"),
   orderAuthSweepIntervalMs: jobIntervalMs("El intervalo del barrido de autorizaciones"),
   paymentReconciliationIntervalMs: jobIntervalMs("El intervalo de reconciliación de pagos"),
+  lowStockAlertIntervalMs: jobIntervalMs("El intervalo del barrido de stock bajo"),
 });

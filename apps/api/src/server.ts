@@ -4,9 +4,11 @@ import { connectDb, disconnectDb } from "./config/db.js";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import {
+  startLowStockAlertSweeper,
   startOrderAuthorizationSweeper,
   startPaymentReconciliation,
   startReservationReaper,
+  stopLowStockAlertSweeper,
   stopOrderAuthorizationSweeper,
   stopPaymentReconciliation,
   stopReservationReaper,
@@ -20,6 +22,7 @@ async function main(): Promise<void> {
   startReservationReaper();
   startOrderAuthorizationSweeper();
   startPaymentReconciliation();
+  startLowStockAlertSweeper();
 
   const app = buildApp();
   const server: Server = app.listen(env.port, () => {
@@ -31,6 +34,7 @@ async function main(): Promise<void> {
     stopReservationReaper();
     stopOrderAuthorizationSweeper();
     stopPaymentReconciliation();
+    stopLowStockAlertSweeper();
 
     server.close(async (err) => {
       if (err) {

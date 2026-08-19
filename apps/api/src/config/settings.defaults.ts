@@ -84,6 +84,9 @@ export const DEFAULT_REAPER_INTERVAL_MS = 60_000;
 export const DEFAULT_ORDER_AUTH_SWEEP_INTERVAL_MS = 300_000;
 export const DEFAULT_PAYMENT_RECONCILIATION_INTERVAL_MS = 600_000;
 
+/** How often the low-stock sweep ticks — same order of magnitude as the authorization sweeper. */
+export const DEFAULT_LOW_STOCK_ALERT_INTERVAL_MS = 300_000;
+
 export const SETTINGS_DEFAULTS: SettingsSections = Object.freeze({
   inventory: Object.freeze({
     stockReservationTtlMinutes: DEFAULT_RESERVATION_TTL_MINUTES,
@@ -107,5 +110,6 @@ export const SETTINGS_DEFAULTS: SettingsSections = Object.freeze({
     reservationReaperIntervalMs: DEFAULT_REAPER_INTERVAL_MS,
     orderAuthSweepIntervalMs: DEFAULT_ORDER_AUTH_SWEEP_INTERVAL_MS,
     paymentReconciliationIntervalMs: DEFAULT_PAYMENT_RECONCILIATION_INTERVAL_MS,
+    lowStockAlertIntervalMs: DEFAULT_LOW_STOCK_ALERT_INTERVAL_MS,
   }),
 });

@@ -6,6 +6,7 @@ export * from "./bike.model.js";
 export * from "./brand.model.js";
 export * from "./cart.model.js";
 export * from "./category.model.js";
+export * from "./color-template.model.js";
 export * from "./inventory-item.model.js";
 export * from "./order.model.js";
 export * from "./payment-event.model.js";

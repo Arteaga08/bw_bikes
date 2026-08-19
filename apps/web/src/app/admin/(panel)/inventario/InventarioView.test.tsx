@@ -1,4 +1,4 @@
-import type { AdminInventoryItem } from "@bw-bikes/shared";
+import type { AdminInventoryItem, InventorySummaryGroup, InventorySummaryTotals } from "@bw-bikes/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,26 +27,62 @@ function makeItem(overrides: Partial<AdminInventoryItem> = {}): AdminInventoryIt
   };
 }
 
+function makeGroup(overrides: Partial<InventorySummaryGroup> = {}): InventorySummaryGroup {
+  return {
+    itemType: "bike",
+    categoryId: "cat-1",
+    categoryName: "Ruta",
+    totalSkus: 1,
+    outOfStockSkus: 0,
+    lowStockSkus: 0,
+    ...overrides,
+  };
+}
+
+function makeTotals(overrides: Partial<InventorySummaryTotals> = {}): InventorySummaryTotals {
+  return { totalSkus: 0, outOfStockSkus: 0, lowStockSkus: 0, newSkus: 0, ...overrides };
+}
+
 function emptyList(): Response {
   return jsonResponse({ status: "success", message: "OK", data: { items: [] }, meta: { total: 0, page: 1, pages: 1, limit: 50 } });
 }
 
-function stubFetch(overrides: { outItems?: AdminInventoryItem[]; lowItems?: AdminInventoryItem[] } = {}) {
+function stubFetch(
+  overrides: {
+    groups?: InventorySummaryGroup[];
+    totals?: InventorySummaryTotals;
+    categoryItems?: AdminInventoryItem[];
+    searchItems?: AdminInventoryItem[];
+  } = {},
+) {
+  const groups = overrides.groups ?? [];
+  const totals = overrides.totals ?? makeTotals();
+
   const fetchSpy = vi.fn().mockImplementation((url: string) => {
     if (url.includes("/admin/inventory/summary")) {
-      return Promise.resolve(jsonResponse({ status: "success", message: "OK", data: { summary: { groups: [] } } }));
+      return Promise.resolve(jsonResponse({ status: "success", message: "OK", data: { summary: { groups, totals } } }));
     }
-    if (url.includes("stock=out")) {
+    if (url.includes("/admin/inventory") && url.includes("search=")) {
       return Promise.resolve(
-        overrides.outItems
-          ? jsonResponse({ status: "success", message: "OK", data: { items: overrides.outItems }, meta: { total: overrides.outItems.length, page: 1, pages: 1, limit: 50 } })
+        overrides.searchItems
+          ? jsonResponse({
+              status: "success",
+              message: "OK",
+              data: { items: overrides.searchItems },
+              meta: { total: overrides.searchItems.length, page: 1, pages: 1, limit: 50 },
+            })
           : emptyList(),
       );
     }
-    if (url.includes("stock=low")) {
+    if (url.includes("/admin/inventory") && url.includes("category=")) {
       return Promise.resolve(
-        overrides.lowItems
-          ? jsonResponse({ status: "success", message: "OK", data: { items: overrides.lowItems }, meta: { total: overrides.lowItems.length, page: 1, pages: 1, limit: 50 } })
+        overrides.categoryItems
+          ? jsonResponse({
+              status: "success",
+              message: "OK",
+              data: { items: overrides.categoryItems },
+              meta: { total: overrides.categoryItems.length, page: 1, pages: 1, limit: 100 },
+            })
           : emptyList(),
       );
     }
@@ -61,7 +97,7 @@ function stubFetch(overrides: { outItems?: AdminInventoryItem[]; lowItems?: Admi
         jsonResponse({
           status: "success",
           message: "Stock actualizado.",
-          data: { item: { ...makeItem(overrides.outItems?.[0] ?? overrides.lowItems?.[0] ?? {}), onHand: 7, available: 7 } },
+          data: { item: { ...makeItem(overrides.categoryItems?.[0] ?? {}), onHand: 7, available: 7 } },
         }),
       );
     }
@@ -82,15 +118,23 @@ function renderView() {
 describe("InventarioView", () => {
   beforeEach(() => vi.unstubAllGlobals());
 
-  it("shows the healthy empty state when nothing needs reordering", async () => {
-    stubFetch();
+  it("shows neutral alert cards and a collapsed healthy band when nothing needs attention", async () => {
+    stubFetch({ groups: [makeGroup()], totals: makeTotals() });
     renderView();
 
-    expect(await screen.findByText("Todos los SKUs están por encima de su umbral")).toBeInTheDocument();
+    expect(await screen.findByText("Ninguno agotado")).toBeInTheDocument();
+    expect(screen.getByText("Ninguno bajo su umbral")).toBeInTheDocument();
+    expect(screen.getByText("Ruta")).toBeInTheDocument();
+    // A healthy band starts collapsed, so its row content never fetched/rendered.
+    expect(screen.queryByText("Tarmac SL7")).not.toBeInTheDocument();
   });
 
   it("renders a low-stock row with available prominent and en bodega/apartado subordinate", async () => {
-    stubFetch({ lowItems: [makeItem({ available: 3, onHand: 3, reserved: 0 })] });
+    stubFetch({
+      groups: [makeGroup({ lowStockSkus: 1 })],
+      totals: makeTotals({ lowStockSkus: 1 }),
+      categoryItems: [makeItem({ available: 3, onHand: 3, reserved: 0 })],
+    });
     renderView();
 
     expect(await screen.findByText("Tarmac SL7")).toBeInTheDocument();
@@ -100,7 +144,11 @@ describe("InventarioView", () => {
   });
 
   it("shows 'apartado' only when reserved > 0", async () => {
-    stubFetch({ lowItems: [makeItem({ available: 3, onHand: 5, reserved: 2 })] });
+    stubFetch({
+      groups: [makeGroup({ lowStockSkus: 1 })],
+      totals: makeTotals({ lowStockSkus: 1 }),
+      categoryItems: [makeItem({ available: 3, onHand: 5, reserved: 2 })],
+    });
     renderView();
 
     expect(await screen.findByText("5 en bodega · 2 apartado")).toBeInTheDocument();
@@ -108,7 +156,9 @@ describe("InventarioView", () => {
 
   it("marks an on_request variant as 'Bajo pedido', never 'Agotado'", async () => {
     stubFetch({
-      outItems: [makeItem({ available: 0, onHand: 0, variant: { fulfillmentMode: "on_request" } })],
+      groups: [makeGroup({ outOfStockSkus: 1 })],
+      totals: makeTotals({ outOfStockSkus: 1 }),
+      categoryItems: [makeItem({ available: 0, onHand: 0, variant: { fulfillmentMode: "on_request" } })],
     });
     renderView();
 
@@ -117,7 +167,11 @@ describe("InventarioView", () => {
   });
 
   it("adjusts stock end to end: PATCH real → toast → refetch", async () => {
-    const fetchSpy = stubFetch({ lowItems: [makeItem({ available: 3, onHand: 3 })] });
+    const fetchSpy = stubFetch({
+      groups: [makeGroup({ lowStockSkus: 1 })],
+      totals: makeTotals({ lowStockSkus: 1 }),
+      categoryItems: [makeItem({ available: 3, onHand: 3 })],
+    });
     const user = userEvent.setup();
     renderView();
 
@@ -135,5 +189,60 @@ describe("InventarioView", () => {
     const call = fetchSpy.mock.calls.find((args: unknown[]) => args[0] === "/api/v1/admin/inventory/item-1/stock");
     expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({ delta: 5, reason: "Recepción de embarque" });
     expect(await screen.findByText("Stock actualizado")).toBeInTheDocument();
+  });
+
+  it("shows a placeholder icon instead of an empty box when the product has no photo", async () => {
+    const { container } = (() => {
+      stubFetch({
+        groups: [makeGroup({ lowStockSkus: 1 })],
+        totals: makeTotals({ lowStockSkus: 1 }),
+        categoryItems: [makeItem()], // no product.imageUrl
+      });
+      return renderView();
+    })();
+
+    expect(await screen.findByText("Tarmac SL7")).toBeInTheDocument();
+    expect(container.querySelector("img")).not.toBeInTheDocument();
+  });
+
+  it("clicking the 'Bajos' card forces every band open and filters its rows to stock=low", async () => {
+    const fetchSpy = stubFetch({
+      groups: [makeGroup({ categoryName: "Ruta", lowStockSkus: 0, outOfStockSkus: 0 })],
+      totals: makeTotals({ lowStockSkus: 1 }),
+      categoryItems: [makeItem({ available: 3, onHand: 3 })],
+    });
+    const user = userEvent.setup();
+    renderView();
+
+    // Healthy band starts collapsed — its row is not fetched yet.
+    expect(await screen.findByText("Ruta")).toBeInTheDocument();
+    expect(screen.queryByText("Tarmac SL7")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Bajos/ }));
+
+    expect(await screen.findByText("Tarmac SL7")).toBeInTheDocument();
+    expect(await screen.findByText("Filtro: Bajos")).toBeInTheDocument();
+
+    const bandCall = fetchSpy.mock.calls.find(
+      (args: unknown[]) => typeof args[0] === "string" && (args[0] as string).includes("category="),
+    );
+    expect(bandCall![0]).toContain("stock=low");
+  });
+
+  it("typing in the search box replaces the category bands with a flat SKU-matched list", async () => {
+    stubFetch({
+      groups: [makeGroup()],
+      totals: makeTotals(),
+      searchItems: [makeItem({ sku: "BK-TARMAC-M" })],
+    });
+    const user = userEvent.setup();
+    renderView();
+
+    await screen.findByText("Ruta");
+    await user.type(screen.getByPlaceholderText("Buscar por SKU"), "TARMAC");
+
+    expect(await screen.findByText("Tarmac SL7")).toBeInTheDocument();
+    // The category band structure (with its own SKU count/eyebrow) is replaced while searching.
+    expect(screen.queryByText("1 SKUs")).not.toBeInTheDocument();
   });
 });

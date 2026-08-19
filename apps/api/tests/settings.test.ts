@@ -32,6 +32,7 @@ describe("Settings — singleton editable by section", () => {
         reservationReaperIntervalMs: 60_000,
         orderAuthSweepIntervalMs: 300_000,
         paymentReconciliationIntervalMs: 600_000,
+        lowStockAlertIntervalMs: 300_000,
       },
     });
 

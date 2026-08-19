@@ -7,7 +7,11 @@ import type {
   ShippingSettings,
 } from "@bw-bikes/shared";
 import { type Document, model, Schema } from "mongoose";
-import { SETTINGS_DEFAULTS } from "../config/settings.defaults.js";
+import {
+  DEFAULT_LOW_STOCK_ALERT_INTERVAL_MS,
+  DEFAULT_LOW_STOCK_THRESHOLD_UNITS,
+  SETTINGS_DEFAULTS,
+} from "../config/settings.defaults.js";
 
 /**
  * The one document this collection ever holds. `key` carries a unique index
@@ -33,7 +37,15 @@ const inventorySchema = new Schema<InventorySettings>(
   {
     stockReservationTtlMinutes: { type: Number, required: true, min: 1 },
     reservationRetentionDays: { type: Number, required: true, min: 1 },
-    lowStockThresholdUnits: { type: Number, required: true, min: 0 },
+    // Field-level default (not just the `inventory` sub-document's default
+    // below) — the singleton predates this field (M7), so an existing
+    // document has `inventory` set but not this path. Mongoose applies a
+    // field's own default during hydration for any path missing from the
+    // stored document, which is what let this self-heal on the next read
+    // instead of needing a migration. Any settings field added to an
+    // already-persisted singleton needs the same treatment, not just a
+    // `required: true`.
+    lowStockThresholdUnits: { type: Number, required: true, min: 0, default: DEFAULT_LOW_STOCK_THRESHOLD_UNITS },
   },
   { _id: false },
 );
@@ -78,6 +90,16 @@ const jobsSchema = new Schema<JobsSettings>(
     reservationReaperIntervalMs: { type: Number, required: true, min: 1 },
     orderAuthSweepIntervalMs: { type: Number, required: true, min: 1 },
     paymentReconciliationIntervalMs: { type: Number, required: true, min: 1 },
+    // Field-level default, same reasoning as `inventory.lowStockThresholdUnits`
+    // above: this field is added to a `jobs` sub-document that may already be
+    // persisted on the singleton, so an existing document self-heals on the
+    // next read instead of needing a migration.
+    lowStockAlertIntervalMs: {
+      type: Number,
+      required: true,
+      min: 1,
+      default: DEFAULT_LOW_STOCK_ALERT_INTERVAL_MS,
+    },
   },
   { _id: false },
 );

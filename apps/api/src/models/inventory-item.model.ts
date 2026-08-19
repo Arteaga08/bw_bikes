@@ -47,6 +47,15 @@ export interface IInventoryItem extends Document {
   lowStockThreshold?: number;
   /** Set only when `adjustStock` applies a positive `delta` — a physical recount (`onHand`) or a deduction is not a restock. Absent means never restocked since this row was created. */
   lastRestockedAt?: Date;
+  /**
+   * Sealed by the low-stock sweep (`inventory-maintenance.service.ts`) the
+   * first time this row is found at or below its effective threshold — same
+   * shape as `Order.adminAlertedAt`, so the Telegram/email alert fires
+   * exactly once per crossing. Cleared back to absent once `available` rises
+   * back above the threshold, so a later restock→depletion cycle alerts
+   * again instead of staying silent forever.
+   */
+  lowStockAlertedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -64,6 +73,7 @@ const inventoryItemSchema = new Schema<IInventoryItem>(
     reserved: { type: Number, required: true, default: 0, min: 0 },
     lowStockThreshold: { type: Number, min: 0, max: MAX_ON_HAND },
     lastRestockedAt: { type: Date },
+    lowStockAlertedAt: { type: Date },
   },
   { timestamps: true },
 );

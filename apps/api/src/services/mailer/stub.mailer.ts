@@ -24,4 +24,22 @@ export const stubMailer: Mailer = {
   async sendShipmentNotification({ to, trackingNumber }) {
     logger.debug({ to, trackingNumber }, "[stub-mailer] shipment notification not sent — no provider configured");
   },
+  async sendOrderPaidEmail({ to, orderNumber }) {
+    logger.debug({ to, orderNumber }, "[stub-mailer] order-paid email not sent — no provider configured");
+  },
+  async sendOrderProcessingEmail({ to, orderNumber }) {
+    logger.debug({ to, orderNumber }, "[stub-mailer] order-processing email not sent — no provider configured");
+  },
+  async sendOrderDeliveredEmail({ to, orderNumber }) {
+    logger.debug({ to, orderNumber }, "[stub-mailer] order-delivered email not sent — no provider configured");
+  },
+  async sendRefundConfirmedEmail({ to, orderNumber }) {
+    logger.debug({ to, orderNumber }, "[stub-mailer] refund-confirmed email not sent — no provider configured");
+  },
+  async sendPaymentFailedEmail({ to, orderNumber }) {
+    logger.debug({ to, orderNumber }, "[stub-mailer] payment-failed email not sent — no provider configured");
+  },
+  async sendAdminAlertEmail({ subject }) {
+    logger.debug({ subject }, "[stub-mailer] admin alert email not sent — no provider configured");
+  },
 };

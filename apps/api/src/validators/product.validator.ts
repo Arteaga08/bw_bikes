@@ -70,15 +70,18 @@ const variants = Joi.array().items(variant).max(MAX_VARIANTS).messages({
 });
 
 /**
- * Create-only: `initialStock` seeds `InventoryItem.onHand` for an `in_stock`
- * variant at product creation (M11) — see `bike.service.ts`'s `create`. Kept
- * out of the plain `variant`/`variants` schemas above (shared by every
- * update route) on purpose: accepting it on `PATCH` would let an edit
- * silently overwrite whatever `/admin/inventario` adjusted in the meantime,
- * which is exactly the stale-write bug the read-only field in the editor's
- * edit mode exists to avoid. `fulfillmentMode` isn't cross-validated against
- * it here — a value sent for `on_request`/`preorder` is simply ignored at
- * the service layer, same as the UI never renders the field for those modes.
+ * `initialStock` seeds `InventoryItem.onHand` for an `in_stock` variant (M11
+ * create, M11.x a variant added mid-edit) — see `bike.service.ts`'s
+ * `create`/`update`. Kept out of the plain `variant`/`variants` schemas
+ * above on purpose, but — unlike the milestone that introduced it —
+ * accepting it on `PATCH` is now safe: the anti-stale-overwrite guarantee
+ * lives at the service layer (`product.service.ts`'s `partitionNewVariants`),
+ * which only ever acts on `initialStock` for a SKU that wasn't already on the
+ * product before this PATCH. A value sent for an already-persisted SKU is
+ * accepted by Joi but ignored by the service, same as `fulfillmentMode`
+ * isn't cross-validated against it here — a value sent for
+ * `on_request`/`preorder` is simply ignored too, same as the UI never
+ * renders the field for those modes.
  */
 const initialStock = Joi.number().integer().min(0).max(MAX_ON_HAND).messages({
   "number.base": "El stock inicial debe ser un número.",
@@ -87,9 +90,9 @@ const initialStock = Joi.number().integer().min(0).max(MAX_ON_HAND).messages({
   "number.max": `El stock inicial no puede exceder ${MAX_ON_HAND} unidades.`,
 });
 
-const variantForCreate = variant.keys({ initialStock: initialStock.optional() });
+const variantWithInitialStock = variant.keys({ initialStock: initialStock.optional() });
 
-const variantsForCreate = Joi.array().items(variantForCreate).max(MAX_VARIANTS).messages({
+const variantsWithInitialStock = Joi.array().items(variantWithInitialStock).max(MAX_VARIANTS).messages({
   "array.max": `No se pueden registrar más de ${MAX_VARIANTS} variantes.`,
 });
 
@@ -178,7 +181,7 @@ export const createBikeSchema = Joi.object({
   price: priceCents.required(),
   summary: summary.default([]),
   relatedAccessories: relatedAccessories.default([]),
-  variants: variantsForCreate.optional(),
+  variants: variantsWithInitialStock.optional(),
 });
 
 export const updateBikeSchema = Joi.object({
@@ -186,6 +189,7 @@ export const updateBikeSchema = Joi.object({
   shortDescription: shortDescription.optional(),
   summary: summary.optional(),
   relatedAccessories: relatedAccessories.optional(),
+  variants: variantsWithInitialStock.optional(),
 })
   .min(1)
   .messages({ "object.min": "Envía al menos un campo para actualizar." });
@@ -197,9 +201,12 @@ export const createAccessorySchema = Joi.object({
   category: productBase.category.required(),
   description: description.required(),
   price: priceCents.required(),
-  variants: variantsForCreate.optional(),
+  variants: variantsWithInitialStock.optional(),
 });
 
-export const updateAccessorySchema = Joi.object(productBase)
+export const updateAccessorySchema = Joi.object({
+  ...productBase,
+  variants: variantsWithInitialStock.optional(),
+})
   .min(1)
   .messages({ "object.min": "Envía al menos un campo para actualizar." });

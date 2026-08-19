@@ -2,6 +2,7 @@
 
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useId, useRef } from "react";
+import { CloseButton } from "@/components/ui/CloseButton";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { cn } from "@/lib/cn";
 
@@ -74,9 +75,12 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: M
           size === "lg" ? "max-w-dialog-lg" : "max-w-dialog",
         )}
       >
-        <h2 id={titleId} className="shrink-0 px-lg pt-lg font-display text-h3 text-negro">
-          {title}
-        </h2>
+        <div className="flex shrink-0 items-start justify-between gap-sm px-lg pt-lg">
+          <h2 id={titleId} className="font-display text-h3 text-negro">
+            {title}
+          </h2>
+          <CloseButton onClick={onClose} aria-label={`Cerrar ${title}`} className="-mr-xs -mt-xs shrink-0" />
+        </div>
         <div className={cn("min-h-0 flex-1 overflow-y-auto px-lg pt-md font-body text-body text-negro", !footer && "pb-lg")}>
           {children}
         </div>

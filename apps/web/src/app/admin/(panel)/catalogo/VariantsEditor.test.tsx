@@ -1,9 +1,14 @@
+import type { ColorTemplate } from "@bw-bikes/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { emptyVariantRow, findDuplicateSkuIndices, VariantsEditor, type VariantRow } from "./VariantsEditor";
 
 function row(overrides: Partial<VariantRow> = {}): VariantRow {
   return { ...emptyVariantRow(), ...overrides };
+}
+
+function colorTemplate(overrides: Partial<ColorTemplate> = {}): ColorTemplate {
+  return { id: "ct-1", value: "Negro", hex: "#0A0A0A", source: "manual", order: 0, isActive: true, ...overrides };
 }
 
 describe("findDuplicateSkuIndices", () => {
@@ -76,13 +81,61 @@ describe("VariantsEditor", () => {
     expect(onChange).toHaveBeenCalledWith([row({ size: "54" }), { ...emptyVariantRow(), size: "54" }]);
   });
 
-  it("uppercases the SKU as it's typed", () => {
+  it("renders the SKU field as read-only — it's computed automatically, not typed", () => {
+    render(<VariantsEditor variants={[row({ size: "54", sku: "BK-TARMAC-M" })]} onChange={vi.fn()} mode="edit" />);
+
+    const skuInput = screen.getByLabelText("SKU") as HTMLInputElement;
+    expect(skuInput).toHaveAttribute("readOnly");
+    expect(skuInput).toBeDisabled();
+    expect(skuInput.value).toBe("BK-TARMAC-M");
+  });
+
+  it("computes the SKU from brand, model, size and color for a new row", () => {
     const onChange = vi.fn();
-    render(<VariantsEditor variants={[row({ size: "54", sku: "" })]} onChange={onChange} mode="edit" />);
+    const variants = [row({ size: "54", color: "", sku: "" })];
+    const { rerender } = render(
+      <VariantsEditor
+        variants={variants}
+        onChange={onChange}
+        mode="edit"
+        brandName="Trek"
+        productName="Domane SL 5"
+        colorTemplates={[colorTemplate({ value: "Negro" })]}
+      />,
+    );
 
-    fireEvent.change(screen.getByLabelText("SKU"), { target: { value: "bk-tarmac-m" } });
+    fireEvent.change(screen.getByLabelText("Color"), { target: { value: "Negro" } });
+    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ sku: "TRE-DOMSL5-54-NEG" })]);
 
-    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ sku: "BK-TARMAC-M" })]);
+    rerender(
+      <VariantsEditor
+        variants={[{ ...variants[0]!, color: "Negro", sku: "TRE-DOMSL5-54-NEG" }]}
+        onChange={onChange}
+        mode="edit"
+        brandName="Trek"
+        productName="Domane SL 5"
+      />,
+    );
+  });
+
+  it("never recomputes the SKU of a row hydrated from an existing product, even when brand/model change", () => {
+    const onChange = vi.fn();
+    const existingRow = { ...row({ size: "54", color: "Negro", sku: "TRE-DOMSL5-54-NEG" }), isNewRow: false };
+    const { rerender } = render(
+      <VariantsEditor variants={[existingRow]} onChange={onChange} mode="edit" brandName="Trek" productName="Domane SL 5" />,
+    );
+
+    rerender(
+      <VariantsEditor
+        variants={[existingRow]}
+        onChange={onChange}
+        mode="edit"
+        brandName="Trek"
+        productName="Domane SL 6"
+      />,
+    );
+
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("removes only the clicked row, not the whole size group", () => {
@@ -118,17 +171,25 @@ describe("VariantsEditor", () => {
     });
   });
 
-  describe("initial stock (M11, create-only)", () => {
-    it("shows Stock inicial for an in_stock variant only in create mode", () => {
-      const { rerender } = render(
-        <VariantsEditor variants={[row({ size: "54", fulfillmentMode: "in_stock" })]} onChange={vi.fn()} mode="edit" />,
-      );
-      expect(screen.queryByLabelText("Stock inicial")).not.toBeInTheDocument();
-
-      rerender(
+  describe("initial stock (M11 create, M11.x new rows added mid-edit)", () => {
+    it("shows Stock inicial for a new in_stock row in create mode", () => {
+      render(
         <VariantsEditor variants={[row({ size: "54", fulfillmentMode: "in_stock" })]} onChange={vi.fn()} mode="create" />,
       );
       expect(screen.getByLabelText("Stock inicial")).toBeInTheDocument();
+    });
+
+    it("shows Stock inicial for a new (isNewRow) in_stock row even in edit mode", () => {
+      render(
+        <VariantsEditor variants={[row({ size: "54", fulfillmentMode: "in_stock" })]} onChange={vi.fn()} mode="edit" />,
+      );
+      expect(screen.getByLabelText("Stock inicial")).toBeInTheDocument();
+    });
+
+    it("never shows Stock inicial for a row hydrated from an existing product in edit mode", () => {
+      const existingRow = { ...row({ size: "54", fulfillmentMode: "in_stock" }), isNewRow: false };
+      render(<VariantsEditor variants={[existingRow]} onChange={vi.fn()} mode="edit" />);
+      expect(screen.queryByLabelText("Stock inicial")).not.toBeInTheDocument();
     });
 
     it("does not show Stock inicial for on_request or preorder, even in create mode", () => {
@@ -156,6 +217,77 @@ describe("VariantsEditor", () => {
       fireEvent.change(screen.getByLabelText("Stock inicial"), { target: { value: "5" } });
 
       expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ initialStock: "5" })]);
+    });
+  });
+
+  describe("color picker (real color selector with hex swatch)", () => {
+    it("lists the catalog's colors as options, sorted by order", () => {
+      const colorTemplates = [colorTemplate({ id: "ct-2", value: "Azul", order: 1 }), colorTemplate({ id: "ct-1", value: "Negro", order: 0 })];
+      render(<VariantsEditor variants={[row({ size: "54" })]} onChange={vi.fn()} mode="edit" colorTemplates={colorTemplates} />);
+
+      const select = screen.getByLabelText("Color") as HTMLSelectElement;
+      const optionLabels = Array.from(select.options).map((option) => option.textContent);
+      expect(optionLabels).toEqual(["Sin color", "Negro", "Azul"]);
+    });
+
+    it("selecting a catalog color updates the row via onChange", () => {
+      const onChange = vi.fn();
+      const colorTemplates = [colorTemplate({ value: "Negro" })];
+      render(
+        <VariantsEditor variants={[row({ size: "54", color: "" })]} onChange={onChange} mode="edit" colorTemplates={colorTemplates} />,
+      );
+
+      fireEvent.change(screen.getByLabelText("Color"), { target: { value: "Negro" } });
+
+      expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ color: "Negro" })]);
+    });
+
+    it("renders a solid swatch reflecting the selected color's hex", () => {
+      const colorTemplates = [colorTemplate({ value: "Negro", hex: "#0A0A0A" })];
+      render(
+        <VariantsEditor variants={[row({ size: "54", color: "Negro" })]} onChange={vi.fn()} mode="edit" colorTemplates={colorTemplates} />,
+      );
+
+      const swatch = document.querySelector('[aria-hidden="true"].rounded-full') as HTMLElement;
+      expect(swatch.style.backgroundColor).toBe("rgb(10, 10, 10)");
+    });
+
+    it("renders a dashed placeholder swatch when the row has no color selected", () => {
+      render(<VariantsEditor variants={[row({ size: "54", color: "" })]} onChange={vi.fn()} mode="edit" colorTemplates={[]} />);
+
+      const swatch = document.querySelector('[aria-hidden="true"].rounded-full') as HTMLElement;
+      expect(swatch.style.backgroundColor).toBe("");
+    });
+
+    it("lets the admin type a color not yet in the catalog via 'Nuevo color…', and it lands in row.color", () => {
+      const onChange = vi.fn();
+      render(<VariantsEditor variants={[row({ size: "54", color: "" })]} onChange={onChange} mode="edit" colorTemplates={[]} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Nuevo color…" }));
+      fireEvent.change(screen.getByLabelText("Nombre del color"), { target: { value: "Verde militar" } });
+
+      expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ color: "Verde militar" })]);
+    });
+
+    it("'Volver a la lista' switches back from the free-text input to the Select", () => {
+      render(<VariantsEditor variants={[row({ size: "54", color: "" })]} onChange={vi.fn()} mode="edit" colorTemplates={[]} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Nuevo color…" }));
+      expect(screen.getByLabelText("Nombre del color")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Volver a la lista" }));
+      expect(screen.queryByLabelText("Nombre del color")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Color")).toBeInTheDocument();
+    });
+
+    it("shows a row's already-saved color even when it's no longer in the catalog, with a '(nuevo)' hint", () => {
+      render(
+        <VariantsEditor variants={[row({ size: "54", color: "Vintage" })]} onChange={vi.fn()} mode="edit" colorTemplates={[]} />,
+      );
+
+      const select = screen.getByLabelText("Color") as HTMLSelectElement;
+      expect(select.value).toBe("Vintage");
+      expect(screen.getByText("Vintage (nuevo)")).toBeInTheDocument();
     });
   });
 });

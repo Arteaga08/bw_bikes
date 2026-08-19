@@ -1266,6 +1266,10 @@ bajo la condición `react-server`. Corregido cambiando el import.
   concurrente) con un acento `border-l-4` — un side-stripe, prohibición absoluta del skill
   `impeccable`. Queda documentado como deuda; no se corrigió unilateralmente porque es infraestructura
   compartida fuera de la propiedad de M11.
+  **Resuelto en el rediseño de Inicio (2026-08):** con M11 ya cerrado, `StatCard` deja de ser
+  infraestructura ajena. El stripe se reemplaza por un punto de 8px junto al eyebrow (ver
+  `DESIGN.md` §5, Cards); `StatCardSkeleton` se actualiza en el mismo cambio para que loading →
+  loaded no salte de layout.
 
 **Deuda de diseño heredada:** solo `/admin/inventario` pasó por el flujo `shape` de `impeccable`
 completo. Las otras cinco pantallas se construyeron sobre patrones ya validados por M9/M10
@@ -1274,10 +1278,15 @@ riesgo más agudo en Inicio y Analítica, donde el reflejo de categoría ("panel
 gráfico") es más fuerte.
 
 **Fuera de este milestone:** `search` roto de `/admin/applications` (deuda ya conocida, no tocada);
-`revenueByDay` en stats; historial de movimientos de stock; exportación a CSV; comparación contra
-periodo anterior; reconciliar la fila de inventario huérfana al renombrar un SKU; estado de filtros
+~~`revenueByDay` en stats~~; historial de movimientos de stock; exportación a CSV; ~~comparación contra
+periodo anterior~~; reconciliar la fila de inventario huérfana al renombrar un SKU; estado de filtros
 en la URL; rediseño del Sidebar a dos columnas; un campo `allowBackorder` propio (se reusa
 `fulfillmentMode: "on_request"`); un tercer contador `allocated` en `InventoryItem` (no existe —
 ver corrección del modelo de datos arriba); cambiar `fulfillmentMode` desde inventario (se edita en
 `VariantsEditor`). Ninguna operación de git — este trabajo queda sin commitear, a la espera de
 revisión y aprobación explícita de Manuel.
+
+**Resuelto en el rediseño de Inicio (2026-08):** `revenueByDay` (`OrdersStats.ordersByDay[].revenueCents`,
+`orders.stats.ts`) y la comparación contra el periodo anterior (`OrdersStats.previous`, misma ventana
+que el rango solicitado) — ambos tachados arriba. Ver `apps/api/src/services/stats/orders.stats.ts`
+y `packages/shared/src/types/stats.ts`.

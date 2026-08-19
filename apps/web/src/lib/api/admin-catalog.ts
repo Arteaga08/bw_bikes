@@ -6,6 +6,7 @@ import type {
   AdminCategory,
   BadgeVariant,
   CategoryImage,
+  ColorTemplate,
   FulfillmentMode,
   ProductImage,
   SizeTemplate,
@@ -219,6 +220,15 @@ function createProductApi<TAdmin, TInput extends ProductBasicsInput>(config: Pro
     return res.data.gallery;
   }
 
+  /** `color` omitted (or empty) clears a previously set tag. */
+  async function updateGalleryImageColor(id: string, publicId: string, color?: string): Promise<ProductImage[]> {
+    const res = await apiFetch<{ gallery: ProductImage[] }>(`${basePath}/${id}/gallery/color`, {
+      method: "PATCH",
+      body: JSON.stringify({ publicId, color: color ?? "" }),
+    });
+    return res.data.gallery;
+  }
+
   return {
     list,
     getById,
@@ -231,6 +241,7 @@ function createProductApi<TAdmin, TInput extends ProductBasicsInput>(config: Pro
     uploadGallery,
     removeGalleryImage,
     reorderGallery,
+    updateGalleryImageColor,
   };
 }
 
@@ -640,3 +651,76 @@ function createSizeTemplateApi(basePath: string) {
 
 export const adminBikeSizeTemplatesApi = createSizeTemplateApi("/admin/bike-size-templates");
 export const adminAccessorySizeTemplatesApi = createSizeTemplateApi("/admin/accessory-size-templates");
+
+// --- Color template API ------------------------------------------------------
+// One shared collection, unlike sizes — a color name means the same thing on
+// a bike as on a helmet, so this is a singleton client, not a factory.
+// Feeds the row-level color picker on "Tallas y variantes"; its own CRUD
+// screen (`/admin/catalogo/colores`) manages it directly.
+
+const COLOR_TEMPLATES_PATH = "/admin/color-templates";
+
+export interface AdminColorTemplateListParams {
+  page?: number;
+  limit?: number;
+  sort?: string;
+  search?: string;
+  isActive?: boolean;
+}
+
+function buildColorTemplateListQuery(params: AdminColorTemplateListParams): string {
+  const entries: Array<[string, string]> = [];
+  if (params.page !== undefined) entries.push(["page", String(params.page)]);
+  if (params.limit !== undefined) entries.push(["limit", String(params.limit)]);
+  if (params.sort) entries.push(["sort", params.sort]);
+  if (params.search) entries.push(["search", params.search]);
+  if (params.isActive !== undefined) entries.push(["isActive", String(params.isActive)]);
+
+  const query = new URLSearchParams(entries).toString();
+  return query ? `?${query}` : "";
+}
+
+export interface ColorTemplateInput {
+  value: string;
+  hex: string;
+  order?: number;
+  isActive?: boolean;
+}
+
+async function listColorTemplates(params: AdminColorTemplateListParams = {}): Promise<ParsedResponse<ColorTemplate[]>> {
+  const res = await apiFetch<{ colorTemplates: ColorTemplate[] }>(`${COLOR_TEMPLATES_PATH}${buildColorTemplateListQuery(params)}`);
+  return { data: res.data.colorTemplates, ...(res.meta ? { meta: res.meta } : {}) };
+}
+
+async function getColorTemplateById(id: string): Promise<ColorTemplate> {
+  const res = await apiFetch<{ colorTemplate: ColorTemplate }>(`${COLOR_TEMPLATES_PATH}/${id}`);
+  return res.data.colorTemplate;
+}
+
+async function createColorTemplate(input: ColorTemplateInput): Promise<ColorTemplate> {
+  const res = await apiFetch<{ colorTemplate: ColorTemplate }>(COLOR_TEMPLATES_PATH, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return res.data.colorTemplate;
+}
+
+async function updateColorTemplate(id: string, input: Partial<ColorTemplateInput>): Promise<ColorTemplate> {
+  const res = await apiFetch<{ colorTemplate: ColorTemplate }>(`${COLOR_TEMPLATES_PATH}/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+  return res.data.colorTemplate;
+}
+
+async function removeColorTemplate(id: string): Promise<void> {
+  await apiFetch<undefined>(`${COLOR_TEMPLATES_PATH}/${id}`, { method: "DELETE" });
+}
+
+export const adminColorTemplatesApi = {
+  list: listColorTemplates,
+  getById: getColorTemplateById,
+  create: createColorTemplate,
+  update: updateColorTemplate,
+  remove: removeColorTemplate,
+};

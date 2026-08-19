@@ -6,6 +6,7 @@ export * from "./billing.validator.js";
 export * from "./brand.validator.js";
 export * from "./cart.validator.js";
 export * from "./category.validator.js";
+export * from "./color-template.validator.js";
 export * from "./common.validator.js";
 export * from "./gallery.validator.js";
 export * from "./inventory.validator.js";

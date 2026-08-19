@@ -55,6 +55,9 @@ const SORTABLE_FIELDS = ["createdAt", "price", "name"] as const;
 /** Only active, never-archived products are visible to the storefront. */
 const PUBLIC_VISIBILITY = { isActive: true, archivedAt: null } as const;
 
+/** A color only ever needs a "before"/"after" shot — the cap is optional (0 or 1 is fine), it just blocks a 3rd. Enforced on both the retag path and the upload-batch path. */
+const MAX_IMAGES_PER_COLOR = 2;
+
 export function createProductService<TDoc extends ProductDocument>(
   Product: Model<TDoc>,
   options: ProductServiceOptions,
@@ -123,6 +126,17 @@ export function createProductService<TDoc extends ProductDocument>(
       }
       seen.add(variant.sku);
     }
+  }
+
+  /**
+   * Variants in `next` whose SKU wasn't already on the product before this
+   * update — the only rows an `update()` may seed `InventoryItem` rows for.
+   * Keyed by SKU because a variant carries no `_id` of its own (see
+   * `ProductVariant`); `previousSkus` must be snapshotted before the caller
+   * mutates the document's own `variants` array.
+   */
+  function partitionNewVariants(previousSkus: ReadonlySet<string>, next: ProductVariant[]): ProductVariant[] {
+    return next.filter((variant) => !previousSkus.has(variant.sku));
   }
 
   /**
@@ -398,6 +412,18 @@ export function createProductService<TDoc extends ProductDocument>(
       throw new AppError(`La galería no puede tener más de ${MAX_GALLERY_IMAGES} imágenes.`, 400);
     }
 
+    // Same "fails atomically, never half-succeeds" discipline as the
+    // MAX_GALLERY_IMAGES check above — checked, and possibly thrown, before
+    // any mutation of `product.gallery` or `product.save()`.
+    const incomingColors = new Set(images.map((image) => image.color).filter((color): color is string => Boolean(color)));
+    for (const color of incomingColors) {
+      const existingCount = product.gallery.filter((image) => image.color === color).length;
+      const incomingCount = images.filter((image) => image.color === color).length;
+      if (existingCount + incomingCount > MAX_IMAGES_PER_COLOR) {
+        throw new AppError(`El color "${color}" no puede tener más de ${MAX_IMAGES_PER_COLOR} fotos.`, 400);
+      }
+    }
+
     const startOrder = product.gallery.length;
     product.gallery.push(...images.map((image, index) => ({ ...image, order: startOrder + index })));
     await product.save();
@@ -448,6 +474,63 @@ export function createProductService<TDoc extends ProductDocument>(
     return product;
   }
 
+  /**
+   * Retags one gallery image's `color` — admin-only prep for a future public
+   * gallery-by-color swap (no storefront reads this yet). Rebuilds the array
+   * via `.map` rather than mutating the matched subdocument in place, same
+   * discipline as `removeGalleryImage`/`reorderGallery`: `{_id:false}`
+   * subdocuments are safest replaced wholesale.
+   */
+  async function updateGalleryImageColor(
+    id: string,
+    publicId: string,
+    color: string | undefined,
+    actor: ActorContext,
+  ): Promise<TDoc> {
+    const product = await findByIdOrFail(id);
+
+    if (color) {
+      const existingCount = product.gallery.filter((image) => image.color === color && image.publicId !== publicId).length;
+      if (existingCount >= MAX_IMAGES_PER_COLOR) {
+        throw new AppError(`El color "${color}" ya tiene ${MAX_IMAGES_PER_COLOR} fotos. Quita una antes de agregar otra.`, 400);
+      }
+    }
+
+    let found = false;
+    // Rebuilt field by field, not `{...image, color}` — these are Mongoose
+    // subdocuments, and spreading one copies its internals (`$__`, `_doc`)
+    // instead of the data (same pitfall `toPublicSpecGroups` documents).
+    product.gallery = product.gallery.map((image) => {
+      if (image.publicId !== publicId) return image;
+      found = true;
+      return {
+        publicId: image.publicId,
+        url: image.url,
+        width: image.width,
+        height: image.height,
+        ...(image.alt ? { alt: image.alt } : {}),
+        ...(color ? { color } : {}),
+        order: image.order,
+      };
+    });
+    if (!found) {
+      throw new AppError("La imagen no pertenece a este producto.", 404);
+    }
+    await product.save();
+
+    await recordAuditLog({
+      actorId: actor.actorId,
+      actorType: "user",
+      action: "catalog.gallery_updated" satisfies AuditAction,
+      module: moduleName,
+      targetId: id,
+      after: { publicId, color: color ?? null },
+      ip: actor.ip,
+    });
+
+    return product;
+  }
+
   async function reorderGallery(id: string, publicIds: string[], actor: ActorContext): Promise<TDoc> {
     const product = await findByIdOrFail(id);
 
@@ -479,6 +562,7 @@ export function createProductService<TDoc extends ProductDocument>(
     assertBrandExists,
     assertBadgesExist,
     assertVariantSkusAreUnique,
+    partitionNewVariants,
     resolveSlug,
     list,
     getById,
@@ -489,6 +573,7 @@ export function createProductService<TDoc extends ProductDocument>(
     replaceSpecGroups,
     addGalleryImages,
     removeGalleryImage,
+    updateGalleryImageColor,
     reorderGallery,
   };
 }

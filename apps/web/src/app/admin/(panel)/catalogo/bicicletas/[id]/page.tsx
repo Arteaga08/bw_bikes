@@ -1,4 +1,4 @@
-import type { AdminBadge, AdminBike, AdminBrand, SizeTemplate, SpecTemplate } from "@bw-bikes/shared";
+import type { AdminBadge, AdminBike, AdminBrand, ColorTemplate, SizeTemplate, SpecTemplate } from "@bw-bikes/shared";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { serverApiFetch } from "@/lib/api/server";
@@ -14,23 +14,26 @@ export default async function EditarBicicletaPage({ params }: { params: Promise<
   let badgesResult: Awaited<ReturnType<typeof serverApiFetch<{ badges: AdminBadge[] }>>>;
   let templatesResult: Awaited<ReturnType<typeof serverApiFetch<{ templates: SpecTemplate[] }>>>;
   let sizeTemplatesResult: Awaited<ReturnType<typeof serverApiFetch<{ sizeTemplates: SizeTemplate[] }>>>;
+  let colorTemplatesResult: Awaited<ReturnType<typeof serverApiFetch<{ colorTemplates: ColorTemplate[] }>>>;
   let bikeResult: Awaited<ReturnType<typeof serverApiFetch<{ bike: AdminBike }>>>;
   try {
-    [treeResult, brandsResult, badgesResult, templatesResult, sizeTemplatesResult, bikeResult] = await Promise.all([
-      serverApiFetch<{ tree: CategoryTreeNode[] }>("/admin/bike-categories/tree"),
-      serverApiFetch<{ brands: AdminBrand[] }>("/admin/brands?limit=100&sort=name"),
-      // Unfiltered, unlike the create page: an already-assigned badge that's
-      // since been deactivated must still show, so it can be removed
-      // deliberately instead of just vanishing from the picker.
-      serverApiFetch<{ badges: AdminBadge[] }>("/admin/badges?limit=100&sort=order"),
-      serverApiFetch<{ templates: SpecTemplate[] }>("/admin/spec-templates?isActive=true&limit=100&sort=title"),
-      // `isActive=true` even on edit, same as spec templates: unlike a badge,
-      // an already-used-but-deactivated size still shows fine — `SizePicker`
-      // falls back to rendering any size already on a variant as its own
-      // chip regardless of whether it came back in this list.
-      serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/bike-size-templates?isActive=true&limit=100&sort=order"),
-      serverApiFetch<{ bike: AdminBike }>(`/admin/bikes/${id}`),
-    ]);
+    [treeResult, brandsResult, badgesResult, templatesResult, sizeTemplatesResult, colorTemplatesResult, bikeResult] =
+      await Promise.all([
+        serverApiFetch<{ tree: CategoryTreeNode[] }>("/admin/bike-categories/tree"),
+        serverApiFetch<{ brands: AdminBrand[] }>("/admin/brands?limit=100&sort=name"),
+        // Unfiltered, unlike the create page: an already-assigned badge that's
+        // since been deactivated must still show, so it can be removed
+        // deliberately instead of just vanishing from the picker.
+        serverApiFetch<{ badges: AdminBadge[] }>("/admin/badges?limit=100&sort=order"),
+        serverApiFetch<{ templates: SpecTemplate[] }>("/admin/spec-templates?isActive=true&limit=100&sort=title"),
+        // `isActive=true` even on edit, same as spec templates: unlike a badge,
+        // an already-used-but-deactivated size still shows fine — `SizePicker`
+        // falls back to rendering any size already on a variant as its own
+        // chip regardless of whether it came back in this list.
+        serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/bike-size-templates?isActive=true&limit=100&sort=order"),
+        serverApiFetch<{ colorTemplates: ColorTemplate[] }>("/admin/color-templates?isActive=true&limit=100&sort=order"),
+        serverApiFetch<{ bike: AdminBike }>(`/admin/bikes/${id}`),
+      ]);
   } catch (error) {
     if (error instanceof ApiError && error.httpStatus === 404) notFound();
     throw error;
@@ -51,6 +54,7 @@ export default async function EditarBicicletaPage({ params }: { params: Promise<
         availableBadges={badgesResult.data.badges}
         specTemplates={templatesResult.data.templates}
         sizeTemplates={sizeTemplatesResult.data.sizeTemplates}
+        colorTemplates={colorTemplatesResult.data.colorTemplates}
         listPath="/admin/catalogo/bicicletas"
       />
     </>

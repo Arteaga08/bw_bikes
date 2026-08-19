@@ -1,14 +1,23 @@
 "use client";
 
 import type { AdminInventoryItem } from "@bw-bikes/shared";
-import { Warning, WarningOctagon } from "@phosphor-icons/react";
+import { Image as ImageIcon, Warning, WarningOctagon } from "@phosphor-icons/react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/cn";
 
 export interface InventoryRowProps {
   item: AdminInventoryItem;
   onAdjust: (item: AdminInventoryItem) => void;
+  /**
+   * Zona 1 (Reposición) is the dominant zone and gets `"comfortable"`; Zona 2
+   * (Por categoría) is mid-weight and gets `"compact"` — the second axis the
+   * `impeccable` brief called for, alongside the `text-h2`/`text-h3` section
+   * titles that already differ. Without this the two zones render identical
+   * rows and read as the same list repeated twice.
+   */
+  density?: "comfortable" | "compact";
 }
 
 /**
@@ -20,19 +29,31 @@ export interface InventoryRowProps {
  * its explanation. A healthy row carries no badge at all; only the
  * exception is marked, always with an icon, never color alone.
  */
-export function InventoryRow({ item, onAdjust }: InventoryRowProps) {
+export function InventoryRow({ item, onAdjust, density = "comfortable" }: InventoryRowProps) {
   const isOnRequest = item.variant?.fulfillmentMode === "on_request" || item.variant?.fulfillmentMode === "preorder";
   const isOut = !isOnRequest && item.available <= 0;
   const isLow = !isOnRequest && !isOut && item.available <= item.lowStockThresholdUnits;
 
   const variantLabel = [item.variant?.size, item.variant?.color].filter(Boolean).join(" / ") || undefined;
 
+  const isComfortable = density === "comfortable";
+  const thumbnailSize = isComfortable ? "h-12 w-12" : "h-8 w-8";
+  const rowPadding = isComfortable ? "p-md" : "px-md py-xs";
+
   return (
-    <div className="flex items-center gap-md border-b border-borde p-md last:border-b-0">
-      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-control bg-inset">
+    <div className={cn("flex items-center gap-md border-b border-borde last:border-b-0", rowPadding)}>
+      <div className={cn("relative flex shrink-0 items-center justify-center overflow-hidden rounded-control bg-inset", thumbnailSize)}>
         {item.product?.imageUrl ? (
-          <Image src={item.product.imageUrl} alt={item.product.name} fill sizes="48px" className="object-cover" />
-        ) : null}
+          <Image
+            src={item.product.imageUrl}
+            alt={item.product.name}
+            fill
+            sizes={isComfortable ? "48px" : "32px"}
+            className="object-cover"
+          />
+        ) : (
+          <ImageIcon size={isComfortable ? 20 : 14} weight="light" aria-hidden="true" className="text-grafito opacity-40" />
+        )}
       </div>
 
       <div className="min-w-0 flex-1">

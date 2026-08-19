@@ -77,6 +77,16 @@ export interface InventorySummaryGroup {
   lowStockSkus: number;
 }
 
+/** Store-wide rollup, independent of category — feeds the alert cards atop `/admin/inventario`. */
+export interface InventorySummaryTotals {
+  totalSkus: number;
+  outOfStockSkus: number;
+  lowStockSkus: number;
+  /** Rows created within the panel's "recent" window (see `inventory.service.ts`). */
+  newSkus: number;
+}
+
 export interface InventorySummary {
   groups: InventorySummaryGroup[];
+  totals: InventorySummaryTotals;
 }

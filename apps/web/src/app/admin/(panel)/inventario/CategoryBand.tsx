@@ -5,6 +5,7 @@ import { CaretDown } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { listAdminInventory } from "@/lib/api/admin-inventory";
+import type { InventoryStockFilter } from "./InventoryAlertCards";
 import { InventoryRow } from "./InventoryRow";
 
 export interface CategoryBandProps {
@@ -12,6 +13,8 @@ export interface CategoryBandProps {
   onAdjust: (item: AdminInventoryItem) => void;
   /** Bumped after any stock adjustment so an open band re-fetches its own rows without the parent tracking which band needs it. */
   refetchToken: number;
+  /** Set from an alert-card click — forces every band open and scopes its rows to that stock state, regardless of `hasIssue`. */
+  stockFilter: InventoryStockFilter | null;
 }
 
 /**
@@ -22,36 +25,43 @@ export interface CategoryBandProps {
  * `bg-surface`, `bg-inset` only as the disclosure body separates from the
  * header hairline.
  */
-export function CategoryBand({ group, onAdjust, refetchToken }: CategoryBandProps) {
+export function CategoryBand({ group, onAdjust, refetchToken, stockFilter }: CategoryBandProps) {
   const hasIssue = group.outOfStockSkus + group.lowStockSkus > 0;
-  const [open, setOpen] = useState(hasIssue);
+  const [manualOpen, setManualOpen] = useState(hasIssue);
+  const open = stockFilter !== null || manualOpen;
   const [rows, setRows] = useState<AdminInventoryItem[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // "Adjust state during render", same pattern every list in this panel
-  // uses: a `refetchToken` bump invalidates this band's cached rows right
-  // here, in the render body — not inside the effect below, which only ever
-  // responds to the fetch actually settling.
+  // uses: a `refetchToken` bump, or the stock filter changing, invalidates
+  // this band's cached rows right here, in the render body — not inside the
+  // effect below, which only ever responds to the fetch actually settling.
   const [lastRefetchToken, setLastRefetchToken] = useState(refetchToken);
-  if (refetchToken !== lastRefetchToken) {
+  const [lastStockFilter, setLastStockFilter] = useState(stockFilter);
+  if (refetchToken !== lastRefetchToken || stockFilter !== lastStockFilter) {
     setLastRefetchToken(refetchToken);
+    setLastStockFilter(stockFilter);
     setLoaded(false);
   }
 
   useEffect(() => {
     if (!open || loaded) return;
     let cancelled = false;
-    listAdminInventory({ itemType: group.itemType, category: group.categoryId, limit: 100, sort: "available" }).then(
-      (result) => {
-        if (cancelled) return;
-        setRows(result.data.items);
-        setLoaded(true);
-      },
-    );
+    listAdminInventory({
+      itemType: group.itemType,
+      category: group.categoryId,
+      limit: 100,
+      sort: "available",
+      ...(stockFilter ? { stock: stockFilter } : {}),
+    }).then((result) => {
+      if (cancelled) return;
+      setRows(result.data.items);
+      setLoaded(true);
+    });
     return () => {
       cancelled = true;
     };
-  }, [open, loaded, group.itemType, group.categoryId]);
+  }, [open, loaded, group.itemType, group.categoryId, stockFilter]);
 
   const loading = open && !loaded;
 
@@ -59,7 +69,7 @@ export function CategoryBand({ group, onAdjust, refetchToken }: CategoryBandProp
     <div className="border-b border-borde last:border-b-0">
       <button
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setManualOpen((current) => !current)}
         aria-expanded={open}
         className="flex w-full items-center gap-sm px-md py-sm text-left transition-colors duration-150 hover:bg-inset focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro"
       >
@@ -92,7 +102,7 @@ export function CategoryBand({ group, onAdjust, refetchToken }: CategoryBandProp
           ) : rows.length === 0 ? (
             <p className="p-md font-body text-caption text-grafito">Sin SKUs en esta categoría.</p>
           ) : (
-            rows.map((item) => <InventoryRow key={item.id} item={item} onAdjust={onAdjust} />)
+            rows.map((item) => <InventoryRow key={item.id} item={item} onAdjust={onAdjust} density="comfortable" />)
           )}
         </div>
       ) : null}

@@ -13,6 +13,7 @@ import {
   Ruler,
   Sparkle,
   Storefront,
+  Swatches,
   Tag,
 } from "@phosphor-icons/react";
 
@@ -63,6 +64,12 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     items: [
       { label: "Marcas", href: "/admin/catalogo/marcas", icon: Storefront, keywords: ["marcas", "brands"] },
       { label: "Badges", href: "/admin/catalogo/badges", icon: Sparkle, keywords: ["badges", "etiquetas", "novedad", "bestseller"] },
+      {
+        label: "Colores",
+        href: "/admin/catalogo/colores",
+        icon: Swatches,
+        keywords: ["colores", "colors", "plantillas", "variantes"],
+      },
       {
         label: "Fichas técnicas",
         href: "/admin/catalogo/fichas-tecnicas",

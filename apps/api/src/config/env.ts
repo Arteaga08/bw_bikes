@@ -93,6 +93,14 @@ const STRIPE_REQUIRED_VARS = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as c
 const TELEGRAM_REQUIRED_VARS = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"] as const;
 
 /**
+ * Same policy as Telegram, for the same reason: an admin-facing "new sale" /
+ * "low stock" email is a second channel for an alert Telegram already
+ * carries, never the sole path to it — a production deploy must not be
+ * unbootable because nobody set an inbox for these yet.
+ */
+const ADMIN_ALERT_EMAIL_REQUIRED_VARS = ["ADMIN_ALERT_EMAIL"] as const;
+
+/**
  * Required in production, same policy as Cloudinary/Stripe — unlike
  * Telegram, this one *is* on a path a customer depends on:
  * `auth.service.ts` awaits `Mailer` directly (no `.catch()`, unlike the
@@ -216,6 +224,8 @@ function buildEnv() {
   const telegramBotToken = process.env["TELEGRAM_BOT_TOKEN"] ?? "";
   const telegramChatId = process.env["TELEGRAM_CHAT_ID"] ?? "";
   const isTelegramConfigured = TELEGRAM_REQUIRED_VARS.every(isSet);
+  const adminAlertEmail = process.env["ADMIN_ALERT_EMAIL"] ?? "";
+  const isAdminAlertEmailConfigured = ADMIN_ALERT_EMAIL_REQUIRED_VARS.every(isSet);
   const resendApiKey = process.env["RESEND_API_KEY"] ?? "";
   const mailFrom = process.env["MAIL_FROM"] ?? "";
   const isResendConfigured = RESEND_REQUIRED_VARS.every(isSet);
@@ -271,6 +281,15 @@ function buildEnv() {
     );
   }
 
+  // Same treatment as Telegram — an admin-alert inbox is a second channel,
+  // never required to boot.
+  if (!isAdminAlertEmailConfigured) {
+    console.warn(
+      "[env] ADMIN_ALERT_EMAIL is not configured — admin alert emails (new sale, low stock) will only be logged, never sent. " +
+        `Set ${ADMIN_ALERT_EMAIL_REQUIRED_VARS.join(", ")} to enable them.`,
+    );
+  }
+
   return Object.freeze({
     nodeEnv,
     port,
@@ -291,6 +310,8 @@ function buildEnv() {
     telegramBotToken,
     telegramChatId,
     isTelegramConfigured,
+    adminAlertEmail,
+    isAdminAlertEmailConfigured,
     resendApiKey,
     mailFrom,
     isResendConfigured,

@@ -2,6 +2,7 @@
 
 import type { AdminOrder, OrderActivityEntry, OrderPriority, ShippingAddress } from "@bw-bikes/shared";
 import {
+  CheckCircle,
   ClockCounterClockwise,
   CreditCard,
   Copy,
@@ -14,7 +15,7 @@ import {
   Truck,
   User,
 } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
@@ -123,6 +124,7 @@ export function OrderDetailModal({
 }: OrderDetailModalProps) {
   const [editingAddress, setEditingAddress] = useState(false);
   const [editingShipment, setEditingShipment] = useState(false);
+  const [shipmentJustSaved, setShipmentJustSaved] = useState(false);
   const [addressSubmitting, setAddressSubmitting] = useState(false);
   const [shipmentSubmitting, setShipmentSubmitting] = useState(false);
   const [statusActionSubmitting, setStatusActionSubmitting] = useState(false);
@@ -131,6 +133,18 @@ export function OrderDetailModal({
   const [copied, setCopied] = useState(false);
 
   const open = order !== null || loading;
+
+  // Same confirmation window as `useAsyncAction` (DESIGN_SYSTEM.md §4.4) —
+  // held here rather than in `ShipmentForm` because the form unmounts the
+  // instant `editingShipment` flips, and it's this component that owns that
+  // flag; delaying the flip is what gives the button's `success` state a
+  // window to actually be seen before the read view replaces the form.
+  const shipmentSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (shipmentSavedTimer.current) clearTimeout(shipmentSavedTimer.current);
+    };
+  }, []);
 
   async function handleAddressSubmit(address: ShippingAddress): Promise<void> {
     setAddressSubmitting(true);
@@ -143,7 +157,13 @@ export function OrderDetailModal({
     setShipmentSubmitting(true);
     const ok = await onRecordShipment(input);
     setShipmentSubmitting(false);
-    if (ok) setEditingShipment(false);
+    if (ok) {
+      setShipmentJustSaved(true);
+      shipmentSavedTimer.current = setTimeout(() => {
+        setShipmentJustSaved(false);
+        setEditingShipment(false);
+      }, 2000);
+    }
   }
 
   async function handleMarkProcessing(): Promise<void> {
@@ -185,6 +205,8 @@ export function OrderDetailModal({
   function handleClose(): void {
     setEditingAddress(false);
     setEditingShipment(false);
+    if (shipmentSavedTimer.current) clearTimeout(shipmentSavedTimer.current);
+    setShipmentJustSaved(false);
     onClose();
   }
 
@@ -276,9 +298,11 @@ export function OrderDetailModal({
                     <dt className="text-grafito">Envío</dt>
                     <dd>{formatCurrencyCents(order.totals.shippingCents)}</dd>
                   </div>
-                  <div className="mt-xs flex justify-between border-t border-borde pt-xs font-ui text-body-l">
-                    <dt>Total</dt>
-                    <dd>{formatCurrencyCents(order.totals.totalCents)}</dd>
+                  <div className="mt-xs flex items-center justify-between border-t border-borde pt-xs">
+                    <dt className="font-ui text-body-l text-negro">Total</dt>
+                    <dd className="rounded-control bg-dorado px-sm py-xs font-ui text-body-l text-negro">
+                      {formatCurrencyCents(order.totals.totalCents)}
+                    </dd>
                   </div>
                 </dl>
               </OrderDetailCard>
@@ -322,6 +346,14 @@ export function OrderDetailModal({
                   </p>
                 ) : null}
               </OrderDetailCard>
+
+              {/* Lives here, not in the side column — it's the one section that
+                  keeps growing over an order's lifetime, and the main column
+                  (líneas + totales + dirección) otherwise runs out well before
+                  the side column does, leaving a tall blank gap beside it. */}
+              <OrderDetailCard icon={ClockCounterClockwise} title="Bitácora">
+                <OrderActivityList entries={buildOrderTimeline(order.statusHistory, activity)} />
+              </OrderDetailCard>
             </div>
 
             {/* Side column — who, how paid, and staff-only context. */}
@@ -344,6 +376,7 @@ export function OrderDetailModal({
                 ) : editingShipment ? (
                   <ShipmentForm
                     submitting={shipmentSubmitting}
+                    success={shipmentJustSaved}
                     willTransitionToShipped={order.status === "processing"}
                     initial={
                       order.shipment
@@ -358,29 +391,35 @@ export function OrderDetailModal({
                     onSubmit={handleShipmentSubmit}
                   />
                 ) : order.shipment ? (
-                  <dl className="flex flex-col gap-xs font-body text-body text-negro">
-                    <div className="flex justify-between gap-sm">
-                      <dt className="text-grafito">Paquetería</dt>
-                      <dd>{order.shipment.carrierName ?? order.shipment.carrier.toUpperCase()}</dd>
-                    </div>
-                    <div className="flex justify-between gap-sm">
-                      <dt className="text-grafito">Guía</dt>
-                      <dd className="truncate">
-                        <a
-                          href={order.shipment.trackingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline decoration-borde underline-offset-2 hover:text-negro"
-                        >
-                          {order.shipment.trackingNumber}
-                        </a>
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-sm">
-                      <dt className="text-grafito">Enviado</dt>
-                      <dd>{formatDateTime(order.shipment.shippedAt)}</dd>
-                    </div>
-                  </dl>
+                  <div className="flex flex-col gap-sm">
+                    <p className="flex items-center gap-xs rounded-control bg-estado-exito-soft px-sm py-xs font-ui text-caption text-estado-exito">
+                      <CheckCircle size={14} aria-hidden="true" />
+                      Guía capturada
+                    </p>
+                    <dl className="flex flex-col gap-xs font-body text-body text-negro">
+                      <div className="flex justify-between gap-sm">
+                        <dt className="text-grafito">Paquetería</dt>
+                        <dd>{order.shipment.carrierName ?? order.shipment.carrier.toUpperCase()}</dd>
+                      </div>
+                      <div className="flex justify-between gap-sm">
+                        <dt className="text-grafito">Guía</dt>
+                        <dd className="truncate">
+                          <a
+                            href={order.shipment.trackingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline decoration-borde underline-offset-2 hover:text-negro"
+                          >
+                            {order.shipment.trackingNumber}
+                          </a>
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-sm">
+                        <dt className="text-grafito">Enviado</dt>
+                        <dd>{formatDateTime(order.shipment.shippedAt)}</dd>
+                      </div>
+                    </dl>
+                  </div>
                 ) : (
                   <p className="font-body text-body text-grafito">Aún no se ha capturado guía.</p>
                 )}
@@ -474,10 +513,6 @@ export function OrderDetailModal({
 
               <OrderDetailCard icon={NoteBlank} title="Notas internas">
                 <OrderInternalNotes notes={order.internalNotes} onAddNote={handleAddNote} submitting={noteSubmitting} />
-              </OrderDetailCard>
-
-              <OrderDetailCard icon={ClockCounterClockwise} title="Bitácora">
-                <OrderActivityList entries={buildOrderTimeline(order.statusHistory, activity)} />
               </OrderDetailCard>
             </div>
           </div>

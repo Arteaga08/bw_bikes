@@ -6,6 +6,7 @@ import type {
   AdminBike,
   AdminBrand,
   CategoryImage,
+  ColorTemplate,
   ProductImage,
   PublicAccessory,
   SizeTemplate,
@@ -72,6 +73,8 @@ export interface ProductEditorProps {
   specTemplates: SpecTemplate[];
   /** Saved sizes (M10.7 S1) — feeds "Tallas y variantes"' chip picker (`SizePicker`). */
   sizeTemplates: SizeTemplate[];
+  /** Saved colors, one shared catalog for both kinds — feeds "Tallas y variantes"' row-level color `<Select>` (`VariantsEditor`). */
+  colorTemplates: ColorTemplate[];
   /** This catalog's own list route (`/admin/catalogo/bicicletas` or `/admin/catalogo/accesorios`) — where Cancel goes and where a create redirects to (`${listPath}/${savedId}`). */
   listPath: string;
 }
@@ -130,6 +133,8 @@ function variantsFromProduct(product?: AdminBike | AdminAccessory): VariantRow[]
     fulfillmentMode: variant.fulfillmentMode,
     ...(variant.preorderReleaseDate ? { preorderReleaseDate: variant.preorderReleaseDate } : {}),
     isActive: variant.isActive,
+    // `isNewRow` intentionally omitted — a row hydrated from a persisted
+    // product keeps its own SKU frozen and never re-shows "Stock inicial".
   }));
 }
 
@@ -187,6 +192,7 @@ function ProductEditorContent({
   availableBadges,
   specTemplates,
   sizeTemplates,
+  colorTemplates,
   listPath,
 }: ProductEditorProps) {
   const router = useRouter();
@@ -207,6 +213,24 @@ function ProductEditorContent({
   const [summary, setSummary] = useState<SummaryRow[]>(() => initialBike?.summary ?? []);
   const [specGroups, setSpecGroups] = useState<SpecGroup[]>(() => initialProduct?.specGroups ?? []);
   const [gallery, setGallery] = useState<ProductImage[]>(() => initialProduct?.gallery ?? []);
+
+  // Feeds `VariantsEditor`'s SKU auto-generation — recomputed from `brands`/`basics.brand` on every render rather than cached in state, same reasoning as any other derived-from-props value.
+  const brandName = brands.find((candidate) => candidate.id === basics.brand)?.name ?? "";
+
+  // Feeds `GallerySection`'s per-photo color tag — distinct colors typed into
+  // the product's variants so far, first-appearance order (same dedupe
+  // pattern as `SizePicker`'s own `sizesInUse`).
+  const availableColors = (() => {
+    const seen = new Set<string>();
+    const colors: string[] = [];
+    for (const variant of variants) {
+      const color = variant.color.trim();
+      if (!color || seen.has(color)) continue;
+      seen.add(color);
+      colors.push(color);
+    }
+    return colors;
+  })();
   const [badgeIds, setBadgeIds] = useState<string[]>(() => initialProduct?.badges.map((badge) => badge.id) ?? []);
 
   const [currentStepId, setCurrentStepId] = useState<EditorStepId>(() => initialStepIdFrom(searchParams));
@@ -404,11 +428,13 @@ function ProductEditorContent({
 
     const resolvedVariants = variants.map((row) => {
       const overridePrice = row.priceInput.trim() ? parsePriceToCents(row.priceInput) : null;
-      // Create-only, `in_stock`-only — mirrors what `VariantsEditor` even
-      // renders the field for. `mode === "edit"` never reaches this branch,
-      // so stock capture only ever happens once, at creation.
+      // `in_stock`-only, and only for a genuinely new row — mirrors what
+      // `VariantsEditor` even renders the field for. A row hydrated from an
+      // already-persisted product never reaches this branch, so its stock
+      // stays untouched by a PATCH; only a brand-new variant added this
+      // session (in either mode) gets its inventory seeded on save.
       const initialStock =
-        mode === "create" && row.fulfillmentMode === "in_stock" && row.initialStock?.trim()
+        (mode === "create" || row.isNewRow) && row.fulfillmentMode === "in_stock" && row.initialStock?.trim()
           ? Number.parseInt(row.initialStock, 10)
           : null;
       return {
@@ -595,7 +621,15 @@ function ProductEditorContent({
             {categoryUsesSizes ? (
               <SizePicker sizeTemplates={sizeTemplates} variants={variants} onChange={setVariants} />
             ) : null}
-            <VariantsEditor variants={variants} onChange={setVariants} sizeless={!categoryUsesSizes} mode={mode} />
+            <VariantsEditor
+              variants={variants}
+              onChange={setVariants}
+              sizeless={!categoryUsesSizes}
+              mode={mode}
+              productName={basics.name}
+              brandName={brandName}
+              colorTemplates={colorTemplates}
+            />
           </EditorSection>
         );
       }
@@ -678,6 +712,8 @@ function ProductEditorContent({
                   onUpload={(files) => productApi.uploadGallery(productId, files)}
                   onRemove={(publicId) => productApi.removeGalleryImage(productId, publicId)}
                   onReorder={(publicIds) => productApi.reorderGallery(productId, publicIds)}
+                  availableColors={availableColors}
+                  onColorChange={(publicId, color) => productApi.updateGalleryImageColor(productId, publicId, color)}
                 />
               ) : (
                 <GallerySection mode="deferred" staged={pendingGallery} onChange={setPendingGallery} />

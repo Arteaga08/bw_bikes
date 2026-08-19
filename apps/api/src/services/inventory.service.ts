@@ -6,6 +6,7 @@ import type {
   InventoryAvailability,
   InventorySummary,
   InventorySummaryGroup,
+  InventorySummaryTotals,
   ItemType,
   ReservationReferenceType,
 } from "@bw-bikes/shared";
@@ -37,6 +38,9 @@ const EXPIRY_BATCH_SIZE = 500;
 
 const MS_PER_MINUTE = 60_000;
 const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE;
+
+/** How far back a row counts as "nuevo" for the alert cards atop `/admin/inventario` (M11.1). Not admin-tunable — nobody asked for that yet. */
+const NEW_SKU_WINDOW_DAYS = 7;
 
 /** Which catalog a `{ itemType, itemId, sku }` triplet points at. */
 const CATALOG_MODELS: Record<ItemType, Model<{ variants: { sku: string }[] }>> = {
@@ -770,6 +774,49 @@ async function listItems(query: Record<string, unknown>): Promise<ListInventoryI
 }
 
 /**
+ * The store-wide rollup behind the alert cards atop `/admin/inventario`
+ * (M11.1) — deliberately not a sum of `groups`: category rows only exist for
+ * SKUs whose product still resolves to a category, and this should count
+ * every `InventoryItem`, orphaned or not, the same way `stock=out`/`stock=low`
+ * on the list endpoint do.
+ */
+async function getSummaryTotals(defaultThreshold: number): Promise<InventorySummaryTotals> {
+  const newSince = new Date(Date.now() - NEW_SKU_WINDOW_DAYS * MS_PER_DAY);
+
+  const [row] = await InventoryItem.aggregate<{
+    total: number;
+    outOfStock: number;
+    lowStock: number;
+    newSkus: number;
+  }>([
+    {
+      $addFields: {
+        available: { $subtract: ["$onHand", "$reserved"] },
+        threshold: { $ifNull: ["$lowStockThreshold", defaultThreshold] },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: 1 },
+        outOfStock: { $sum: { $cond: [{ $lte: ["$available", 0] }, 1, 0] } },
+        lowStock: {
+          $sum: { $cond: [{ $and: [{ $gt: ["$available", 0] }, { $lte: ["$available", "$threshold"] }] }, 1, 0] },
+        },
+        newSkus: { $sum: { $cond: [{ $gte: ["$createdAt", newSince] }, 1, 0] } },
+      },
+    },
+  ]).exec();
+
+  return {
+    totalSkus: row?.total ?? 0,
+    outOfStockSkus: row?.outOfStock ?? 0,
+    lowStockSkus: row?.lowStock ?? 0,
+    newSkus: row?.newSkus ?? 0,
+  };
+}
+
+/**
  * Category rollups for the inventory panel's band headers (M11) — total
  * SKUs, out-of-stock and low-stock counts per root category, without
  * fetching every row just to paint a summary. One pair of queries per root
@@ -778,8 +825,7 @@ async function listItems(query: Record<string, unknown>): Promise<ListInventoryI
  * targets (~5 roots) doesn't justify the complexity of a `$facet`/
  * `$unionWith` across two catalogs.
  */
-async function getSummary(): Promise<InventorySummary> {
-  const { inventory } = await settingsService.get();
+async function buildSummaryGroups(defaultThreshold: number): Promise<InventorySummaryGroup[]> {
   const groups: InventorySummaryGroup[] = [];
 
   for (const itemType of ["bike", "accessory"] as const) {
@@ -813,7 +859,7 @@ async function getSummary(): Promise<InventorySummary> {
         {
           $addFields: {
             available: { $subtract: ["$onHand", "$reserved"] },
-            threshold: { $ifNull: ["$lowStockThreshold", inventory.lowStockThresholdUnits] },
+            threshold: { $ifNull: ["$lowStockThreshold", defaultThreshold] },
           },
         },
         {
@@ -839,7 +885,18 @@ async function getSummary(): Promise<InventorySummary> {
     }
   }
 
-  return { groups };
+  return groups;
+}
+
+/** Public entry point — the two rollups above don't depend on each other, so they run in parallel. */
+async function getSummary(): Promise<InventorySummary> {
+  const { inventory } = await settingsService.get();
+  const [groups, totals] = await Promise.all([
+    buildSummaryGroups(inventory.lowStockThresholdUnits),
+    getSummaryTotals(inventory.lowStockThresholdUnits),
+  ]);
+
+  return { groups, totals };
 }
 
 /**

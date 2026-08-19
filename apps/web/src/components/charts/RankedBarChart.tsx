@@ -79,7 +79,7 @@ export function RankedBarChart({ items }: RankedBarChartProps) {
                 dy={4}
                 fontSize={13}
                 fontWeight={500}
-                fill="var(--color-negro)"
+                fill={CHART_COLORS.valueLabel}
               >
                 {item.count}
               </text>

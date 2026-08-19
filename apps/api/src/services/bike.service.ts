@@ -12,6 +12,7 @@ import { toPublicAccessory } from "./accessory.service.js";
 import { inventoryService } from "./inventory.service.js";
 import { type ActorContext, createProductService } from "./product.service.js";
 import { bikeSizeTemplateService } from "./bike-size-template.service.js";
+import { learnColorTemplates } from "./color-template.service.js";
 import { learnSpecTemplates } from "./spec-template.service.js";
 
 const MODULE_NAME = "catalog.bikes";
@@ -253,6 +254,7 @@ async function create(input: BikeInput, actor: ActorContext): Promise<IBike> {
   // `replaceSpecGroups`.
   if (input.specGroups && input.specGroups.length > 0) await learnSpecTemplates(input.specGroups);
   if (variants.length > 0) await bikeSizeTemplateService.learnSizeTemplates(variants);
+  if (variants.length > 0) await learnColorTemplates(variants);
 
   return bike;
 }
@@ -260,6 +262,10 @@ async function create(input: BikeInput, actor: ActorContext): Promise<IBike> {
 async function update(id: string, input: BikeInput, actor: ActorContext): Promise<IBike> {
   const bike = await base.findByIdOrFail(id);
   const before = { slug: bike.slug, price: bike.price, variants: bike.variants.length };
+  // Snapshotted before anything below mutates `bike.variants` — the only way
+  // to tell a brand-new row (seed its inventory) from an edited existing one
+  // (never re-seed; see `partitionNewVariants`).
+  const previousSkus = new Set(bike.variants.map((variant) => variant.sku));
 
   if (input.slug !== undefined && input.slug !== bike.slug) {
     await base.assertSlugIsFree(input.slug, id);
@@ -273,8 +279,10 @@ async function update(id: string, input: BikeInput, actor: ActorContext): Promis
     await base.assertBrandExists(input.brand);
     bike.brand = new Types.ObjectId(input.brand);
   }
+  let newVariants: ProductVariant[] = [];
   if (input.variants !== undefined) {
     base.assertVariantSkusAreUnique(input.variants);
+    newVariants = base.partitionNewVariants(previousSkus, input.variants);
     bike.variants = input.variants;
   }
   if (input.relatedAccessories !== undefined) {
@@ -294,7 +302,15 @@ async function update(id: string, input: BikeInput, actor: ActorContext): Promis
   if (input.summary !== undefined) bike.summary = input.summary;
   if (input.specGroups !== undefined) bike.specGroups = input.specGroups;
 
-  await bike.save();
+  // Same atomicity discipline as `create()`: once a PATCH can also write
+  // `InventoryItem` rows (for a brand-new `in_stock` variant), the product
+  // save and the inventory seed must succeed or fail together.
+  let seededInventory: Awaited<ReturnType<typeof inventoryService.seedInitialStock>> = [];
+
+  await withOptionalTransaction(async (session) => {
+    await bike.save({ session });
+    seededInventory = await inventoryService.seedInitialStock("bike", bike._id as Types.ObjectId, newVariants, session);
+  });
 
   await recordAuditLog({
     actorId: actor.actorId,
@@ -307,11 +323,17 @@ async function update(id: string, input: BikeInput, actor: ActorContext): Promis
     ip: actor.ip,
   });
 
+  for (const item of seededInventory) {
+    await inventoryService.recordItemCreatedAudit(item, actor);
+  }
+
   // Unlike `specGroups` (a separate `PUT .../spec-groups`), variants are part
   // of this same PATCH — so, unlike the sheet, learning has to happen here
   // too, not just on create.
-  if (input.variants !== undefined && input.variants.length > 0)
+  if (input.variants !== undefined && input.variants.length > 0) {
     await bikeSizeTemplateService.learnSizeTemplates(input.variants);
+    await learnColorTemplates(input.variants);
+  }
 
   return bike;
 }

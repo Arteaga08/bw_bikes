@@ -1,4 +1,4 @@
-import type { AdminAccessory, AdminBrand } from "@bw-bikes/shared";
+import type { AdminAccessory, AdminBrand, ColorTemplate } from "@bw-bikes/shared";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,7 +6,16 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api/error";
 import type { CategoryTreeNode } from "@/lib/api/admin-catalog";
 
-const { replaceMock, refreshMock, pushMock, updateMock, createMock, replaceSpecGroupsMock, uploadGalleryMock } = vi.hoisted(() => ({
+const {
+  replaceMock,
+  refreshMock,
+  pushMock,
+  updateMock,
+  createMock,
+  replaceSpecGroupsMock,
+  uploadGalleryMock,
+  updateGalleryImageColorMock,
+} = vi.hoisted(() => ({
   replaceMock: vi.fn(),
   refreshMock: vi.fn(),
   pushMock: vi.fn(),
@@ -14,6 +23,7 @@ const { replaceMock, refreshMock, pushMock, updateMock, createMock, replaceSpecG
   createMock: vi.fn(),
   replaceSpecGroupsMock: vi.fn(),
   uploadGalleryMock: vi.fn(),
+  updateGalleryImageColorMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -30,6 +40,7 @@ vi.mock("@/lib/api/admin-catalog", () => ({
     create: createMock,
     replaceSpecGroups: replaceSpecGroupsMock,
     uploadGallery: uploadGalleryMock,
+    updateGalleryImageColor: updateGalleryImageColorMock,
     list: vi.fn().mockResolvedValue({ data: [] }),
   },
   adminBikesApi: {
@@ -59,6 +70,15 @@ const brand: AdminBrand = {
   isActive: true,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
+};
+
+const colorTemplate: ColorTemplate = {
+  id: "color-1",
+  value: "Negro",
+  hex: "#0A0A0A",
+  source: "manual",
+  order: 0,
+  isActive: true,
 };
 
 const categoryTree: CategoryTreeNode[] = [
@@ -122,6 +142,7 @@ function renderEditor(props: Partial<React.ComponentProps<typeof ProductEditor>>
         availableBadges={[]}
         specTemplates={[]}
         sizeTemplates={[]}
+        colorTemplates={[colorTemplate]}
         listPath="/admin/catalogo/accesorios"
         {...props}
       />
@@ -175,6 +196,68 @@ describe("ProductEditor — unified save (edit mode)", () => {
   it("never renders a separate spec-sheet save button", () => {
     renderEditor();
     expect(screen.queryByRole("button", { name: "Guardar ficha técnica" })).not.toBeInTheDocument();
+  });
+
+  it("computes the SKU and includes initialStock for a brand-new variant added mid-edit", async () => {
+    const user = userEvent.setup();
+    updateMock.mockResolvedValue(accessory);
+    replaceSpecGroupsMock.mockResolvedValue(accessory.specGroups);
+
+    renderEditor();
+    await user.click(screen.getByRole("button", { name: "Siguiente" }));
+    expect(screen.getByRole("heading", { name: "Tallas y variantes" })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Nueva talla"), "54");
+    await user.click(screen.getByRole("button", { name: "Agregar talla" }));
+
+    await user.selectOptions(screen.getByLabelText("Color"), "Negro");
+    expect((screen.getByLabelText("SKU") as HTMLInputElement).value).toBe("CAN-CASAER-54-NEG");
+
+    await user.type(screen.getByLabelText("Stock inicial"), "5");
+
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
+    expect(updateMock).toHaveBeenCalledWith(
+      "acc-1",
+      expect.objectContaining({
+        variants: expect.arrayContaining([
+          expect.objectContaining({ sku: "CAN-CASAER-54-NEG", size: "54", color: "Negro", initialStock: 5 }),
+        ]),
+      }),
+    );
+  });
+
+  it("offers the product's variant colors when tagging a gallery photo, and applies the saved result", async () => {
+    const user = userEvent.setup();
+    const taggedAccessory: AdminAccessory = {
+      ...accessory,
+      variants: [
+        {
+          sku: "ACC-A",
+          size: "U",
+          color: "Negro",
+          fulfillmentMode: "in_stock",
+          isActive: true,
+        },
+      ],
+      gallery: [
+        { publicId: "p1", url: "https://res.cloudinary.com/demo/image/upload/p1.jpg", width: 800, height: 800, order: 0 },
+      ],
+    };
+    updateGalleryImageColorMock.mockResolvedValue([{ ...taggedAccessory.gallery[0]!, color: "Negro" }]);
+
+    renderEditor({ initialProduct: taggedAccessory });
+    await user.click(screen.getByRole("button", { name: "Siguiente" }));
+    await user.click(screen.getByRole("button", { name: "Siguiente" }));
+    await user.click(screen.getByRole("button", { name: "Siguiente" }));
+
+    const colorSelect = screen.getByLabelText("Color") as HTMLSelectElement;
+    expect(Array.from(colorSelect.options).map((option) => option.textContent)).toEqual(["Sin asignar", "Negro"]);
+
+    await user.selectOptions(colorSelect, "Negro");
+
+    await waitFor(() => expect(updateGalleryImageColorMock).toHaveBeenCalledWith("acc-1", "p1", "Negro"));
   });
 });
 

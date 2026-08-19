@@ -224,8 +224,49 @@ Paleta restrained: dos neutros cargan el sistema, un tercero da profundidad de t
 - **Error** (#B42318): borde y mensaje de campos inválidos. Deliberadamente fuera de la paleta de marca — es semántico convencional accesible, no tintado hacia el sistema, porque aquí el reconocimiento instantáneo importa más que la voz de marca. Siempre emparejado con ícono, nunca solo color. Borde más grueso que el resto de estados (1.5px vs 1px) para que se note antes de leer el mensaje.
 - **Success** (#15803D): borde y mensaje de campos verificados. Mismo criterio que error; borde en el grosor default, no necesita el mismo énfasis visual porque no requiere acción del usuario.
 
+### Codificación de datos
+
+Añadida al rediseñar Inicio (2026-08): el sistema tenía reglas de marca (un
+acento, sin sombra) pero ninguna regla de cómo un número comunica que algo va
+bien o mal. Sin esto, un dashboard monocromo con un solo acento reservado
+para CTAs no tiene ningún canal disponible para señalar estado en una tabla o
+gráfico — el vacío que dejaba Inicio ilegible no era falta de color, era
+falta de una regla para cuándo usarlo.
+
+**Regla base: el color nunca es el único canal, y nunca codifica magnitud.**
+
+Verificado con contraste WCAG sobre los tokens `estado-*` reales:
+
+| Uso | Contraste medido | Veredicto |
+|---|---|---|
+| `estado-exito`/`advertencia`/`error` como **texto sobre `surface`** | 4.48 / 8.03 / 5.19 : 1 | Cumple AA — permitido |
+| Los mismos tres como **rellenos adyacentes** (segmentos de barra, dona) | 1.16 / 1.55 / 1.79 : 1 | Falla el piso de 3:1 — prohibido |
+
+De esa medición salen las reglas de uso:
+
+- **Magnitud → longitud o posición**, nunca hue, nunca opacidad, nunca tamaño
+  de fuente. Barra, línea, área, sparkline — el vocabulario que ya usan
+  `OrdersByDayChart` y `RankedBarChart`.
+- **Dirección (mejor/peor) → `estado-exito`/`estado-error` únicamente como
+  color de texto, siempre junto a un glifo** (flecha arriba/abajo). Nunca
+  como relleno de área o segmento — es justo lo que la medición de arriba
+  descarta. Implementado en `DeltaIndicator`
+  (`apps/web/src/components/ui/DeltaIndicator.tsx`): el signo va en el texto
+  mismo ("+12%"/"-8%"), no solo en el color.
+- **Ausencia de base de comparación ≠ cero.** Un delta sin periodo anterior
+  con el que compararse dice "sin base de comparación", nunca `+∞%` ni se
+  omite en silencio — mentir con un número es peor que no mostrarlo.
+- **Énfasis → dorado, un solo elemento por gráfico, siempre con su valor
+  etiquetado.** Regla ya existente de `RankedBarChart`, sin cambios.
+- **Prohibido:** barra apilada de estados, dona de estados, paleta
+  categórica, heatmap por hue. Confirmado por el validador del skill
+  `dataviz` en M11 (grafito+dorado reprueban como par categórico) y
+  reconfirmado aquí: los `estado-*` tampoco sirven como relleno.
+
 ### Named Rules
 **The One Accent Rule.** El dorado nunca supera el 10% de una vista y nunca aparece dos veces como CTA primario en la misma pantalla. Su escasez es lo que lo hace leer como decisión, no como paleta.
+
+**The Text-Only Direction Rule.** Un token `estado-*` puede pintar texto o un glifo; nunca puede pintar un área, una barra o un segmento. Si una vista necesita comunicar "bien/mal" sobre una superficie, se resuelve con un ícono y una etiqueta de texto en ese color, no con el fondo de la superficie misma.
 
 ## 3. Typography
 
@@ -280,9 +321,10 @@ Tres ejes independientes: **variante** es la forma, **tono** es el color,
 
 ### Cards
 - **Corner Style:** 10px (tarjetas pequeñas) / 14px (frames y contenedores grandes) — mayor que el radio de control porque suaviza superficies grandes sin restar precisión.
-- **Background:** Surface Card (#FFFFFF) con borde neutral (#E2E2DE, 1px).
+- **Background:** Surface Card (#FFFFFF) con borde neutral (#E2E2DE, 1px) — el mismo hairline en los cuatro lados, nunca uno engrosado como acento (ver Codificación de datos, §2).
 - **Shadow Strategy:** ninguna — ver Elevation.
 - **Internal Padding:** `lg` (24px) como base.
+- **Estado en una tarjeta KPI** (`StatCard`): un punto sólido de 8px junto al eyebrow, en el color `estado-*`, más el texto del `hint` tinteado igual — nunca un borde lateral engrosado. Corregido en el rediseño de Inicio (2026-08): el stripe original violaba tanto la regla de bordes de arriba como la Text-Only Direction Rule.
 
 ### Badges
 - **Shape:** mismo radio que los controles (2px), padding 4px 8px.
@@ -316,3 +358,5 @@ Tres ejes independientes: **variante** es la forma, **tono** es el color,
 - **Don't** poner un contorno a cada ícono de una fila: eso le da al control menos importante el borde más fuerte de la fila. Va `bare`, agrupado si las acciones son adyacentes.
 - **Don't** recortar un grupo de botones con `overflow: hidden` — se traga el anillo de foco, que se dibuja 2px por fuera del control.
 - **Don't** pasar `h-*`/`w-*` por `className` para cambiar el tamaño de un botón: sin `tailwind-merge` esa clase pierde contra la del componente por orden de CSS, en silencio. Se agrega un tamaño al sistema.
+- **Don't** usar un token `estado-*` como relleno de barra apilada, dona o segmento — falla el piso de contraste 3:1 como relleno adyacente (§2, Codificación de datos). Solo como color de texto/glifo.
+- **Don't** mostrar un delta como `+∞%` o inventar un `0%` cuando no hay periodo anterior con el que comparar — decir "sin base de comparación" (§2, Codificación de datos).

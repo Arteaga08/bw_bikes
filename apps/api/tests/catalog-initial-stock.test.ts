@@ -145,6 +145,64 @@ describe("initial stock captured at product creation", () => {
     // Untouched by the edit — still the value seeded at creation, not 999.
     expect(row?.onHand).toBe(4);
   });
+
+  it("seeds an InventoryItem for a brand-new variant added on a PATCH, leaving the original variant's stock untouched", async () => {
+    const created = await createBike([{ sku: "BK-INIT-ORIG", size: "M", fulfillmentMode: "in_stock", initialStock: 4 }]);
+    const bikeId = created.body.data.bike.id as string;
+
+    const update = await request(app)
+      .patch(`${ADMIN}/bikes/${bikeId}`)
+      .set("Cookie", adminCookie)
+      .send({
+        variants: [
+          { sku: "BK-INIT-ORIG", size: "M", fulfillmentMode: "in_stock", initialStock: 999 },
+          { sku: "BK-INIT-NEW", size: "L", fulfillmentMode: "in_stock", initialStock: 5 },
+        ],
+      });
+
+    expect(update.status).toBe(200);
+
+    const originalRow = await InventoryItem.findOne({ itemType: "bike", itemId: bikeId, sku: "BK-INIT-ORIG" }).exec();
+    expect(originalRow?.onHand).toBe(4);
+
+    const newRow = await InventoryItem.findOne({ itemType: "bike", itemId: bikeId, sku: "BK-INIT-NEW" }).exec();
+    expect(newRow?.onHand).toBe(5);
+
+    const entries = await AuditLog.find({ action: "inventory.item_created" }).exec();
+    expect(entries.map((entry) => (entry.after as { sku?: string })?.sku)).toContain("BK-INIT-NEW");
+  });
+
+  it("rolls back the whole PATCH — variants included — when seeding a new variant's stock collides with an existing InventoryItem row for the same product", async () => {
+    await InventoryItem.init();
+
+    const created = await createBike([{ sku: "BK-INIT-KEEP", size: "M", fulfillmentMode: "in_stock", initialStock: 1 }]);
+    const bikeId = created.body.data.bike.id as string;
+
+    // A stray row for this exact bike + SKU already exists (e.g. left over
+    // from a manual "Registrar entrada") — `seedInitialStock`'s `create()`
+    // for the same {itemType, itemId, sku} triple must collide with it.
+    await createInventoryItemDoc({ itemType: "bike", itemId: new Types.ObjectId(bikeId), sku: "BK-INIT-COLLIDE", onHand: 1 });
+
+    const update = await request(app)
+      .patch(`${ADMIN}/bikes/${bikeId}`)
+      .set("Cookie", adminCookie)
+      .send({
+        variants: [
+          { sku: "BK-INIT-KEEP", size: "M", fulfillmentMode: "in_stock", initialStock: 1 },
+          { sku: "BK-INIT-COLLIDE", size: "L", fulfillmentMode: "in_stock", initialStock: 3 },
+        ],
+      });
+
+    // The global error handler maps the underlying Mongo duplicate-key error
+    // (11000) to a 409 — what matters here is that it's an error at all, and
+    // that the product write rolled back with it (asserted below), not the
+    // exact status code.
+    expect(update.status).toBe(409);
+
+    const bikeGet = await request(app).get(`${ADMIN}/bikes/${bikeId}`).set("Cookie", adminCookie);
+    const skus = (bikeGet.body.data.bike.variants as { sku: string }[]).map((v) => v.sku);
+    expect(skus).toEqual(["BK-INIT-KEEP"]);
+  });
 });
 
 describe("initial stock — accessories", () => {
@@ -184,5 +242,38 @@ describe("initial stock — accessories", () => {
 
     const row = await InventoryItem.findOne({ itemType: "accessory", itemId: accessoryId, sku: "AC-INIT-U" }).exec();
     expect(row?.onHand).toBe(6);
+  });
+
+  it("seeds an InventoryItem for a brand-new accessory variant added on a PATCH", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/accessories`)
+      .set("Cookie", adminCookie)
+      .send({
+        name: "Casco con stock",
+        brand: brandId,
+        category: categoryId,
+        description: "x",
+        price: 1_500_00,
+        variants: [{ sku: "AC-INIT-ORIG", size: "U", fulfillmentMode: "in_stock", initialStock: 2 }],
+      });
+    const accessoryId = created.body.data.accessory.id as string;
+
+    const update = await request(app)
+      .patch(`${ADMIN}/accessories/${accessoryId}`)
+      .set("Cookie", adminCookie)
+      .send({
+        variants: [
+          { sku: "AC-INIT-ORIG", size: "U", fulfillmentMode: "in_stock", initialStock: 999 },
+          { sku: "AC-INIT-NEW", size: "L", fulfillmentMode: "in_stock", initialStock: 8 },
+        ],
+      });
+
+    expect(update.status).toBe(200);
+
+    const originalRow = await InventoryItem.findOne({ itemType: "accessory", itemId: accessoryId, sku: "AC-INIT-ORIG" }).exec();
+    expect(originalRow?.onHand).toBe(2);
+
+    const newRow = await InventoryItem.findOne({ itemType: "accessory", itemId: accessoryId, sku: "AC-INIT-NEW" }).exec();
+    expect(newRow?.onHand).toBe(8);
   });
 });

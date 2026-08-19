@@ -34,6 +34,66 @@ export function captureNextShipmentNotification(): {
   return { getParams: () => params };
 }
 
+export function captureNextOrderPaidEmail(): {
+  getParams: () => Parameters<typeof stubMailer.sendOrderPaidEmail>[0] | undefined;
+} {
+  let params: Parameters<typeof stubMailer.sendOrderPaidEmail>[0] | undefined;
+  vi.spyOn(stubMailer, "sendOrderPaidEmail").mockImplementationOnce(async (input) => {
+    params = input;
+  });
+  return { getParams: () => params };
+}
+
+export function captureNextOrderProcessingEmail(): {
+  getParams: () => Parameters<typeof stubMailer.sendOrderProcessingEmail>[0] | undefined;
+} {
+  let params: Parameters<typeof stubMailer.sendOrderProcessingEmail>[0] | undefined;
+  vi.spyOn(stubMailer, "sendOrderProcessingEmail").mockImplementationOnce(async (input) => {
+    params = input;
+  });
+  return { getParams: () => params };
+}
+
+export function captureNextOrderDeliveredEmail(): {
+  getParams: () => Parameters<typeof stubMailer.sendOrderDeliveredEmail>[0] | undefined;
+} {
+  let params: Parameters<typeof stubMailer.sendOrderDeliveredEmail>[0] | undefined;
+  vi.spyOn(stubMailer, "sendOrderDeliveredEmail").mockImplementationOnce(async (input) => {
+    params = input;
+  });
+  return { getParams: () => params };
+}
+
+export function captureNextRefundConfirmedEmail(): {
+  getParams: () => Parameters<typeof stubMailer.sendRefundConfirmedEmail>[0] | undefined;
+} {
+  let params: Parameters<typeof stubMailer.sendRefundConfirmedEmail>[0] | undefined;
+  vi.spyOn(stubMailer, "sendRefundConfirmedEmail").mockImplementationOnce(async (input) => {
+    params = input;
+  });
+  return { getParams: () => params };
+}
+
+export function captureNextPaymentFailedEmail(): {
+  getParams: () => Parameters<typeof stubMailer.sendPaymentFailedEmail>[0] | undefined;
+} {
+  let params: Parameters<typeof stubMailer.sendPaymentFailedEmail>[0] | undefined;
+  vi.spyOn(stubMailer, "sendPaymentFailedEmail").mockImplementationOnce(async (input) => {
+    params = input;
+  });
+  return { getParams: () => params };
+}
+
+export function captureNextAdminAlertEmail(): {
+  getParams: () => Parameters<typeof stubMailer.sendAdminAlertEmail>[0] | undefined;
+} {
+  let params: Parameters<typeof stubMailer.sendAdminAlertEmail>[0] | undefined;
+  vi.spyOn(stubMailer, "sendAdminAlertEmail").mockImplementationOnce(async (input) => {
+    params = input;
+  });
+  return { getParams: () => params };
+}
+
 /** Pulls the `token` query param out of a link produced by the above. */
 export function extractToken(url: string): string {
   const token = new URL(url).searchParams.get("token");
