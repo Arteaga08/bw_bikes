@@ -8,6 +8,7 @@ import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ButtonGroup } from "@/components/ui/ButtonGroup";
+import { Select } from "@/components/ui/Select";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/lib/api/error";
 import { moveImage } from "@/lib/catalog/gallery";
@@ -21,6 +22,9 @@ const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
 /** Mirrors the formats `image-pipeline.ts` accepts by magic bytes — the `accept` attribute is a UX hint, the real check is server-side. */
 const ACCEPTED_MIME_TYPES = "image/jpeg,image/png,image/webp,image/avif";
+
+/** Mirrors `MAX_IMAGES_PER_COLOR` in `apps/api/src/services/product.service.ts` — checked here too so a blocked 3rd tag never round-trips to the server. */
+const MAX_IMAGES_PER_COLOR = 2;
 
 /** A file staged in `deferred` mode — its own id (not the `File`'s identity) so reordering and removal can key off something stable across re-renders. */
 export interface StagedGalleryFile {
@@ -64,6 +68,16 @@ interface GallerySectionImmediateProps {
   onUpload: (files: File[]) => Promise<ProductImage[]>;
   onRemove: (publicId: string) => Promise<ProductImage[]>;
   onReorder: (publicIds: string[]) => Promise<ProductImage[]>;
+  /**
+   * Distinct colors currently typed into the product's variants (`ProductEditor`
+   * derives this from `variants`, first-appearance order) — offered as the
+   * color-tag options per photo. Prep for a future public gallery-by-color
+   * swap; nothing reads the tag yet. Omitted (with `onColorChange`) on a
+   * product that doesn't exist yet (`mode: "deferred"` never gets these) —
+   * there's no `publicId` to tag against until the first upload.
+   */
+  availableColors?: string[];
+  onColorChange?: (publicId: string, color: string | undefined) => Promise<ProductImage[]>;
 }
 
 interface GallerySectionDeferredProps {
@@ -83,6 +97,7 @@ interface GalleryCard {
   width?: number;
   height?: number;
   isLocal: boolean;
+  color?: string;
 }
 
 function cardsFor(props: GallerySectionProps): GalleryCard[] {
@@ -96,6 +111,7 @@ function cardsFor(props: GallerySectionProps): GalleryCard[] {
     width: image.width,
     height: image.height,
     isLocal: false,
+    color: image.color,
   }));
 }
 
@@ -209,6 +225,35 @@ export function GallerySection(props: GallerySectionProps) {
       toast({
         variant: "error",
         title: "No se pudo reordenar la galería",
+        description: error instanceof ApiError ? error.message : "Intenta de nuevo.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleColorChange(publicId: string, color: string): Promise<void> {
+    if (props.mode !== "immediate" || !props.onColorChange) return;
+
+    if (color) {
+      const existingCount = cards.filter((card) => card.color === color && card.key !== publicId).length;
+      if (existingCount >= MAX_IMAGES_PER_COLOR) {
+        toast({
+          variant: "error",
+          title: "No se pudo actualizar el color",
+          description: `El color "${color}" ya tiene ${MAX_IMAGES_PER_COLOR} fotos. Quita una antes de agregar otra.`,
+        });
+        return;
+      }
+    }
+
+    setBusy(true);
+    try {
+      props.onChange(await props.onColorChange(publicId, color || undefined));
+    } catch (error) {
+      toast({
+        variant: "error",
+        title: "No se pudo actualizar el color",
         description: error instanceof ApiError ? error.message : "Intenta de nuevo.",
       });
     } finally {
@@ -346,6 +391,28 @@ export function GallerySection(props: GallerySectionProps) {
                   iconLeft={<Trash />}
                 />
               </div>
+              {props.mode === "immediate" && props.availableColors && props.onColorChange ? (
+                <div className="flex flex-col gap-xs border-t border-borde p-xs">
+                  <Select
+                    label="Color"
+                    value={card.color ?? ""}
+                    disabled={busy}
+                    onChange={(event) => void handleColorChange(card.key, event.target.value)}
+                  >
+                    <option value="">Sin asignar</option>
+                    {[...new Set([...props.availableColors, ...(card.color ? [card.color] : [])])].map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </Select>
+                  {card.color && !props.availableColors.includes(card.color) ? (
+                    <p className="font-body text-caption text-estado-advertencia">
+                      Este color ya no está en las variantes.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

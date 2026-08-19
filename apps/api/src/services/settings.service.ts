@@ -65,6 +65,7 @@ function toAdminSettings(doc: ISettings): AdminSettings {
       reservationReaperIntervalMs: doc.jobs.reservationReaperIntervalMs,
       orderAuthSweepIntervalMs: doc.jobs.orderAuthSweepIntervalMs,
       paymentReconciliationIntervalMs: doc.jobs.paymentReconciliationIntervalMs,
+      lowStockAlertIntervalMs: doc.jobs.lowStockAlertIntervalMs,
     },
     updatedAt: doc.updatedAt.toISOString(),
   };

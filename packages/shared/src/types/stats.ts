@@ -21,6 +21,32 @@ export interface StatsRange {
   to: string;
 }
 
+/** One day of the window's time series. `date` is `YYYY-MM-DD` in store time, not UTC. */
+export interface OrdersDailyPoint {
+  date: string;
+  count: number;
+  /** Same revenue rule as `OrdersStats.revenueCents`, restricted to this day. */
+  revenueCents: number;
+}
+
+/**
+ * The equivalent window immediately before the requested one, of identical
+ * duration — the reference a headline number needs to mean anything. Only
+ * the totals are mirrored: a second time series would double the payload to
+ * answer a question ("was yesterday better?") that a single figure already
+ * answers.
+ *
+ * `null` when the previous window holds no orders at all, which is a
+ * different statement from "zero revenue" and has to stay distinguishable:
+ * a percentage against no baseline is not 0%, it is undefined, and the UI
+ * must say so rather than render a meaningless `+100%`.
+ */
+export interface OrdersStatsPrevious {
+  revenueCents: number;
+  orderCount: number;
+  averageOrderValueCents: number;
+}
+
 /** Every module response echoes the range it was computed over, for the overview's own consistency check. */
 export interface OrdersStats {
   range: StatsRange;
@@ -28,7 +54,8 @@ export interface OrdersStats {
   /** Cents captured within the window — only statuses that represent money actually taken. */
   revenueCents: number;
   averageOrderValueCents: number;
-  ordersByDay: { date: string; count: number }[];
+  ordersByDay: OrdersDailyPoint[];
+  previous: OrdersStatsPrevious | null;
 }
 
 export interface InventoryStats {

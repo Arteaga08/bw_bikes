@@ -104,6 +104,13 @@ describe("GallerySection — immediate mode", () => {
     expect(onChange).toHaveBeenCalledWith([makeImage("b"), makeImage("a")]);
   });
 
+  it("never renders a color selector when availableColors/onColorChange aren't supplied", () => {
+    renderWithToast(
+      <GallerySection mode="immediate" gallery={[makeImage("a")]} onChange={vi.fn()} onUpload={vi.fn()} onRemove={vi.fn()} onReorder={vi.fn()} />,
+    );
+    expect(screen.queryByLabelText("Color")).not.toBeInTheDocument();
+  });
+
   it("shows the cover badge only on the first image", () => {
     renderWithToast(
       <GallerySection
@@ -116,6 +123,143 @@ describe("GallerySection — immediate mode", () => {
       />,
     );
     expect(screen.getAllByText("Portada")).toHaveLength(1);
+  });
+});
+
+describe("GallerySection — color tagging (immediate mode only)", () => {
+  it("offers the product's variant colors as options, defaulting to 'Sin asignar'", () => {
+    renderWithToast(
+      <GallerySection
+        mode="immediate"
+        gallery={[makeImage("a")]}
+        onChange={vi.fn()}
+        onUpload={vi.fn()}
+        onRemove={vi.fn()}
+        onReorder={vi.fn()}
+        availableColors={["Negro", "Azul"]}
+        onColorChange={vi.fn()}
+      />,
+    );
+
+    const select = screen.getByLabelText("Color") as HTMLSelectElement;
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual(["Sin asignar", "Negro", "Azul"]);
+  });
+
+  it("calls onColorChange with the selected color and applies the result through onChange", async () => {
+    const onChange = vi.fn();
+    const onColorChange = vi.fn().mockResolvedValue([{ ...makeImage("a"), color: "Negro" }]);
+    renderWithToast(
+      <GallerySection
+        mode="immediate"
+        gallery={[makeImage("a")]}
+        onChange={onChange}
+        onUpload={vi.fn()}
+        onRemove={vi.fn()}
+        onReorder={vi.fn()}
+        availableColors={["Negro", "Azul"]}
+        onColorChange={onColorChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Color"), { target: { value: "Negro" } });
+
+    await waitFor(() => expect(onColorChange).toHaveBeenCalledWith("a", "Negro"));
+    expect(onChange).toHaveBeenCalledWith([{ ...makeImage("a"), color: "Negro" }]);
+  });
+
+  it("keeps a tagged color visible and flags it even after it's no longer among the product's variant colors", () => {
+    renderWithToast(
+      <GallerySection
+        mode="immediate"
+        gallery={[{ ...makeImage("a"), color: "Verde" }]}
+        onChange={vi.fn()}
+        onUpload={vi.fn()}
+        onRemove={vi.fn()}
+        onReorder={vi.fn()}
+        availableColors={["Negro"]}
+        onColorChange={vi.fn()}
+      />,
+    );
+
+    const select = screen.getByLabelText("Color") as HTMLSelectElement;
+    expect(select.value).toBe("Verde");
+    expect(screen.getByText("Este color ya no está en las variantes.")).toBeInTheDocument();
+  });
+
+  describe("cap of 2 photos per color", () => {
+    it("blocks tagging a 3rd card with a color that already has 2, without calling onColorChange", async () => {
+      const onChange = vi.fn();
+      const onColorChange = vi.fn();
+      renderWithToast(
+        <GallerySection
+          mode="immediate"
+          gallery={[
+            { ...makeImage("a"), color: "Negro" },
+            { ...makeImage("b"), color: "Negro" },
+            makeImage("c"),
+          ]}
+          onChange={onChange}
+          onUpload={vi.fn()}
+          onRemove={vi.fn()}
+          onReorder={vi.fn()}
+          availableColors={["Negro"]}
+          onColorChange={onColorChange}
+        />,
+      );
+
+      const selects = screen.getAllByLabelText("Color") as HTMLSelectElement[];
+      fireEvent.change(selects[2]!, { target: { value: "Negro" } });
+
+      expect(await screen.findByText("No se pudo actualizar el color")).toBeInTheDocument();
+      expect(onColorChange).not.toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("allows tagging when the target color currently has exactly 1 card", async () => {
+      const onColorChange = vi.fn().mockResolvedValue([]);
+      renderWithToast(
+        <GallerySection
+          mode="immediate"
+          gallery={[{ ...makeImage("a"), color: "Negro" }, makeImage("b")]}
+          onChange={vi.fn()}
+          onUpload={vi.fn()}
+          onRemove={vi.fn()}
+          onReorder={vi.fn()}
+          availableColors={["Negro"]}
+          onColorChange={onColorChange}
+        />,
+      );
+
+      const selects = screen.getAllByLabelText("Color") as HTMLSelectElement[];
+      fireEvent.change(selects[1]!, { target: { value: "Negro" } });
+
+      await waitFor(() => expect(onColorChange).toHaveBeenCalledWith("b", "Negro"));
+    });
+
+    it("doesn't count the card's own current color against itself when retagging to the same color", async () => {
+      const onColorChange = vi.fn().mockResolvedValue([]);
+      renderWithToast(
+        <GallerySection
+          mode="immediate"
+          gallery={[
+            { ...makeImage("a"), color: "Negro" },
+            { ...makeImage("b"), color: "Negro" },
+          ]}
+          onChange={vi.fn()}
+          onUpload={vi.fn()}
+          onRemove={vi.fn()}
+          onReorder={vi.fn()}
+          availableColors={["Negro"]}
+          onColorChange={onColorChange}
+        />,
+      );
+
+      const selects = screen.getAllByLabelText("Color") as HTMLSelectElement[];
+      // Re-selecting "Negro" on a card that already carries "Negro" isn't a 3rd — it's the same 2.
+      fireEvent.change(selects[0]!, { target: { value: "Negro" } });
+
+      await waitFor(() => expect(onColorChange).toHaveBeenCalledWith("a", "Negro"));
+    });
   });
 });
 

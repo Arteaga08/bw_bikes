@@ -61,12 +61,12 @@ export const replaceAccessorySpecGroups = asyncHandler(async (req: Request, res:
 export const uploadAccessoryGallery = asyncHandler(async (req: Request, res: Response) => {
   sanitizeMultipartBody(req);
   const files = readUploadedFiles(req);
-  const { alt } = req.body as { alt?: string };
+  const { alt, color } = req.body as { alt?: string; color?: string };
 
   const uploaded = await uploadImages(files, CLOUDINARY_FOLDER);
   const accessory = await accessoryService.addGalleryImages(
     routeParam(req, "id"),
-    uploaded.map((image) => ({ ...image, ...(alt ? { alt } : {}) })),
+    uploaded.map((image) => ({ ...image, ...(alt ? { alt } : {}), ...(color ? { color } : {}) })),
     requireActor(req),
   );
 
@@ -77,6 +77,17 @@ export const deleteAccessoryGalleryImage = asyncHandler(async (req: Request, res
   const { publicId } = req.body as { publicId: string };
   const accessory = await accessoryService.removeGalleryImage(routeParam(req, "id"), publicId, requireActor(req));
   sendResponse(res, 200, "Imagen eliminada.", { gallery: accessory.gallery });
+});
+
+export const updateAccessoryGalleryImageColor = asyncHandler(async (req: Request, res: Response) => {
+  const { publicId, color } = req.body as { publicId: string; color?: string };
+  const accessory = await accessoryService.updateGalleryImageColor(
+    routeParam(req, "id"),
+    publicId,
+    color,
+    requireActor(req),
+  );
+  sendResponse(res, 200, "Color de la imagen actualizado.", { gallery: accessory.gallery });
 });
 
 export const reorderAccessoryGallery = asyncHandler(async (req: Request, res: Response) => {

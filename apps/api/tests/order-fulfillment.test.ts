@@ -6,7 +6,7 @@ import { AuditLog, Order } from "../src/models/index.js";
 import { stubMailer } from "../src/services/mailer/stub.mailer.js";
 import { createAdminSession, createCustomerSession } from "./helpers/admin-session.js";
 import { createInventoryItemDoc, seedBikeWithVariant } from "./helpers/factories.js";
-import { captureNextShipmentNotification } from "./helpers/mailer.js";
+import { captureNextOrderDeliveredEmail, captureNextOrderProcessingEmail, captureNextShipmentNotification } from "./helpers/mailer.js";
 import { sampleShippingAddress, setShippingAddress } from "./helpers/shipping.js";
 import { paymentIntentObject, signStripeEvent, stubStripe } from "./helpers/stripe.js";
 
@@ -66,6 +66,7 @@ describe("shipping address and fulfillment (M6)", () => {
     expect(res.status).toBe(200);
     return orderId;
   }
+
 
   describe("PUT /cart/shipping-address", () => {
     it("saves the address and reflects it on the cart", async () => {
@@ -218,6 +219,9 @@ describe("shipping address and fulfillment (M6)", () => {
         carrierName: "DHL",
       });
       expect(params!.trackingUrl).toContain("dhl.com");
+      // The order summary names the product, not just its SKU — the SKU
+      // means nothing to a customer.
+      expect(params!.lines).toMatchObject([{ name: bike.bike.name, qty: 1 }]);
 
       // Correcting the tracking number afterward must not fire a second
       // "it shipped!" email — the spy above was `mockImplementationOnce`,
@@ -362,6 +366,44 @@ describe("shipping address and fulfillment (M6)", () => {
 
       expect(asCustomer.status).toBe(403);
       expect(anonymous.status).toBe(401);
+    });
+
+    it("emails the customer when an order enters processing", async () => {
+      const orderId = await paidOrder();
+      const capture = captureNextOrderProcessingEmail();
+
+      const res = await request(app)
+        .patch(`${ADMIN}/orders/bulk-status`)
+        .set("Cookie", adminCookie)
+        .send({ orderIds: [orderId], status: "processing" });
+
+      expect(res.status).toBe(200);
+      const order = await Order.findById(orderId).exec();
+      expect(capture.getParams()).toMatchObject({
+        to: "fulfillment-buyer@example.com",
+        orderNumber: order?.orderNumber,
+      });
+    });
+
+    it("emails the customer when an order is marked delivered", async () => {
+      const orderId = await processingOrder();
+      await request(app)
+        .patch(`${ADMIN}/orders/${orderId}/shipment`)
+        .set("Cookie", adminCookie)
+        .send({ carrier: "dhl", trackingNumber: "1234567890" });
+      const capture = captureNextOrderDeliveredEmail();
+
+      const res = await request(app)
+        .patch(`${ADMIN}/orders/bulk-status`)
+        .set("Cookie", adminCookie)
+        .send({ orderIds: [orderId], status: "delivered" });
+
+      expect(res.status).toBe(200);
+      const order = await Order.findById(orderId).exec();
+      expect(capture.getParams()).toMatchObject({
+        to: "fulfillment-buyer@example.com",
+        orderNumber: order?.orderNumber,
+      });
     });
 
     it("rejects an empty or oversized list of ids", async () => {

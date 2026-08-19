@@ -10,6 +10,7 @@ import {
   replaceAccessorySpecGroups,
   restoreAccessory,
   updateAccessory,
+  updateAccessoryGalleryImageColor,
   uploadAccessoryGallery,
 } from "../controllers/accessory.controller.js";
 import {
@@ -24,6 +25,7 @@ import {
   replaceBikeSpecGroups,
   restoreBike,
   updateBike,
+  updateBikeGalleryImageColor,
   uploadBikeGallery,
   uploadBikeGeometryImage,
 } from "../controllers/bike.controller.js";
@@ -38,6 +40,13 @@ import {
   uploadBrandLogo,
 } from "../controllers/brand.controller.js";
 import { createCategoryController } from "../controllers/category.controller.js";
+import {
+  createColorTemplate,
+  getAdminColorTemplate,
+  listAdminColorTemplates,
+  removeColorTemplate,
+  updateColorTemplate,
+} from "../controllers/color-template.controller.js";
 import { createSizeTemplateController } from "../controllers/size-template.controller.js";
 import {
   createSpecTemplate,
@@ -56,11 +65,13 @@ import {
   badgeListQuerySchema,
   brandListQuerySchema,
   categoryListQuerySchema,
+  colorTemplateListQuerySchema,
   createAccessorySchema,
   createBadgeSchema,
   createBikeSchema,
   createBrandSchema,
   createCategorySchema,
+  createColorTemplateSchema,
   createSizeTemplateSchema,
   createSpecTemplateSchema,
   deleteGalleryImageSchema,
@@ -74,6 +85,8 @@ import {
   updateBikeSchema,
   updateBrandSchema,
   updateCategorySchema,
+  updateColorTemplateSchema,
+  updateGalleryImageColorSchema,
   updateSizeTemplateSchema,
   updateSpecTemplateSchema,
   uploadGalleryImagesSchema,
@@ -202,6 +215,21 @@ function mountSizeTemplateRoutes(basePath: string, controller: ReturnType<typeof
 mountSizeTemplateRoutes("/bike-size-templates", bikeSizeTemplates);
 mountSizeTemplateRoutes("/accessory-size-templates", accessorySizeTemplates);
 
+// --- Color templates -------------------------------------------------------
+// One shared collection, unlike sizes — a color name means the same thing on
+// a bike as on a helmet, so there's exactly one mount, not two.
+
+router.get("/color-templates", validate(colorTemplateListQuerySchema, "query"), listAdminColorTemplates);
+router.post("/color-templates", validate(createColorTemplateSchema), createColorTemplate);
+router.get("/color-templates/:id", validate(idParamSchema, "params"), getAdminColorTemplate);
+router.patch(
+  "/color-templates/:id",
+  validate(idParamSchema, "params"),
+  validate(updateColorTemplateSchema),
+  updateColorTemplate,
+);
+router.delete("/color-templates/:id", validate(idParamSchema, "params"), removeColorTemplate);
+
 // --- Bikes ---------------------------------------------------------------
 
 router.get("/bikes", validate(adminProductListQuerySchema, "query"), listAdminBikes);
@@ -245,6 +273,12 @@ router.patch(
   validate(idParamSchema, "params"),
   validate(reorderGallerySchema),
   reorderBikeGallery,
+);
+router.patch(
+  "/bikes/:id/gallery/color",
+  validate(idParamSchema, "params"),
+  validate(updateGalleryImageColorSchema),
+  updateBikeGalleryImageColor,
 );
 
 // The geometry chart is a single image, so it has no delete-by-publicId and no
@@ -301,6 +335,12 @@ router.patch(
   validate(idParamSchema, "params"),
   validate(reorderGallerySchema),
   reorderAccessoryGallery,
+);
+router.patch(
+  "/accessories/:id/gallery/color",
+  validate(idParamSchema, "params"),
+  validate(updateGalleryImageColorSchema),
+  updateAccessoryGalleryImageColor,
 );
 
 export { router as adminCatalogRouter };

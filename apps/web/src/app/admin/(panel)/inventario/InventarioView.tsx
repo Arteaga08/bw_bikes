@@ -1,13 +1,15 @@
 "use client";
 
 import type { AdminInventoryItem, InventorySummary, ItemType } from "@bw-bikes/shared";
+import { X } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { ComboboxOption } from "@/components/ui/Combobox";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tab, TabList } from "@/components/ui/Tabs";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useToast } from "@/hooks/use-toast";
 import { adminAccessoriesApi, adminBikesApi } from "@/lib/api/admin-catalog";
 import {
@@ -18,35 +20,50 @@ import {
 } from "@/lib/api/admin-inventory";
 import { ApiError } from "@/lib/api/error";
 import { CategoryBand } from "./CategoryBand";
+import { InventoryAlertCards, type InventoryStockFilter } from "./InventoryAlertCards";
 import { InventoryRow } from "./InventoryRow";
 import { NewInventoryEntryDialog } from "./NewInventoryEntryDialog";
 import { StockAdjustDialog } from "./StockAdjustDialog";
+
+const SEARCH_DEBOUNCE_MS = 300;
+const SEARCH_RESULT_LIMIT = 50;
 
 function apiErrorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+const STOCK_FILTER_LABELS: Record<InventoryStockFilter, string> = {
+  out: "Agotados",
+  low: "Bajos",
+};
+
 /**
- * Three zones of decreasing weight, per the `impeccable`-shaped brief:
- * Reposición (dominant — the reorder list itself, not a count), Por
- * categoría (bandas asimétricas, dos árboles independientes), Captura
- * (un solo dorado en toda la vista). Refetching is coarse on purpose — one
- * `refetchToken` bumped after any mutation reloads the summary, Zona 1, and
- * whichever category bands are open, the same "refetch, never optimistic
- * update" discipline every other screen in this panel follows.
+ * Cards arriba (vistazo rapido, store-wide, clicables para filtrar) seguidas
+ * por "Por categoria" como contenido dominante (dos arboles independientes,
+ * bandas asimetricas) y Captura al final (un solo dorado en toda la vista).
+ * Buscar por SKU y filtrar por una card son dos formas de acotar la misma
+ * sección — activar una limpia la otra, para no combinar dos modos de
+ * filtrado a la vez. Refetching is coarse on purpose - one `refetchToken`
+ * bumped after any mutation reloads the summary and whichever category
+ * bands are open, the same "refetch, never optimistic update" discipline
+ * every other screen in this panel follows.
  */
 export function InventarioView() {
   const { toast } = useToast();
 
   const [catalogTab, setCatalogTab] = useState<ItemType>("bike");
   const [refetchToken, setRefetchToken] = useState(0);
+  const [stockFilter, setStockFilter] = useState<InventoryStockFilter | null>(null);
+
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
+  const trimmedSearch = debouncedSearch.trim();
+  const [searchResults, setSearchResults] = useState<AdminInventoryItem[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
 
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
-
-  const [replenishRows, setReplenishRows] = useState<AdminInventoryItem[]>([]);
-  const [replenishLoading, setReplenishLoading] = useState(true);
-  const [replenishError, setReplenishError] = useState(false);
 
   const [bikeOptions, setBikeOptions] = useState<ComboboxOption[]>([]);
   const [accessoryOptions, setAccessoryOptions] = useState<ComboboxOption[]>([]);
@@ -60,14 +77,33 @@ export function InventarioView() {
     setRefetchToken((token) => token + 1);
   }
 
-  // "Adjust state during render" — a `refetchToken` bump resets both loading
-  // flags right here, in the render body; the two effects below only ever
-  // call setState in response to their fetch actually settling.
+  function toggleStockFilter(filter: InventoryStockFilter): void {
+    setSearch("");
+    setStockFilter((current) => (current === filter ? null : filter));
+  }
+
+  function handleSearchChange(next: string): void {
+    if (next.trim() !== "") setStockFilter(null);
+    setSearch(next);
+  }
+
+  // "Adjust state during render" - a `refetchToken` bump resets the summary
+  // loading flag right here, in the render body; the effect below only ever
+  // calls setState in response to the fetch actually settling.
   const [lastRefetchToken, setLastRefetchToken] = useState(refetchToken);
   if (refetchToken !== lastRefetchToken) {
     setLastRefetchToken(refetchToken);
     setSummaryLoading(true);
-    setReplenishLoading(true);
+  }
+
+  // Same pattern for the search results: a change in the debounced term, the
+  // active tab, or a mutation elsewhere invalidates the cached results here.
+  const searchRequestKey = `${trimmedSearch}-${catalogTab}-${refetchToken}`;
+  const [lastSearchRequestKey, setLastSearchRequestKey] = useState<string | null>(null);
+  if (trimmedSearch !== "" && searchRequestKey !== lastSearchRequestKey) {
+    setLastSearchRequestKey(searchRequestKey);
+    setSearchLoading(true);
+    setSearchError(false);
   }
 
   useEffect(() => {
@@ -85,26 +121,24 @@ export function InventarioView() {
   }, [refetchToken]);
 
   useEffect(() => {
+    if (trimmedSearch === "") return;
     let cancelled = false;
-    Promise.all([
-      listAdminInventory({ stock: "out", limit: 50, sort: "available" }),
-      listAdminInventory({ stock: "low", limit: 50, sort: "available" }),
-    ])
-      .then(([out, low]) => {
+    listAdminInventory({ itemType: catalogTab, search: trimmedSearch, limit: SEARCH_RESULT_LIMIT, sort: "available" })
+      .then((result) => {
         if (cancelled) return;
-        setReplenishRows([...out.data.items, ...low.data.items]);
-        setReplenishError(false);
+        setSearchResults(result.data.items);
+        setSearchError(false);
       })
       .catch(() => {
-        if (!cancelled) setReplenishError(true);
+        if (!cancelled) setSearchError(true);
       })
       .finally(() => {
-        if (!cancelled) setReplenishLoading(false);
+        if (!cancelled) setSearchLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [refetchToken]);
+  }, [trimmedSearch, catalogTab, refetchToken]);
 
   useEffect(() => {
     Promise.all([
@@ -158,57 +192,74 @@ export function InventarioView() {
     };
   }, [summary]);
 
+  const isSearching = trimmedSearch !== "";
+
   return (
     <div className="flex flex-col gap-xl p-md sm:p-lg">
-      <Button variant="primary" onClick={() => setNewEntryOpen(true)} className="self-start">
-        Registrar entrada
-      </Button>
+      <InventoryAlertCards totals={summary?.totals ?? null} activeFilter={stockFilter} onToggleFilter={toggleStockFilter} />
 
-      {/* Zona 1 · Reposición — dominante */}
+      {/* Por categoria - contenido dominante de la pantalla, dos arboles independientes */}
       <section className="flex flex-col gap-md">
-        <h2 className="font-display text-h2 text-negro">Reposición</h2>
-        <ErrorBoundary>
-          {replenishLoading ? (
-            <div className="flex flex-col gap-sm rounded-card border border-borde bg-surface p-md">
-              {Array.from({ length: 3 }, (_, index) => (
-                <Skeleton key={index} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : replenishError ? (
-            <EmptyState
-              title="No se pudo cargar la reposición"
-              description="Ocurrió un problema al conectar con el servidor."
-              action={
-                <Button variant="ghost" onClick={refetch}>
-                  Reintentar
-                </Button>
-              }
-            />
-          ) : replenishRows.length === 0 ? (
-            <EmptyState title="Todos los SKUs están por encima de su umbral" description="No hay nada que reponer por ahora." />
-          ) : (
-            <div className="rounded-card border border-borde bg-surface">
-              {replenishRows.map((item) => (
-                <InventoryRow key={item.id} item={item} onAdjust={setAdjustTarget} />
-              ))}
-            </div>
-          )}
-        </ErrorBoundary>
-      </section>
+        <h2 className="font-display text-h2 text-negro">Por categoría</h2>
 
-      {/* Zona 2 · Por categoría — peso medio, dos árboles independientes */}
-      <section className="flex flex-col gap-md">
-        <h3 className="font-display text-h3 text-negro">Por categoría</h3>
-        <TabList label="Catálogo">
-          <Tab selected={catalogTab === "bike"} onSelect={() => setCatalogTab("bike")}>
-            Bicicletas
-          </Tab>
-          <Tab selected={catalogTab === "accessory"} onSelect={() => setCatalogTab("accessory")}>
-            Accesorios
-          </Tab>
-        </TabList>
+        <div className="flex flex-col gap-sm sm:flex-row sm:items-end sm:justify-between">
+          <TabList label="Catálogo">
+            <Tab selected={catalogTab === "bike"} onSelect={() => setCatalogTab("bike")}>
+              Bicicletas
+            </Tab>
+            <Tab selected={catalogTab === "accessory"} onSelect={() => setCatalogTab("accessory")}>
+              Accesorios
+            </Tab>
+          </TabList>
 
-        {summaryLoading ? (
+          <Input
+            label="Buscar"
+            labelHidden
+            placeholder="Buscar por SKU"
+            value={search}
+            onChange={(event) => handleSearchChange(event.target.value)}
+            wrapperClassName="sm:max-w-[16rem]"
+          />
+        </div>
+
+        {stockFilter && !isSearching ? (
+          <button
+            type="button"
+            onClick={() => setStockFilter(null)}
+            className="inline-flex w-fit items-center gap-xs rounded-control border border-borde bg-inset px-sm py-1 font-ui text-caption text-negro transition-colors duration-150 hover:bg-borde focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro"
+          >
+            Filtro: {STOCK_FILTER_LABELS[stockFilter]}
+            <X size={12} weight="bold" aria-hidden="true" />
+          </button>
+        ) : null}
+
+        {isSearching ? (
+          <div className="rounded-card border border-borde bg-surface">
+            {searchLoading ? (
+              <div className="flex flex-col gap-sm p-md">
+                {Array.from({ length: 3 }, (_, index) => (
+                  <Skeleton key={index} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : searchError ? (
+              <EmptyState
+                title="No se pudo buscar"
+                description="Ocurrió un problema al conectar con el servidor."
+                action={
+                  <Button variant="ghost" onClick={refetch}>
+                    Reintentar
+                  </Button>
+                }
+              />
+            ) : searchResults.length === 0 ? (
+              <EmptyState title="Sin resultados" description={`Ningún SKU coincide con "${trimmedSearch}".`} />
+            ) : (
+              searchResults.map((item) => (
+                <InventoryRow key={item.id} item={item} onAdjust={setAdjustTarget} density="comfortable" />
+              ))
+            )}
+          </div>
+        ) : summaryLoading ? (
           <div className="flex flex-col gap-sm rounded-card border border-borde bg-surface p-md">
             {Array.from({ length: 3 }, (_, index) => (
               <Skeleton key={index} className="h-10 w-full" />
@@ -224,11 +275,17 @@ export function InventarioView() {
                 group={group}
                 onAdjust={setAdjustTarget}
                 refetchToken={refetchToken}
+                stockFilter={stockFilter}
               />
             ))}
           </div>
         )}
       </section>
+
+      {/* Captura - la mas ligera, sin card ni heading propio: el unico dorado de la vista */}
+      <Button variant="primary" onClick={() => setNewEntryOpen(true)} className="self-start">
+        Registrar entrada
+      </Button>
 
       <StockAdjustDialog
         item={adjustTarget}

@@ -25,9 +25,17 @@ export interface OrderNumberCellProps {
 
 export function OrderNumberCell({ order, showCountdown, alertHours, cancelHours }: OrderNumberCellProps) {
   const pieces = order.lines.reduce((sum, line) => sum + line.qty, 0);
+  const firstLineName = order.lines[0]?.name;
+  const extraLines = order.lines.length - 1;
   return (
     <div>
       <p className="font-ui text-ui text-negro">{order.orderNumber}</p>
+      {firstLineName ? (
+        <p className="mt-xs truncate font-body text-caption text-grafito">
+          {firstLineName}
+          {extraLines > 0 ? ` +${extraLines} más` : ""}
+        </p>
+      ) : null}
       <p className="mt-xs flex items-center gap-xs font-body text-caption text-grafito">
         <Package size={12} aria-hidden="true" />
         {pieces} {pieces === 1 ? "pieza" : "piezas"}

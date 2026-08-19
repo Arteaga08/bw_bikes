@@ -86,6 +86,8 @@ export interface ProductImage {
   width: number;
   height: number;
   alt?: string;
+  /** Optional variant-color tag (free text, matching `ProductVariant.color`) — admin-only for now. Untagged means "shown for every color" once a public gallery reads this. */
+  color?: string;
   order: number;
 }
 
@@ -236,6 +238,18 @@ export interface SizeTemplate {
   id: string;
   value: string;
   /** `manual`: an admin created it explicitly. `auto`: learned the first time a variant saved this size. */
+  source: "manual" | "auto";
+  order: number;
+  isActive: boolean;
+}
+
+/** Unlike `SizeTemplate`, one shared collection across both catalogs — a color name means the same thing on a bike as on a helmet. */
+export interface ColorTemplate {
+  id: string;
+  value: string;
+  /** `#RRGGBB`, or `null` for an entry auto-learned from a variant that was never typed through the admin CRUD. */
+  hex: string | null;
+  /** `manual`: an admin created/edited it explicitly. `auto`: learned the first time a variant saved this color. */
   source: "manual" | "auto";
   order: number;
   isActive: boolean;

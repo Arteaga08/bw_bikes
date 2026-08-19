@@ -247,4 +247,124 @@ describe("gallery management", () => {
 
     expect(response.status).toBe(400);
   });
+
+  it("tags an image with a color, reflected on the next GET", async () => {
+    const before = await Bike.findById(bikeId).exec();
+    const publicId = before!.gallery[0]!.publicId;
+
+    const response = await request(app)
+      .patch(`${ADMIN}/bikes/${bikeId}/gallery/color`)
+      .set("Cookie", adminCookie)
+      .send({ publicId, color: "Negro" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.gallery.find((image: { publicId: string }) => image.publicId === publicId).color).toBe(
+      "Negro",
+    );
+
+    const stored = await request(app).get(`${ADMIN}/bikes/${bikeId}`).set("Cookie", adminCookie);
+    expect(stored.body.data.bike.gallery.find((image: { publicId: string }) => image.publicId === publicId).color).toBe(
+      "Negro",
+    );
+  });
+
+  it("clears a previously set color when color is sent empty", async () => {
+    const before = await Bike.findById(bikeId).exec();
+    const publicId = before!.gallery[0]!.publicId;
+
+    await request(app).patch(`${ADMIN}/bikes/${bikeId}/gallery/color`).set("Cookie", adminCookie).send({ publicId, color: "Negro" });
+
+    const response = await request(app)
+      .patch(`${ADMIN}/bikes/${bikeId}/gallery/color`)
+      .set("Cookie", adminCookie)
+      .send({ publicId, color: "" });
+
+    expect(response.status).toBe(200);
+    const tagged = response.body.data.gallery.find((image: { publicId: string }) => image.publicId === publicId);
+    expect(tagged.color).toBeUndefined();
+  });
+
+  it("rejects tagging a color on an image that belongs to another product", async () => {
+    const response = await request(app)
+      .patch(`${ADMIN}/bikes/${bikeId}/gallery/color`)
+      .set("Cookie", adminCookie)
+      .send({ publicId: "bw-bikes/bikes/de-otro-producto", color: "Negro" });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("accepts a color tag on the upload itself", async () => {
+    const response = await request(app)
+      .post(`${ADMIN}/bikes/${bikeId}/gallery`)
+      .set("Cookie", adminCookie)
+      .field("color", "Azul")
+      .attach("images", await makeJpegBuffer(), { filename: "c.jpg", contentType: "image/jpeg" });
+
+    expect(response.status).toBe(201);
+    const uploaded = response.body.data.gallery[response.body.data.gallery.length - 1];
+    expect(uploaded.color).toBe("Azul");
+  });
+
+  describe("cap of 2 photos per color", () => {
+    it("rejects retagging a 3rd image with a color that already has 2", async () => {
+      const before = await Bike.findById(bikeId).exec();
+      const [first, second] = before!.gallery;
+
+      await request(app).patch(`${ADMIN}/bikes/${bikeId}/gallery/color`).set("Cookie", adminCookie).send({ publicId: first!.publicId, color: "Negro" });
+      await request(app).patch(`${ADMIN}/bikes/${bikeId}/gallery/color`).set("Cookie", adminCookie).send({ publicId: second!.publicId, color: "Negro" });
+
+      const uploadThird = await request(app)
+        .post(`${ADMIN}/bikes/${bikeId}/gallery`)
+        .set("Cookie", adminCookie)
+        .attach("images", await makeJpegBuffer(), { filename: "c.jpg", contentType: "image/jpeg" });
+      const thirdPublicId = uploadThird.body.data.gallery[uploadThird.body.data.gallery.length - 1].publicId as string;
+
+      const response = await request(app)
+        .patch(`${ADMIN}/bikes/${bikeId}/gallery/color`)
+        .set("Cookie", adminCookie)
+        .send({ publicId: thirdPublicId, color: "Negro" });
+
+      expect(response.status).toBe(400);
+      const after = await Bike.findById(bikeId).exec();
+      expect(after?.gallery.find((image) => image.publicId === thirdPublicId)?.color).toBeUndefined();
+    });
+
+    it("allows retagging when the target color already has exactly 1 image", async () => {
+      const before = await Bike.findById(bikeId).exec();
+      const [first] = before!.gallery;
+
+      await request(app).patch(`${ADMIN}/bikes/${bikeId}/gallery/color`).set("Cookie", adminCookie).send({ publicId: first!.publicId, color: "Negro" });
+
+      const uploadThird = await request(app)
+        .post(`${ADMIN}/bikes/${bikeId}/gallery`)
+        .set("Cookie", adminCookie)
+        .attach("images", await makeJpegBuffer(), { filename: "c.jpg", contentType: "image/jpeg" });
+      const thirdPublicId = uploadThird.body.data.gallery[uploadThird.body.data.gallery.length - 1].publicId as string;
+
+      const response = await request(app)
+        .patch(`${ADMIN}/bikes/${bikeId}/gallery/color`)
+        .set("Cookie", adminCookie)
+        .send({ publicId: thirdPublicId, color: "Negro" });
+
+      expect(response.status).toBe(200);
+    });
+
+    it("rejects an upload batch whose color would push the count over 2, leaving the gallery unchanged", async () => {
+      const before = await Bike.findById(bikeId).exec();
+      const [first, second] = before!.gallery;
+
+      await request(app).patch(`${ADMIN}/bikes/${bikeId}/gallery/color`).set("Cookie", adminCookie).send({ publicId: first!.publicId, color: "Negro" });
+      await request(app).patch(`${ADMIN}/bikes/${bikeId}/gallery/color`).set("Cookie", adminCookie).send({ publicId: second!.publicId, color: "Negro" });
+
+      const response = await request(app)
+        .post(`${ADMIN}/bikes/${bikeId}/gallery`)
+        .set("Cookie", adminCookie)
+        .field("color", "Negro")
+        .attach("images", await makeJpegBuffer(), { filename: "c.jpg", contentType: "image/jpeg" });
+
+      expect(response.status).toBe(400);
+      const after = await Bike.findById(bikeId).exec();
+      expect(after?.gallery).toHaveLength(2);
+    });
+  });
 });

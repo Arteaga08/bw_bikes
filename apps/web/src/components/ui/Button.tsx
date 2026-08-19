@@ -261,7 +261,7 @@ export function buttonClasses({ variant = "primary", size = "md", tone = "neutra
     // Marker the scoped rule in `globals.css` keys the in-group hover off —
     // see the comment on BARE_BASE_CLASSES.
     variant === "bare" && tone === "neutral" && "is-bare-neutral",
-    loading && "relative text-transparent",
+    loading && "relative",
   );
 }
 
@@ -328,9 +328,19 @@ export function ButtonContent({ variant = "primary", size = "md", tone = "neutra
           )}
         />
       ) : null}
-      {iconLeft ? <IconSlot size={size}>{iconLeft}</IconSlot> : null}
-      {children}
-      {iconRight ? <IconSlot size={size}>{iconRight}</IconSlot> : null}
+      {/* `invisible`, not the button's own `text-transparent` — the spinner
+          above reads `border-current` off this same element's color, and a
+          transparent button color would blank the spinner out too. `invisible`
+          keeps the layout box (so the button doesn't shrink) without touching
+          `color`, and — unlike a color utility — it can't lose a specificity
+          fight against `disabled:text-*` the way a plain `text-transparent`
+          class did (both single-property utilities of equal specificity,
+          `:disabled` included, resolved by generation order, not source order). */}
+      <span className={cn("contents", loading && "invisible")}>
+        {iconLeft ? <IconSlot size={size}>{iconLeft}</IconSlot> : null}
+        {children}
+        {iconRight ? <IconSlot size={size}>{iconRight}</IconSlot> : null}
+      </span>
       {variant === "text" ? (
         <span
           aria-hidden="true"

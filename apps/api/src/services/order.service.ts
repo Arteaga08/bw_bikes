@@ -24,6 +24,7 @@ import { cartService } from "./cart.service.js";
 import { createMailer } from "./mailer/index.js";
 import type { ReservationLine } from "./inventory.service.js";
 import { inventoryService } from "./inventory.service.js";
+import { createNotifier } from "./notifier/index.js";
 import { assertTransition, canTransition, isTerminal, ORDER_STATUSES } from "./order-state.js";
 import { buildLineSnapshots, calculateTotals, resolveCaptureMethod } from "./order-pricing.js";
 import { assertPaymentsConfigured, getPaymentProvider } from "./payments/index.js";
@@ -542,7 +543,7 @@ async function markAuthorized(order: IOrder, authorizedAt: Date): Promise<void> 
     await inventoryService.extendHold(reservationRef(current), authorizationExpiresAt);
   }
 
-  await applyTransition(current, "awaiting_supplier_confirmation", { actorType: "system" });
+  const queued = await applyTransition(current, "awaiting_supplier_confirmation", { actorType: "system" });
 
   // The purchase is committed from the customer's side, so the shopping list
   // has done its job.
@@ -555,6 +556,17 @@ async function markAuthorized(order: IOrder, authorizedAt: Date): Promise<void> 
     targetId: String(current._id),
     after: { orderNumber: current.orderNumber, totalCents: current.totalCents },
   });
+
+  // Only the first time this order lands in the queue — a redelivered webhook
+  // or the reconciliation sweep finding it already there must not re-alert.
+  if (queued) {
+    await createNotifier().notifyAdmin({
+      kind: "order.authorized",
+      title: `Nueva orden bajo pedido — orden ${queued.orderNumber}`,
+      body: `Por $${(queued.totalCents / 100).toFixed(2)} MXN. Revisa el stock con el proveedor y confírmala o recházala desde el panel.`,
+      meta: { orderId: String(queued._id), orderNumber: queued.orderNumber, totalCents: queued.totalCents },
+    });
+  }
 }
 
 /**
@@ -585,15 +597,96 @@ async function markPaid(order: IOrder, capturedAt: Date, card?: { brand: string;
     targetId: String(updated._id),
     after: { orderNumber: updated.orderNumber, totalCents: updated.totalCents },
   });
+
+  // Fetched once, reused by both the admin alert (enriched with who/what to
+  // prepare) and the customer's own "payment succeeded" email below.
+  const customer = await User.findById(updated.userId).select("email firstName").exec();
+
+  // Only an order that was charged the instant it was placed is a "new sale"
+  // worth an immediate ping — a made-to-order bike reaching `paid` always
+  // does so through `confirmSupplierStock`, an admin action that already has
+  // its own screen open; alerting them about their own click would be noise.
+  if (updated.payment.captureMethod === "automatic") {
+    const summaryBody = `Pago capturado por $${(updated.totalCents / 100).toFixed(2)} MXN. Lista para preparar.`;
+
+    await createNotifier().notifyAdmin({
+      kind: "order.paid",
+      title: `Nueva venta — orden ${updated.orderNumber}`,
+      body: summaryBody,
+      meta: { orderId: String(updated._id), orderNumber: updated.orderNumber, totalCents: updated.totalCents },
+    });
+
+    // The email is the channel that actually has room for what Telegram's
+    // one-line ping doesn't: who to ship it to and exactly what to pull off
+    // the shelf, so whoever opens it can start preparing the order without
+    // switching to the admin panel first.
+    const { recipientName, phone, city, state } = updated.shippingAddress;
+    const productLines = updated.lines
+      .map((line) => {
+        const variant = [line.size ? `talla ${line.size}` : undefined, line.color].filter(Boolean).join(" · ");
+        return `${line.qty}× ${line.name}${variant ? ` (${variant})` : ""} — SKU ${line.sku}`;
+      })
+      .join("<br />");
+
+    // Second channel for the same "nueva venta" alert — unlike the Telegram
+    // call above, a flaky Resend call must not disturb the payment flow
+    // that already committed, so this one gets its own `.catch()`.
+    await createMailer()
+      .sendAdminAlertEmail({
+        subject: `Nueva venta — orden ${updated.orderNumber}`,
+        title: `Nueva venta — orden ${updated.orderNumber}`,
+        bodyParagraphs: [
+          summaryBody,
+          `<strong>Cliente:</strong> ${recipientName} — ${customer?.email ?? "sin correo en la cuenta"} · ${phone}`,
+          `<strong>Productos:</strong><br />${productLines}`,
+          `<strong>Enviar a:</strong> ${city}, ${state}`,
+        ],
+      })
+      .catch((error: unknown) => {
+        logger.error({ err: error, orderId: String(updated._id) }, "Failed to send the new-sale admin alert email");
+      });
+  }
+
+  // Customer-facing "payment succeeded" — unlike the admin alert above, this
+  // fires for every real transition to `paid`, instant capture or
+  // supplier-confirmed: the customer must always know their money moved,
+  // regardless of how the capture happened.
+  if (customer) {
+    await createMailer()
+      .sendOrderPaidEmail({
+        to: customer.email,
+        firstName: customer.firstName,
+        orderNumber: updated.orderNumber,
+        totalCents: updated.totalCents,
+      })
+      .catch((error: unknown) => {
+        logger.error({ err: error, orderId: String(updated._id) }, "Failed to send the order-paid email");
+      });
+  }
 }
 
 /** The payment attempt ended without money. Holds go back; the order closes. */
 async function markPaymentFailed(order: IOrder, reason: string): Promise<void> {
   await inventoryService.release(reservationRef(order));
-  await applyTransition(order, "cancelled", { actorType: "system", reason }, {
+  const updated = await applyTransition(order, "cancelled", { actorType: "system", reason }, {
     cancelReason: reason,
     "payment.state": "failed",
   });
+
+  if (!updated) return;
+
+  // Never mentions a refund — nothing was charged, so there is nothing to
+  // give back. Best-effort, same reasoning as every other order email: the
+  // release/transition above already committed and must not be undone by a
+  // flaky mailer.
+  const customer = await User.findById(updated.userId).select("email firstName").exec();
+  if (customer) {
+    await createMailer()
+      .sendPaymentFailedEmail({ to: customer.email, firstName: customer.firstName, orderNumber: updated.orderNumber })
+      .catch((error: unknown) => {
+        logger.error({ err: error, orderId: String(updated._id) }, "Failed to send the payment-failed email");
+      });
+  }
 }
 
 /**
@@ -628,6 +721,22 @@ async function markRefunded(order: IOrder, refundedAmountCents: number, refunded
     targetId: String(updated._id),
     after: { orderNumber: updated.orderNumber, refundedAmountCents },
   });
+
+  // The only path here today is the `charge.refunded` webhook — there is no
+  // manual refund flow — so this is the sole trigger for this email.
+  const customer = await User.findById(updated.userId).select("email firstName").exec();
+  if (customer) {
+    await createMailer()
+      .sendRefundConfirmedEmail({
+        to: customer.email,
+        firstName: customer.firstName,
+        orderNumber: updated.orderNumber,
+        refundedAmountCents,
+      })
+      .catch((error: unknown) => {
+        logger.error({ err: error, orderId: String(updated._id) }, "Failed to send the refund-confirmed email");
+      });
+  }
 }
 
 /**
@@ -849,6 +958,12 @@ async function recordShipment(orderId: string, input: RecordShipmentInput, actor
           carrierName,
           trackingNumber: input.trackingNumber,
           trackingUrl,
+          lines: updated.lines.map((line) => ({
+            name: line.name,
+            qty: line.qty,
+            ...(line.size !== undefined ? { size: line.size } : {}),
+            ...(line.color !== undefined ? { color: line.color } : {}),
+          })),
         })
         .catch((error: unknown) => {
           logger.error({ err: error, orderId: String(updated._id) }, "Failed to send the shipment notification email");
@@ -962,6 +1077,30 @@ async function bulkUpdateStatus(
         after: { status, orderNumber: updated.orderNumber, ...(reason !== undefined ? { reason } : {}) },
         ip: actor.ip,
       });
+
+      // Best-effort, per order — one order's flaky mailer must not turn its
+      // sibling's already-committed status change into a "rejected" result.
+      if (status === "processing" || status === "delivered") {
+        const customer = await User.findById(updated.userId).select("email firstName").exec();
+        if (customer) {
+          const send =
+            status === "processing"
+              ? createMailer().sendOrderProcessingEmail({
+                  to: customer.email,
+                  firstName: customer.firstName,
+                  orderNumber: updated.orderNumber,
+                })
+              : createMailer().sendOrderDeliveredEmail({
+                  to: customer.email,
+                  firstName: customer.firstName,
+                  orderNumber: updated.orderNumber,
+                });
+
+          await send.catch((error: unknown) => {
+            logger.error({ err: error, orderId: String(updated._id), status }, "Failed to send the bulk-status order email");
+          });
+        }
+      }
     } catch (error) {
       const message = error instanceof AppError ? error.message : "No se pudo actualizar esta orden.";
       results.push({ id: orderId, orderNumber: order.orderNumber, outcome: "rejected", message });

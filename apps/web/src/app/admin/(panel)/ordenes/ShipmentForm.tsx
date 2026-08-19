@@ -21,6 +21,8 @@ const CARRIER_OPTIONS: Array<{ value: Carrier; label: string }> = [
 export interface ShipmentFormProps {
   onSubmit: (input: RecordShipmentInput) => void | Promise<void>;
   submitting: boolean;
+  /** Brief post-submit confirmation window, owned by the parent (`OrderDetailModal`) — see `Button`'s `success` prop. */
+  success: boolean;
   /** `order.status === "processing"` — this submission also transitions the order to `shipped`. */
   willTransitionToShipped: boolean;
   initial?: RecordShipmentInput;
@@ -32,7 +34,7 @@ export interface ShipmentFormProps {
  * rejects a submission this form accepted. For the six known carriers the
  * backend builds the tracking URL itself (`shippingService.buildTrackingUrl`).
  */
-export function ShipmentForm({ onSubmit, submitting, willTransitionToShipped, initial }: ShipmentFormProps) {
+export function ShipmentForm({ onSubmit, submitting, success, willTransitionToShipped, initial }: ShipmentFormProps) {
   const [carrier, setCarrier] = useState<Carrier>(initial?.carrier ?? "dhl");
   const [trackingNumber, setTrackingNumber] = useState(initial?.trackingNumber ?? "");
   const [carrierName, setCarrierName] = useState(initial?.carrierName ?? "");
@@ -102,7 +104,14 @@ export function ShipmentForm({ onSubmit, submitting, willTransitionToShipped, in
         </>
       ) : null}
 
-      <Button type="submit" variant="primary" disabled={!isValid} loading={submitting}>
+      <Button
+        type="submit"
+        variant="primary"
+        disabled={!isValid}
+        loading={submitting}
+        success={success}
+        successLabel="Guía guardada"
+      >
         {willTransitionToShipped ? "Capturar guía y marcar como enviada" : "Actualizar guía"}
       </Button>
     </form>

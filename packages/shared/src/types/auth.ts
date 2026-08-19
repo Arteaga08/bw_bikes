@@ -51,6 +51,9 @@ export interface AuthUser {
  * M11.5 adds the two order fields the queue was missing: `priority_updated`
  * (triage, independent of the state machine) and `note_added` (append-only
  * staff notes). Both are read back by `GET /admin/orders/:id/activity`.
+ *
+ * Adds `inventory.low_stock`, written by the low-stock sweep — no human
+ * actor, same reasoning as `order.authorization_expiring`.
  */
 export type AuditAction =
   | "admin.login"
@@ -73,6 +76,9 @@ export type AuditAction =
   | "catalog.size_template_created"
   | "catalog.size_template_updated"
   | "catalog.size_template_deleted"
+  | "catalog.color_template_created"
+  | "catalog.color_template_updated"
+  | "catalog.color_template_deleted"
   | "catalog.product_created"
   | "catalog.product_updated"
   | "catalog.product_archived"
@@ -84,6 +90,7 @@ export type AuditAction =
   | "inventory.item_created"
   | "inventory.stock_adjusted"
   | "inventory.reservation_expired"
+  | "inventory.low_stock"
   | "order.created"
   | "order.authorized"
   | "order.paid"
@@ -141,6 +148,9 @@ export const AUDIT_ACTIONS = [
   "catalog.size_template_created",
   "catalog.size_template_updated",
   "catalog.size_template_deleted",
+  "catalog.color_template_created",
+  "catalog.color_template_updated",
+  "catalog.color_template_deleted",
   "catalog.product_created",
   "catalog.product_updated",
   "catalog.product_archived",
@@ -152,6 +162,7 @@ export const AUDIT_ACTIONS = [
   "inventory.item_created",
   "inventory.stock_adjusted",
   "inventory.reservation_expired",
+  "inventory.low_stock",
   "order.created",
   "order.authorized",
   "order.paid",

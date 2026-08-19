@@ -9,6 +9,8 @@ import {
   seedAccessoryWithVariant,
   seedBikeWithVariant,
 } from "./helpers/factories.js";
+import { captureNextAdminAlertEmail, captureNextOrderPaidEmail, captureNextPaymentFailedEmail, captureNextRefundConfirmedEmail } from "./helpers/mailer.js";
+import { captureNextAdminNotification } from "./helpers/notifier.js";
 import { setShippingAddress } from "./helpers/shipping.js";
 import { chargeObject, paymentIntentObject, signStripeEvent, stubStripe } from "./helpers/stripe.js";
 
@@ -207,6 +209,58 @@ describe("payment webhook", () => {
 
       expect((await Cart.findOne({}).exec())?.lines).toEqual([]);
     });
+
+    it("alerts the admin of a new automatic sale", async () => {
+      const { orderId, intentId } = await checkout([{ itemType: "bike", itemId: bike.itemId, sku: bike.sku }]);
+      const notification = captureNextAdminNotification();
+
+      const { body, signature } = signStripeEvent({
+        type: "payment_intent.succeeded",
+        object: paymentIntentObject({ id: intentId, orderId }),
+      });
+      await postEvent(app, body, signature);
+
+      expect(notification.getNotification()).toMatchObject({ kind: "order.paid" });
+    });
+
+    it("also alerts the admin by email, alongside Telegram, with who and what to prepare", async () => {
+      const { orderId, intentId } = await checkout([{ itemType: "bike", itemId: bike.itemId, sku: bike.sku }]);
+      const adminEmail = captureNextAdminAlertEmail();
+
+      const { body, signature } = signStripeEvent({
+        type: "payment_intent.succeeded",
+        object: paymentIntentObject({ id: intentId, orderId }),
+      });
+      await postEvent(app, body, signature);
+
+      const params = adminEmail.getParams();
+      expect(params).toMatchObject({ subject: expect.stringContaining("Nueva venta") });
+      const bodyText = params!.bodyParagraphs.join("\n");
+      // Who to ship it to — the recipient's name, account email and phone —
+      // and what to pull off the shelf, not just "a sale happened."
+      expect(bodyText).toContain("Ana García");
+      expect(bodyText).toContain("webhook-buyer@example.com");
+      expect(bodyText).toContain("5512345678");
+      expect(bodyText).toContain(bike.sku);
+    });
+
+    it("emails the customer that their payment was confirmed", async () => {
+      const { orderId, intentId } = await checkout([{ itemType: "bike", itemId: bike.itemId, sku: bike.sku }]);
+      const capture = captureNextOrderPaidEmail();
+
+      const { body, signature } = signStripeEvent({
+        type: "payment_intent.succeeded",
+        object: paymentIntentObject({ id: intentId, orderId }),
+      });
+      await postEvent(app, body, signature);
+
+      const order = await Order.findById(orderId).exec();
+      expect(capture.getParams()).toMatchObject({
+        to: "webhook-buyer@example.com",
+        orderNumber: order?.orderNumber,
+        totalCents: order?.totalCents,
+      });
+    });
   });
 
   describe("payment_intent.amount_capturable_updated (manual capture)", () => {
@@ -215,6 +269,7 @@ describe("payment webhook", () => {
       const { orderId, intentId } = await checkout([
         { itemType: "bike", itemId: onRequest.itemId, sku: onRequest.sku },
       ]);
+      const notification = captureNextAdminNotification();
 
       const { body, signature } = signStripeEvent({
         type: "payment_intent.amount_capturable_updated",
@@ -234,6 +289,7 @@ describe("payment webhook", () => {
         "authorized",
         "awaiting_supplier_confirmation",
       ]);
+      expect(notification.getNotification()).toMatchObject({ kind: "order.authorized" });
     });
 
     it("extends the in-stock hold of a mixed cart past the checkout deadline", async () => {
@@ -310,6 +366,25 @@ describe("payment webhook", () => {
       expect((await StockReservation.findOne({ referenceId: orderId }).exec())?.status).toBe("released");
     });
 
+    it("emails the customer that the payment failed, without mentioning a refund", async () => {
+      const { orderId, intentId } = await checkout([{ itemType: "bike", itemId: bike.itemId, sku: bike.sku }]);
+      const capture = captureNextPaymentFailedEmail();
+
+      const { body, signature } = signStripeEvent({
+        type: "payment_intent.payment_failed",
+        object: paymentIntentObject({
+          id: intentId,
+          status: "requires_payment_method",
+          orderId,
+          lastError: "Tu tarjeta fue rechazada.",
+        }),
+      });
+      await postEvent(app, body, signature);
+
+      const order = await Order.findById(orderId).exec();
+      expect(capture.getParams()).toMatchObject({ to: "webhook-buyer@example.com", orderNumber: order?.orderNumber });
+    });
+
     it("records a cancelled authorization as expired, not as a plain cancellation", async () => {
       const onRequest = await seedBikeWithVariant({ sku: "BK-WH-EXP", fulfillmentMode: "on_request" });
       const { orderId, intentId } = await checkout([
@@ -355,6 +430,24 @@ describe("payment webhook", () => {
       const order = await Order.findById(orderId).exec();
       expect(order?.status).toBe("refunded");
       expect(order?.payment.refundedAmountCents).toBe(19_999_900);
+    });
+
+    it("emails the customer that the refund was confirmed", async () => {
+      const { orderId, intentId } = await paidOrder();
+      const capture = captureNextRefundConfirmedEmail();
+
+      const { body, signature } = signStripeEvent({
+        type: "charge.refunded",
+        object: chargeObject({ intentId, amountRefunded: 19_999_900, orderId }),
+      });
+      await postEvent(app, body, signature);
+
+      const order = await Order.findById(orderId).exec();
+      expect(capture.getParams()).toMatchObject({
+        to: "webhook-buyer@example.com",
+        orderNumber: order?.orderNumber,
+        refundedAmountCents: 19_999_900,
+      });
     });
 
     it("flags a dispute without changing the status — a claim is not an outcome", async () => {

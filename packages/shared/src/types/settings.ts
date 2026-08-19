@@ -87,6 +87,7 @@ export interface JobsSettings {
   reservationReaperIntervalMs: number;
   orderAuthSweepIntervalMs: number;
   paymentReconciliationIntervalMs: number;
+  lowStockAlertIntervalMs: number;
 }
 
 export interface SettingsSections {

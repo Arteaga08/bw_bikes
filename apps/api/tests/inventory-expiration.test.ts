@@ -133,6 +133,7 @@ describe("reservation reaper job", () => {
         reservationReaperIntervalMs: 50,
         orderAuthSweepIntervalMs: 50,
         paymentReconciliationIntervalMs: 50,
+        lowStockAlertIntervalMs: 50,
       },
       { actorType: "system" },
     );

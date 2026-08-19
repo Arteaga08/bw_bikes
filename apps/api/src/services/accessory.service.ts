@@ -10,6 +10,7 @@ import { toPublicCategory } from "./category.service.js";
 import { inventoryService } from "./inventory.service.js";
 import { type ActorContext, createProductService } from "./product.service.js";
 import { accessorySizeTemplateService } from "./accessory-size-template.service.js";
+import { learnColorTemplates } from "./color-template.service.js";
 import { learnSpecTemplates } from "./spec-template.service.js";
 
 const MODULE_NAME = "catalog.accessories";
@@ -158,6 +159,7 @@ async function create(input: AccessoryInput, actor: ActorContext): Promise<IAcce
 
   if (input.specGroups && input.specGroups.length > 0) await learnSpecTemplates(input.specGroups);
   if (variants.length > 0) await accessorySizeTemplateService.learnSizeTemplates(variants);
+  if (variants.length > 0) await learnColorTemplates(variants);
 
   return accessory;
 }
@@ -165,6 +167,9 @@ async function create(input: AccessoryInput, actor: ActorContext): Promise<IAcce
 async function update(id: string, input: AccessoryInput, actor: ActorContext): Promise<IAccessory> {
   const accessory = await base.findByIdOrFail(id);
   const before = { slug: accessory.slug, price: accessory.price, variants: accessory.variants.length };
+  // Snapshotted before anything below mutates `accessory.variants` — see
+  // `bike.service.ts`'s `update` for the full reasoning (mirrored 1:1 here).
+  const previousSkus = new Set(accessory.variants.map((variant) => variant.sku));
 
   if (input.slug !== undefined && input.slug !== accessory.slug) {
     await base.assertSlugIsFree(input.slug, id);
@@ -178,8 +183,10 @@ async function update(id: string, input: AccessoryInput, actor: ActorContext): P
     await base.assertBrandExists(input.brand);
     accessory.brand = new Types.ObjectId(input.brand);
   }
+  let newVariants: ProductVariant[] = [];
   if (input.variants !== undefined) {
     base.assertVariantSkusAreUnique(input.variants);
+    newVariants = base.partitionNewVariants(previousSkus, input.variants);
     accessory.variants = input.variants;
   }
   if (input.badges !== undefined) {
@@ -193,7 +200,17 @@ async function update(id: string, input: AccessoryInput, actor: ActorContext): P
   if (input.compareAtPrice !== undefined) accessory.compareAtPrice = input.compareAtPrice;
   if (input.specGroups !== undefined) accessory.specGroups = input.specGroups;
 
-  await accessory.save();
+  let seededInventory: Awaited<ReturnType<typeof inventoryService.seedInitialStock>> = [];
+
+  await withOptionalTransaction(async (session) => {
+    await accessory.save({ session });
+    seededInventory = await inventoryService.seedInitialStock(
+      "accessory",
+      accessory._id as Types.ObjectId,
+      newVariants,
+      session,
+    );
+  });
 
   await recordAuditLog({
     actorId: actor.actorId,
@@ -206,11 +223,17 @@ async function update(id: string, input: AccessoryInput, actor: ActorContext): P
     ip: actor.ip,
   });
 
+  for (const item of seededInventory) {
+    await inventoryService.recordItemCreatedAudit(item, actor);
+  }
+
   // Unlike `specGroups` (a separate `PUT .../spec-groups`), variants are part
   // of this same PATCH — so, unlike the sheet, learning has to happen here
   // too, not just on create.
-  if (input.variants !== undefined && input.variants.length > 0)
+  if (input.variants !== undefined && input.variants.length > 0) {
     await accessorySizeTemplateService.learnSizeTemplates(input.variants);
+    await learnColorTemplates(input.variants);
+  }
 
   return accessory;
 }

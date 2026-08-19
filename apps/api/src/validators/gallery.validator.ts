@@ -1,5 +1,9 @@
 import Joi from "joi";
-import { MAX_IMAGE_ALT_LENGTH } from "../models/index.js";
+import { MAX_COLOR_LENGTH, MAX_IMAGE_ALT_LENGTH } from "../models/index.js";
+
+const color = Joi.string().trim().max(MAX_COLOR_LENGTH).allow("").optional().messages({
+  "string.max": `El color no puede exceder ${MAX_COLOR_LENGTH} caracteres.`,
+});
 
 /**
  * Text fields that ride along with a `multipart/form-data` upload.
@@ -14,6 +18,7 @@ export const uploadGalleryImagesSchema = Joi.object({
   alt: Joi.string().trim().max(MAX_IMAGE_ALT_LENGTH).allow("").optional().messages({
     "string.max": `El texto alternativo no puede exceder ${MAX_IMAGE_ALT_LENGTH} caracteres.`,
   }),
+  color,
 });
 
 /**
@@ -32,6 +37,21 @@ export const deleteGalleryImageSchema = Joi.object({
       "string.pattern.base": "Identificador de imagen inválido.",
       "any.required": "El identificador de la imagen es obligatorio.",
     }),
+});
+
+/** Retagging an already-uploaded image's color — `publicId` travels in the body for the same reason as `deleteGalleryImageSchema`'s (it contains slashes). An empty `color` clears the tag. */
+export const updateGalleryImageColorSchema = Joi.object({
+  publicId: Joi.string()
+    .trim()
+    .max(200)
+    .pattern(/^[A-Za-z0-9/_-]+$/)
+    .required()
+    .messages({
+      "string.empty": "El identificador de la imagen es obligatorio.",
+      "string.pattern.base": "Identificador de imagen inválido.",
+      "any.required": "El identificador de la imagen es obligatorio.",
+    }),
+  color,
 });
 
 /** Reordering the gallery is a plain list of publicIds in their new order. */

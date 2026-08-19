@@ -14,12 +14,25 @@
  * than one series. `highlight` exists for exactly one case: the single #1
  * bar of a ranked list, always paired with a visible value label (dorado's
  * own 1.82:1 contrast on white needs that relief).
+ *
+ * A second rule this project only measured for the Inicio redesign
+ * (2026-08): the `estado-*` tokens clear WCAG AA (4.48:1 / 5.19:1) as
+ * **text on `surface`**, but fail the 3:1 UI floor as **adjacent fills**
+ * (~1.2–1.8:1) — see DESIGN.md §2, "Codificación de datos". `estado-*`
+ * therefore never joins `CHART_COLORS`: it stays out of SVG fills entirely
+ * and is applied the same way it already is everywhere else in this system
+ * (`Badge`, `StatCard`'s hint line) — as a Tailwind text-color utility
+ * (`text-estado-exito`/`text-estado-error`), always paired with a glyph, on
+ * `DeltaIndicator`'s delta text. Direction encoding is a property of *text*
+ * in this system, not of a chart mark.
  */
 export const CHART_COLORS = {
   series: "var(--color-grafito)",
   highlight: "var(--color-dorado)",
   grid: "var(--color-borde)",
   axisText: "var(--color-grafito)",
+  /** The #1 bar's value label — full negro, not `axisText`'s grafito, so the one number this chart calls out reads with the same weight as the highlight bar it sits beside. */
+  valueLabel: "var(--color-negro)",
   tooltipBg: "var(--color-surface)",
   tooltipBorder: "var(--color-borde)",
 } as const;

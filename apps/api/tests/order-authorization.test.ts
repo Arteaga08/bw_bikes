@@ -11,6 +11,8 @@ import { orderMaintenanceService } from "../src/services/order-maintenance.servi
 import { settingsService } from "../src/services/settings.service.js";
 import { createAdminSession, createCustomerSession } from "./helpers/admin-session.js";
 import { createInventoryItemDoc, seedAccessoryWithVariant, seedBikeWithVariant } from "./helpers/factories.js";
+import { captureNextOrderPaidEmail } from "./helpers/mailer.js";
+import { captureNextAdminNotification } from "./helpers/notifier.js";
 import { setShippingAddress } from "./helpers/shipping.js";
 import { paymentIntentObject, signStripeEvent, stubStripe } from "./helpers/stripe.js";
 
@@ -51,6 +53,7 @@ describe("supplier confirmation and the authorization clock", () => {
         reservationReaperIntervalMs: 50,
         orderAuthSweepIntervalMs: 50,
         paymentReconciliationIntervalMs: 50,
+        lowStockAlertIntervalMs: 50,
       },
       { actorType: "system" },
     );
@@ -83,6 +86,12 @@ describe("supplier confirmation and the authorization clock", () => {
     it("captures the held funds and marks the order paid", async () => {
       const { orderId, intentId } = await orderAwaitingSupplier();
 
+      // The admin is already looking at the order they just confirmed —
+      // pinging them on their own click would be noise, so this is one of
+      // the two capture methods `markPaid`'s "new sale" alert deliberately
+      // never fires for (see `order.service.ts`).
+      const notification = captureNextAdminNotification();
+
       const res = await request(app)
         .post(`${ADMIN}/orders/${orderId}/confirm-supplier-stock`)
         .set("Cookie", adminCookie)
@@ -94,6 +103,21 @@ describe("supplier confirmation and the authorization clock", () => {
       const order = await Order.findById(orderId).exec();
       expect(order?.status).toBe("paid");
       expect(order?.payment.state).toBe("captured");
+      expect(notification.getNotification()).toBeUndefined();
+    });
+
+    it("still emails the customer that their payment was confirmed, even though the admin alert is skipped", async () => {
+      const { orderId } = await orderAwaitingSupplier();
+      const capture = captureNextOrderPaidEmail();
+
+      const res = await request(app)
+        .post(`${ADMIN}/orders/${orderId}/confirm-supplier-stock`)
+        .set("Cookie", adminCookie)
+        .send({});
+
+      expect(res.status).toBe(200);
+      const order = await Order.findById(orderId).exec();
+      expect(capture.getParams()).toMatchObject({ to: "order-buyer@example.com", orderNumber: order?.orderNumber });
     });
 
     it("commits the in-stock line of a mixed cart out of the warehouse", async () => {
@@ -348,13 +372,17 @@ describe("supplier confirmation and the authorization clock", () => {
       expect(await AuditLog.countDocuments({ action: "order.reconciled" })).toBe(1);
     });
 
-    it("queues an order the gateway says was authorized", async () => {
+    it("queues an order the gateway says was authorized, and alerts the admin", async () => {
       const orderId = await orphanedCheckout();
       stripe.setRetrievedState("authorized");
+      const notification = captureNextAdminNotification();
 
       await orderMaintenanceService.reconcilePendingPayments(new Date());
 
       expect((await Order.findById(orderId).exec())?.status).toBe("awaiting_supplier_confirmation");
+      // Discovered by the sweep instead of a live webhook, but it's still the
+      // first time this order needs supplier review — same alert either way.
+      expect(notification.getNotification()).toMatchObject({ kind: "order.authorized" });
     });
 
     it("closes an order the customer simply never paid", async () => {

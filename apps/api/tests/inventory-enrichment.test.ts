@@ -2,7 +2,8 @@ import { Types } from "mongoose";
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { Bike, BikeCategory, type IBike } from "../src/models/index.js";
+import { Bike, BikeCategory, InventoryItem, Settings, type IBike } from "../src/models/index.js";
+import { resetSettingsCache } from "../src/services/settings.service.js";
 import { createAdminSession } from "./helpers/admin-session.js";
 import { createBikeCategoryDoc, createBrandDoc, seedBikeWithVariant } from "./helpers/factories.js";
 
@@ -129,6 +130,125 @@ describe("inventory admin list — stock filter and threshold override", () => {
     const [row] = (await request(app).get(`${ADMIN}/inventory?itemId=${itemId}&search=OVERRIDE`).set("Cookie", adminCookie))
       .body.data.items as { lowStockThresholdUnits: number }[];
     expect(row!.lowStockThresholdUnits).toBe(10);
+  });
+});
+
+describe("inventory summary — store-wide totals", () => {
+  let app: App;
+  let adminCookie: string;
+  let itemId: string;
+
+  beforeEach(async () => {
+    app = buildApp();
+    adminCookie = await createAdminSession(app);
+    ({ itemId } = await seedBikeWithVariant({ sku: "BK-TOTALS-BASE" }));
+  });
+
+  it("counts total/out/low across the whole store, and only rows created within the last 7 days as new", async () => {
+    const bike = await Bike.findById(itemId).exec();
+    bike!.variants.push(
+      { sku: "BK-TOTALS-OUT", size: "S", fulfillmentMode: "in_stock", isActive: true },
+      { sku: "BK-TOTALS-LOW", size: "M", fulfillmentMode: "in_stock", isActive: true },
+      { sku: "BK-TOTALS-OLD", size: "L", fulfillmentMode: "in_stock", isActive: true },
+    );
+    await bike!.save();
+
+    const outRow = await request(app)
+      .post(`${ADMIN}/inventory`)
+      .set("Cookie", adminCookie)
+      .send({ itemType: "bike", itemId, sku: "BK-TOTALS-OUT", onHand: 0 });
+    await request(app)
+      .post(`${ADMIN}/inventory`)
+      .set("Cookie", adminCookie)
+      .send({ itemType: "bike", itemId, sku: "BK-TOTALS-LOW", onHand: 3 }); // < default threshold (5) → low
+    const oldRow = await request(app)
+      .post(`${ADMIN}/inventory`)
+      .set("Cookie", adminCookie)
+      .send({ itemType: "bike", itemId, sku: "BK-TOTALS-OLD", onHand: 20 }); // healthy, but backdated below
+
+    // `createdAt` isn't writable through the API — and Mongoose's own
+    // `timestamps` plugin actively strips a manual `createdAt` out of any
+    // `updateOne()` `$set` (see `applyTimestampsToUpdate.js`), so even a
+    // direct model-level update silently no-ops. Going through the native
+    // collection bypasses that and is the only way to backdate this row to
+    // prove the 7-day "new" window is actually applied, not just always true.
+    await InventoryItem.collection.updateOne(
+      { _id: new Types.ObjectId(oldRow.body.data.item.id) },
+      { $set: { createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+    );
+
+    const res = await request(app).get(`${ADMIN}/inventory/summary`).set("Cookie", adminCookie);
+    expect(res.status).toBe(200);
+    const { totals } = res.body.data.summary as {
+      totals: { totalSkus: number; outOfStockSkus: number; lowStockSkus: number; newSkus: number };
+    };
+
+    expect(totals.totalSkus).toBe(3);
+    expect(totals.outOfStockSkus).toBe(1);
+    expect(totals.lowStockSkus).toBe(1);
+    // BK-TOTALS-OUT and BK-TOTALS-LOW were just created (in the window);
+    // BK-TOTALS-OLD was backdated out of it.
+    expect(totals.newSkus).toBe(2);
+
+    expect(outRow.status).toBe(201);
+  });
+});
+
+describe("inventory admin list — legacy Settings document missing lowStockThresholdUnits", () => {
+  let app: App;
+  let adminCookie: string;
+  let itemId: string;
+
+  beforeEach(async () => {
+    app = buildApp();
+    adminCookie = await createAdminSession(app);
+    ({ itemId } = await seedBikeWithVariant({ sku: "BK-LEGACY-BASE" }));
+
+    // `createAdminSession` already triggers the Settings singleton's
+    // lazy-create, which — via `setDefaultsOnInsert` — writes every field
+    // including `lowStockThresholdUnits`. That's not what a real pre-M11
+    // deploy looks like: its singleton was created before this field existed
+    // at all. `$unset` reproduces that exact shape directly against the
+    // collection, bypassing Mongoose so the field is genuinely absent from
+    // the stored document, not just cleared through schema validation.
+    await Settings.collection.updateOne({ key: "global" }, { $unset: { "inventory.lowStockThresholdUnits": "" } });
+    resetSettingsCache();
+  });
+
+  it("self-heals the missing field on read instead of leaving it undefined", async () => {
+    const res = await request(app).get(`${ADMIN}/settings`).set("Cookie", adminCookie);
+    expect(res.body.data.settings.inventory.lowStockThresholdUnits).toBe(5);
+  });
+
+  it("stock=low does not crash and classifies correctly against the default", async () => {
+    const bike = await Bike.findById(itemId).exec();
+    bike!.variants.push({ sku: "BK-LEGACY-LOW", size: "M", fulfillmentMode: "in_stock", isActive: true });
+    await bike!.save();
+
+    await request(app)
+      .post(`${ADMIN}/inventory`)
+      .set("Cookie", adminCookie)
+      .send({ itemType: "bike", itemId, sku: "BK-LEGACY-LOW", onHand: 5 }); // = default threshold → low
+
+    const low = await request(app).get(`${ADMIN}/inventory?itemId=${itemId}&stock=low`).set("Cookie", adminCookie);
+    expect(low.status).toBe(200);
+    expect((low.body.data.items as { sku: string }[]).map((i) => i.sku)).toEqual(["BK-LEGACY-LOW"]);
+  });
+
+  it("getSummary reports the real low-stock count instead of silently zeroing it", async () => {
+    const bike = await Bike.findById(itemId).exec();
+    bike!.variants.push({ sku: "BK-LEGACY-SUMMARY", size: "M", fulfillmentMode: "in_stock", isActive: true });
+    await bike!.save();
+
+    await request(app)
+      .post(`${ADMIN}/inventory`)
+      .set("Cookie", adminCookie)
+      .send({ itemType: "bike", itemId, sku: "BK-LEGACY-SUMMARY", onHand: 3 }); // < default threshold → low
+
+    const summary = await request(app).get(`${ADMIN}/inventory/summary`).set("Cookie", adminCookie);
+    expect(summary.status).toBe(200);
+    const groups = summary.body.data.summary.groups as { lowStockSkus: number }[];
+    expect(groups.some((group) => group.lowStockSkus > 0)).toBe(true);
   });
 });
 

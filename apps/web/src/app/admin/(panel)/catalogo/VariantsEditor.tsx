@@ -1,10 +1,13 @@
 "use client";
 
-import type { FulfillmentMode } from "@bw-bikes/shared";
+import { useEffect, useState } from "react";
+import type { ColorTemplate, FulfillmentMode } from "@bw-bikes/shared";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Toggle } from "@/components/ui/Toggle";
+import { buildSkuBase, ensureUniqueSku } from "@/lib/catalog/sku";
+import { cn } from "@/lib/cn";
 import { ALL_FULFILLMENT_MODES, FULFILLMENT_MODE_LABELS } from "@/lib/catalog/labels";
 
 /** Mirrors `MAX_VARIANTS` in `apps/api/src/models/schemas/product-variant.schema.ts`. */
@@ -27,10 +30,20 @@ export interface VariantRow {
    * "edit"` — see that prop's own doc comment for why.
    */
   initialStock?: string;
+  /**
+   * True for a row added during this form session (via `SizePicker` or
+   * "Agregar variante en esta talla"), in either `create` or `edit` mode —
+   * false/absent for a row hydrated from an already-persisted product
+   * (`ProductEditor.variantsFromProduct`). Drives two things: whether the
+   * SKU auto-computes from brand/model/size/color (a persisted SKU is
+   * frozen — see the `sku` field's own note on `VariantsEditorProps`), and
+   * whether "Stock inicial" renders for it in edit mode.
+   */
+  isNewRow?: boolean;
 }
 
 export function emptyVariantRow(): VariantRow {
-  return { sku: "", size: "", color: "", priceInput: "", fulfillmentMode: "in_stock", isActive: true };
+  return { sku: "", size: "", color: "", priceInput: "", fulfillmentMode: "in_stock", isActive: true, isNewRow: true };
 }
 
 /**
@@ -90,16 +103,21 @@ export interface VariantsEditorProps {
   /** True when the product's category doesn't manage sizes — `SizePicker` isn't rendered, so this component owns the empty state and the affordance to add the product's single implicit "Sin talla" group. */
   sizeless?: boolean;
   /**
-   * `"create"` shows the Stock inicial field (`in_stock` rows only — an
-   * `on_request`/`preorder` variant holds no stock, so the field is skipped
-   * for those the same way the preorder-only date field skips everything
-   * else). `"edit"` never renders it: stock capture only happens once, at
-   * creation — editing an existing variant's stock here would silently
-   * overwrite whatever `/admin/inventario` adjusted since the form opened,
-   * with no reason and no audit entry. Adjusting existing stock stays a
-   * dedicated action on that screen instead.
+   * The Stock inicial field renders for `in_stock` rows (never `on_request`/
+   * `preorder`, same as the preorder-only date field) that are also
+   * `isNewRow` — always true in `create` mode, and true in `edit` mode only
+   * for a variant added during this session. A row hydrated from an
+   * already-persisted product never shows it: editing its stock here would
+   * silently overwrite whatever `/admin/inventario` adjusted since the form
+   * opened, with no reason and no audit entry. Adjusting existing stock
+   * stays a dedicated action on that screen instead.
    */
   mode: "create" | "edit";
+  /** Feeds `buildSkuBase` for `isNewRow` rows — the product's own name/brand, so the SKU stays in sync as the admin types them in an earlier step. */
+  productName?: string;
+  brandName?: string;
+  /** Feeds the row-level color `<Select>` (real selector, not free text) and its swatch — sorted by `order` at render. */
+  colorTemplates?: ColorTemplate[];
 }
 
 /**
@@ -111,12 +129,71 @@ export interface VariantsEditorProps {
  * `SizePicker` removes the whole group the instant its last row goes away,
  * so there's nothing here to clean up on this side.
  */
-export function VariantsEditor({ variants, onChange, sizeless = false, mode }: VariantsEditorProps) {
+export function VariantsEditor({
+  variants,
+  onChange,
+  sizeless = false,
+  mode,
+  productName = "",
+  brandName = "",
+  colorTemplates = [],
+}: VariantsEditorProps) {
   const duplicates = findDuplicateSkuIndices(variants);
   const groups = groupBySize(variants);
+  const sortedColorTemplates = colorTemplates.slice().sort((a, b) => a.order - b.order);
+
+  // Rows currently showing the free-text "Nuevo color" input instead of the
+  // `<Select>` — UI-only, never persisted; a row leaves this set the moment
+  // it's removed or the admin clicks "Volver a la lista".
+  const [customColorRows, setCustomColorRows] = useState<Set<number>>(new Set());
+
+  function enterCustomColor(index: number): void {
+    setCustomColorRows((prev) => new Set(prev).add(index));
+  }
+
+  function exitCustomColor(index: number): void {
+    setCustomColorRows((prev) => {
+      const next = new Set(prev);
+      next.delete(index);
+      return next;
+    });
+  }
+
+  // Keeps a new row's SKU in sync as the admin fills in the product's own
+  // name/brand in an earlier wizard step — deliberately keyed on those two
+  // strings only, not on `variants`, so it fires exactly when they change
+  // and never loops back on its own `onChange` call.
+  useEffect(() => {
+    const taken = new Set(variants.filter((row) => !row.isNewRow && row.sku).map((row) => row.sku));
+    let changed = false;
+
+    const next = variants.map((row) => {
+      if (!row.isNewRow) return row;
+      const base = buildSkuBase(brandName, productName, row.size, row.color);
+      const sku = ensureUniqueSku(base, taken);
+      if (sku) taken.add(sku);
+      if (sku === row.sku) return row;
+      changed = true;
+      return { ...row, sku };
+    });
+
+    if (changed) onChange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandName, productName]);
 
   function updateRow(index: number, patch: Partial<VariantRow>): void {
-    onChange(variants.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+    onChange(
+      variants.map((row, i) => {
+        if (i !== index) return row;
+        const next = { ...row, ...patch };
+        if (row.isNewRow && ("size" in patch || "color" in patch)) {
+          const base = buildSkuBase(brandName, productName, next.size, next.color);
+          const taken = new Set(variants.filter((_, j) => j !== index).map((v) => v.sku).filter(Boolean));
+          next.sku = ensureUniqueSku(base, taken);
+        }
+        return next;
+      }),
+    );
   }
 
   function removeRow(index: number): void {
@@ -151,22 +228,62 @@ export function VariantsEditor({ variants, onChange, sizeless = false, mode }: V
           <div className="flex flex-col divide-y divide-borde">
             {group.indices.map((index) => {
               const row = variants[index]!;
+              const currentColorHex = colorTemplates.find((template) => template.value === row.color)?.hex ?? null;
               return (
                 <div key={index} className="flex flex-col gap-sm py-sm first:pt-0 last:pb-0">
                   <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
                     <Input
                       label="SKU"
-                      placeholder="p. ej. DOM-SL5-54-NEG"
                       value={row.sku}
-                      onChange={(event) => updateRow(index, { sku: event.target.value.toUpperCase() })}
+                      disabled
+                      readOnly
+                      helper="Se genera automáticamente de marca, modelo, talla y color."
                       error={duplicates.has(index) ? "SKU repetido entre variantes." : undefined}
                     />
-                    <Input
-                      label="Color"
-                      placeholder="p. ej. Negro mate"
-                      value={row.color}
-                      onChange={(event) => updateRow(index, { color: event.target.value })}
-                    />
+                    {customColorRows.has(index) ? (
+                      <div className="flex items-end gap-sm">
+                        <Input
+                          label="Nombre del color"
+                          placeholder="p. ej. Verde militar"
+                          value={row.color}
+                          onChange={(event) => updateRow(index, { color: event.target.value })}
+                          wrapperClassName="min-w-0 flex-1"
+                        />
+                        <Button variant="ghost" size="sm" onClick={() => exitCustomColor(index)}>
+                          Volver a la lista
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-end gap-sm">
+                        <Select
+                          label="Color"
+                          value={row.color}
+                          onChange={(event) => updateRow(index, { color: event.target.value })}
+                          wrapperClassName="min-w-0 flex-1"
+                        >
+                          <option value="">Sin color</option>
+                          {sortedColorTemplates.map((template) => (
+                            <option key={template.id} value={template.value}>
+                              {template.value}
+                            </option>
+                          ))}
+                          {row.color && !colorTemplates.some((template) => template.value === row.color) ? (
+                            <option value={row.color}>{row.color} (nuevo)</option>
+                          ) : null}
+                        </Select>
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "mb-0.5 h-11 w-11 shrink-0 rounded-full border",
+                            currentColorHex ? "border-borde" : "border-dashed border-grafito",
+                          )}
+                          style={currentColorHex ? { backgroundColor: currentColorHex } : undefined}
+                        />
+                        <Button variant="ghost" size="sm" onClick={() => enterCustomColor(index)}>
+                          Nuevo color…
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 gap-sm sm:grid-cols-3">
@@ -200,7 +317,7 @@ export function VariantsEditor({ variants, onChange, sizeless = false, mode }: V
                     )}
                   </div>
 
-                  {mode === "create" && row.fulfillmentMode === "in_stock" ? (
+                  {(mode === "create" || row.isNewRow) && row.fulfillmentMode === "in_stock" ? (
                     <Input
                       label="Stock inicial"
                       inputMode="numeric"
