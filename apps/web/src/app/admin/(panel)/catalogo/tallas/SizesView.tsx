@@ -190,11 +190,9 @@ export function SizesView({ kind }: SizesViewProps) {
         title={title}
         subtitle={subtitle}
         actions={
-          <div className="hidden sm:block">
-            <Button variant="primary" onClick={() => setFormDialog({ mode: "create" })}>
-              Nueva talla
-            </Button>
-          </div>
+          <Button variant="primary" className="w-full sm:w-auto" onClick={() => setFormDialog({ mode: "create" })}>
+            Nueva talla
+          </Button>
         }
       />
 
@@ -203,7 +201,6 @@ export function SizesView({ kind }: SizesViewProps) {
         searchPlaceholder="Talla"
         value={search}
         onChange={setSearch}
-        action={{ label: "Nueva talla", onClick: () => setFormDialog({ mode: "create" }) }}
         count={!loading && !loadError ? formatCount(meta.total) : undefined}
       />
 

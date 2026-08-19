@@ -164,11 +164,9 @@ export function BadgesView() {
         title="Badges"
         subtitle="Etiquetas de merchandising — Novedad, Bestseller — que un producto puede lucir en la ficha pública. Hasta 3 por producto."
         actions={
-          <div className="hidden sm:block">
-            <Button variant="primary" onClick={() => setFormDialog({ mode: "create" })}>
-              Nuevo badge
-            </Button>
-          </div>
+          <Button variant="primary" className="w-full sm:w-auto" onClick={() => setFormDialog({ mode: "create" })}>
+            Nuevo badge
+          </Button>
         }
       />
 
@@ -177,7 +175,6 @@ export function BadgesView() {
         searchPlaceholder="Etiqueta"
         value={search}
         onChange={setSearch}
-        action={{ label: "Nuevo badge", onClick: () => setFormDialog({ mode: "create" }) }}
         count={!loading && !loadError ? formatCount(meta.total) : undefined}
       />
 

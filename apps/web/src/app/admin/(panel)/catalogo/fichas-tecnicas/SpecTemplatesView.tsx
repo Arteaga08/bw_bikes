@@ -170,11 +170,9 @@ export function SpecTemplatesView() {
         title="Fichas técnicas"
         subtitle="Plantillas reutilizables — un título y sus etiquetas, sin valores — que el editor de producto ofrece al armar una ficha técnica."
         actions={
-          <div className="hidden sm:block">
-            <Button variant="primary" onClick={() => setFormDialog({ mode: "create" })}>
-              Nueva plantilla
-            </Button>
-          </div>
+          <Button variant="primary" className="w-full sm:w-auto" onClick={() => setFormDialog({ mode: "create" })}>
+            Nueva plantilla
+          </Button>
         }
       />
 
@@ -183,7 +181,6 @@ export function SpecTemplatesView() {
         searchPlaceholder="Título"
         value={search}
         onChange={setSearch}
-        action={{ label: "Nueva plantilla", onClick: () => setFormDialog({ mode: "create" }) }}
         count={!loading && !loadError ? formatCount(meta.total) : undefined}
       />
 

@@ -20,23 +20,6 @@ describe("ListToolbar", () => {
     expect(onChange).toHaveBeenLastCalledWith("d");
   });
 
-  it("mirrors the primary action as an icon button that only shows below `sm`, and fires the same handler", async () => {
-    const user = userEvent.setup();
-    const onClick = vi.fn();
-    render(<ListToolbar searchLabel="Buscar" value="" onChange={() => {}} action={{ label: "Nuevo badge", onClick }} />);
-
-    const button = screen.getByRole("button", { name: "Nuevo badge" });
-    expect(button).toHaveClass("sm:hidden");
-
-    await user.click(button);
-    expect(onClick).toHaveBeenCalledTimes(1);
-  });
-
-  it("omits the action button when no action is given", () => {
-    render(<ListToolbar searchLabel="Buscar" value="" onChange={() => {}} />);
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
-  });
-
   it("announces the result count politely, and omits it entirely when absent", () => {
     const { rerender } = render(<ListToolbar searchLabel="Buscar" value="" onChange={() => {}} count="2 badges" />);
     expect(screen.getByText("2 badges")).toHaveAttribute("aria-live", "polite");
