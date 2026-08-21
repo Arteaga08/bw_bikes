@@ -16,6 +16,36 @@ import { RecentOrdersList } from "./RecentOrdersList";
 
 const DEFAULT_RANGE: StatsRangeValue = { preset: "30d" as StatsPreset };
 const PERIOD_LABEL = "vs. periodo anterior";
+const ORDER_COUNT_FORMATTER = new Intl.NumberFormat("es-MX");
+
+/**
+ * Fixed gridline steps, in cents — not a scale relative to whatever this
+ * render's peak happens to be: a ceiling that reshuffles itself every time
+ * the data does is what made the old single "Ingresos por día" chart read as
+ * noise rather than a trend (2026-08 Inicio redesign, at Manuel's request).
+ *
+ * The two charts deliberately do **not** share a step. Bikes clear $300k in a
+ * 30-day window while accessories top out around $9k — two orders of
+ * magnitude apart. A shared $50,000 step (which both charts used through
+ * 2026-08) put the accessory chart's entire series below its first gridline,
+ * flattening every bar onto the baseline. Each series now gets the step its
+ * own scale calls for.
+ *
+ * The trade-off this accepts: bar heights are no longer comparable *across*
+ * the two charts — half-height means $200k in one and $4.5k in the other.
+ * Each chart is read against its own axis, which is why the axis labels are
+ * always rendered rather than left implicit.
+ */
+const REVENUE_AXIS_STEP_CENTS = 50_000_00;
+/**
+ * $2,000, not $1,000: at accessories' real scale (~$9k/period), a $1,000
+ * step draws 10 gridlines in a card this size — cramped, and it leaves the
+ * tallest bar's ceiling landing on an exact multiple with zero headroom
+ * above it (the mechanism that clipped its own value label — see
+ * `OrdersByDayChart`'s `PADDING.top` doc comment). $2,000 halves the
+ * gridline count and reliably leaves the ceiling above `rawMax`.
+ */
+const ACCESSORY_REVENUE_AXIS_STEP_CENTS = 2_000_00;
 
 /**
  * Below the operations strip (Inicio's accionable half): the business-pulse
@@ -73,6 +103,32 @@ export function HomeStats() {
     () => orders?.ordersByDay.map((day) => ({ date: day.date, value: day.revenueCents })) ?? [],
     [orders],
   );
+  const orderCountSeries = useMemo(
+    () => orders?.ordersByDay.map((day) => ({ date: day.date, value: day.count })) ?? [],
+    [orders],
+  );
+  const bikeRevenueSeries = useMemo(
+    () => orders?.ordersByDay.map((day) => ({ date: day.date, value: day.bikeRevenueCents })) ?? [],
+    [orders],
+  );
+  const accessoryRevenueSeries = useMemo(
+    () => orders?.ordersByDay.map((day) => ({ date: day.date, value: day.accessoryRevenueCents })) ?? [],
+    [orders],
+  );
+  // The one chart input in this file that wasn't memoized like the four
+  // series above — same reasoning: a fresh array/objects on every render
+  // otherwise, fed straight into `RankedBarChart`.
+  const topModelItems = useMemo(
+    () =>
+      topModels?.map((model) => ({
+        label: model.name,
+        count: model.count,
+        itemType: model.itemType,
+        revenueCents: model.revenueCents,
+        formatRevenue: formatCurrencyCents,
+      })) ?? [],
+    [topModels],
+  );
 
   return (
     <div className="flex flex-col gap-lg">
@@ -95,7 +151,13 @@ export function HomeStats() {
                       periodLabel={PERIOD_LABEL}
                     />
                   }
-                  spark={<Sparkline points={revenueSeries} ariaLabel="Tendencia de ingresos en el periodo" />}
+                  spark={
+                    <Sparkline
+                      points={revenueSeries}
+                      ariaLabel="Tendencia de ingresos en el periodo"
+                      formatValue={formatCompactCurrencyCents}
+                    />
+                  }
                 />
                 <StatCard
                   label="Órdenes"
@@ -109,8 +171,9 @@ export function HomeStats() {
                   }
                   spark={
                     <Sparkline
-                      points={orders.ordersByDay.map((day) => ({ date: day.date, value: day.count }))}
+                      points={orderCountSeries}
                       ariaLabel="Tendencia de órdenes en el periodo"
+                      formatValue={(value) => ORDER_COUNT_FORMATTER.format(value)}
                     />
                   }
                 />
@@ -136,35 +199,61 @@ export function HomeStats() {
             )}
           </div>
 
+          {/*
+            Two separate charts, not one two-series chart or a stacked bar —
+            decided with Manuel: bikes and accessories are different enough
+            in ticket size (two orders of magnitude apart) that overlaying
+            them, or sharing one y-axis step, would bury the accessory bars
+            under the bike ones. Each chart now uses the fixed step its own
+            scale calls for (`REVENUE_AXIS_STEP_CENTS` /
+            `ACCESSORY_REVENUE_AXIS_STEP_CENTS`, above) — same currency,
+            different steps, not directly comparable bar-to-bar across the
+            two charts. Neither total sums to the "Ingresos" KPI above:
+            shipping is an order-level charge, not a product line, so it
+            belongs to neither chart — each subtitle says so rather than
+            leaving two numbers that silently don't add up.
+          */}
           <div className="grid grid-cols-1 gap-md xl:grid-cols-2">
             <ChartCard
-              title="Ingresos por día"
-              subtitle={orders ? `${orders.ordersByDay.length} ${orders.ordersByDay.length === 1 ? "día" : "días"} con actividad` : undefined}
-              empty={orders !== null && orders.ordersByDay.length === 0}
+              title="Ingresos por bicicletas"
+              subtitle="No incluye envío"
+              empty={orders !== null && bikeRevenueSeries.every((point) => point.value === 0)}
             >
               {orders ? (
                 <OrdersByDayChart
-                  data={revenueSeries}
+                  data={bikeRevenueSeries}
                   range={orders.range}
                   formatValue={formatCurrencyCents}
                   formatAxisValue={formatCompactCurrencyCents}
-                  ariaLabel="Ingresos por día"
-                  tooltipDetail={(_, index) => {
-                    const day = orders.ordersByDay[index];
-                    if (!day) return undefined;
-                    return `${day.count} ${day.count === 1 ? "orden" : "órdenes"}`;
-                  }}
+                  ariaLabel="Ingresos por bicicletas, por día"
+                  axisStep={REVENUE_AXIS_STEP_CENTS}
                 />
               ) : null}
             </ChartCard>
-            <RecentOrdersList />
+            <ChartCard
+              title="Ingresos por accesorios"
+              subtitle="No incluye envío"
+              empty={orders !== null && accessoryRevenueSeries.every((point) => point.value === 0)}
+            >
+              {orders ? (
+                <OrdersByDayChart
+                  data={accessoryRevenueSeries}
+                  range={orders.range}
+                  formatValue={formatCurrencyCents}
+                  formatAxisValue={formatCompactCurrencyCents}
+                  ariaLabel="Ingresos por accesorios, por día"
+                  axisStep={ACCESSORY_REVENUE_AXIS_STEP_CENTS}
+                />
+              ) : null}
+            </ChartCard>
           </div>
 
-          <ChartCard title="Modelos más vendidos" empty={topModels !== null && topModels.length === 0}>
-            {topModels ? (
-              <RankedBarChart items={topModels.map((model) => ({ label: model.name, count: model.count }))} />
-            ) : null}
-          </ChartCard>
+          <div className="grid grid-cols-1 gap-md xl:grid-cols-2">
+            <RecentOrdersList />
+            <ChartCard title="Modelos más vendidos" empty={topModels !== null && topModels.length === 0}>
+              {topModels ? <RankedBarChart items={topModelItems} /> : null}
+            </ChartCard>
+          </div>
         </>
       )}
     </div>

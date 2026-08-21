@@ -31,7 +31,15 @@ export interface StatCardProps {
   active?: boolean;
   /** A `DeltaIndicator` (or equivalent) — the reference number that makes `value` mean something. Renders below `value`, above `hint`. */
   delta?: ReactNode;
-  /** A `Sparkline` (or equivalent) trend line. Renders last, right-aligned against `label`/`value`'s column. */
+  /**
+   * A `Sparkline` (or equivalent) trend line. Renders last, in its own
+   * full-width row below `label`/`value`/`delta`/`hint` — not beside them.
+   * At `xl:grid-cols-4` a card's content box is ~222px; `value` alone (e.g.
+   * `"$872,000.00"` at `text-h2`) already spends most of that, so a
+   * sparkline with min/max/period context (needed after the 2026-08 fix —
+   * see `Sparkline.tsx`) has nowhere to sit beside it without wrapping or
+   * truncating the very context it exists to add.
+   */
   spark?: ReactNode;
 }
 
@@ -58,19 +66,17 @@ const CARD_SHELL = "flex flex-col gap-sm rounded-card border border-borde bg-sur
  */
 export function StatCard({ label, value, hint, tone = "neutral", onClick, active = false, delta, spark }: StatCardProps) {
   const content = (
-    <div className="flex items-start justify-between gap-md">
-      <div className="flex min-w-0 flex-col gap-sm">
-        <span className="flex items-center gap-xs font-ui text-eyebrow text-grafito uppercase">
-          {tone !== "neutral" ? (
-            <Circle weight="fill" size={8} aria-hidden="true" className={cn("shrink-0", TONE_DOT_CLASSES[tone])} />
-          ) : null}
-          {label}
-        </span>
-        <span className="font-display text-h2 text-negro">{value}</span>
-        {delta}
-        {hint ? <span className={cn("font-body text-caption", TONE_HINT_CLASSES[tone])}>{hint}</span> : null}
-      </div>
-      {spark ? <div className="shrink-0 pt-xs">{spark}</div> : null}
+    <div className="flex flex-col gap-sm">
+      <span className="flex items-center gap-xs font-ui text-eyebrow text-grafito uppercase">
+        {tone !== "neutral" ? (
+          <Circle weight="fill" size={8} aria-hidden="true" className={cn("shrink-0", TONE_DOT_CLASSES[tone])} />
+        ) : null}
+        {label}
+      </span>
+      <span className="font-display text-h2 text-negro">{value}</span>
+      {delta}
+      {hint ? <span className={cn("font-body text-caption", TONE_HINT_CLASSES[tone])}>{hint}</span> : null}
+      {spark ? <div className="pt-xs">{spark}</div> : null}
     </div>
   );
 

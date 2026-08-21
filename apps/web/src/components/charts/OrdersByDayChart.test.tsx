@@ -30,8 +30,8 @@ describe("OrdersByDayChart", () => {
     const x2 = Number(second!.getAttribute("x"));
     // Both bars land in roughly the first 1/15th of the plot (1 day out of 30),
     // nowhere near the chart's right edge.
-    expect(x1).toBeLessThan(120);
-    expect(x2).toBeLessThan(150);
+    expect(x1).toBeLessThan(90);
+    expect(x2).toBeLessThan(110);
   });
 
   it("leaves a wide empty stretch when active days cluster at the end of a sparse window", () => {
@@ -47,9 +47,9 @@ describe("OrdersByDayChart", () => {
     const [only] = bars(container);
     const x = Number(only!.getAttribute("x"));
     // The single active day is the window's last day — its bar sits near the
-    // right edge of the ~730px plot area (800 viewBox minus padding), not at
+    // right edge of the ~480px plot area (560 viewBox minus padding), not at
     // the left edge an index-based layout would have placed it at.
-    expect(x).toBeGreaterThan(600);
+    expect(x).toBeGreaterThan(450);
   });
 
   it("highlights only the highest-value bar with the accent color and a value label", () => {
@@ -94,5 +94,28 @@ describe("OrdersByDayChart", () => {
     );
 
     expect(container.querySelector("title")?.textContent).toBe("18 ago: $100 · 3 órdenes");
+  });
+
+  // Regression: with a fixed `axisStep`, the gridline count used to be
+  // `maxValue / axisStep + 1` with no ceiling — a series that outgrows its
+  // step (e.g. accessory revenue crossing what used to be bike-scale
+  // territory) drew one `<g>` gridline group per step, unbounded. Capped at
+  // `MAX_GRID_TICKS` (8) by widening the step to a whole multiple of
+  // `axisStep`, never by scaling to this render's own peak.
+  it("caps the number of gridlines instead of drawing one per axisStep no matter how far the data outgrows it", () => {
+    const { container } = render(
+      <OrdersByDayChart
+        // $2,000,000.00 at a $10.00 axisStep would be 200,001 gridlines
+        // with the old unbounded formula.
+        data={[{ date: "2026-08-18", value: 200_000_000 }]}
+        range={RANGE}
+        formatValue={(v) => `$${(v / 100).toLocaleString("es-MX")}`}
+        ariaLabel="Ingresos por día"
+        axisStep={1_000}
+      />,
+    );
+
+    const gridlines = container.querySelectorAll("svg > g > line");
+    expect(gridlines.length).toBeLessThanOrEqual(8);
   });
 });
