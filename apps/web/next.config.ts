@@ -22,11 +22,34 @@ function apiUrl(): string {
 }
 
 const nextConfig: NextConfig = {
+  // Same rationale as `app.disable("x-powered-by")` on the API side: no
+  // reason to tell the world which framework served the response.
+  poweredByHeader: false,
   async rewrites() {
     return [
       {
         source: "/api/v1/:path*",
         destination: `${apiUrl()}/api/v1/:path*`,
+      },
+    ];
+  },
+  // Baseline response headers for an internal admin panel. No `script-src`/
+  // `default-src` CSP here on purpose: this app has no `dangerouslySetInnerHTML`
+  // and no third-party scripts today, but a real script-src policy needs
+  // nonces threaded through middleware and verifying against Next's hydration
+  // inline scripts — a change that needs browser testing before it ships, not
+  // a drive-by header. `frame-ancestors 'none'` alone is safe: it only blocks
+  // this app from being framed, which nothing here relies on.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
       },
     ];
   },

@@ -339,16 +339,19 @@ export function JobsSection({ settings, onSaved }: SectionProps) {
   const [reaper, setReaper] = useState(String(settings.jobs.reservationReaperIntervalMs));
   const [authSweep, setAuthSweep] = useState(String(settings.jobs.orderAuthSweepIntervalMs));
   const [reconciliation, setReconciliation] = useState(String(settings.jobs.paymentReconciliationIntervalMs));
+  const [lowStockAlert, setLowStockAlert] = useState(String(settings.jobs.lowStockAlertIntervalMs));
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(): Promise<void> {
     const reservationReaperIntervalMs = parseInt(reaper);
     const orderAuthSweepIntervalMs = parseInt(authSweep);
     const paymentReconciliationIntervalMs = parseInt(reconciliation);
+    const lowStockAlertIntervalMs = parseInt(lowStockAlert);
     if (
       reservationReaperIntervalMs === null ||
       orderAuthSweepIntervalMs === null ||
-      paymentReconciliationIntervalMs === null
+      paymentReconciliationIntervalMs === null ||
+      lowStockAlertIntervalMs === null
     ) {
       toast({ variant: "error", title: "Revisa los campos", description: "Todos los valores deben ser enteros, en milisegundos." });
       return;
@@ -360,6 +363,7 @@ export function JobsSection({ settings, onSaved }: SectionProps) {
         reservationReaperIntervalMs,
         orderAuthSweepIntervalMs,
         paymentReconciliationIntervalMs,
+        lowStockAlertIntervalMs,
       });
       onSaved(updated);
       toast({ variant: "success", title: "Tareas programadas actualizado" });
@@ -396,6 +400,13 @@ export function JobsSection({ settings, onSaved }: SectionProps) {
         inputMode="numeric"
         value={reconciliation}
         onChange={(event) => setReconciliation(event.target.value)}
+        wrapperClassName="w-full sm:w-48"
+      />
+      <Input
+        label="Alerta de stock bajo (ms)"
+        inputMode="numeric"
+        value={lowStockAlert}
+        onChange={(event) => setLowStockAlert(event.target.value)}
         wrapperClassName="w-full sm:w-48"
       />
     </SettingsSectionCard>
