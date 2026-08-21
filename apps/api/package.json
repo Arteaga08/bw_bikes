@@ -12,6 +12,7 @@
     "test": "vitest run",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
     "seed:test-orders": "tsx src/scripts/seed-test-orders.ts",
+    "seed:batch-orders": "tsx src/scripts/seed-batch-orders.ts",
     "migrate:brands": "tsx src/scripts/migrate-brands.ts"
   },
   "dependencies": {
@@ -52,6 +53,6 @@
     "tsx": "^4.19.1",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.8.0",
-    "vitest": "^2.1.2"
+    "vitest": "^3.2.6"
   }
 }

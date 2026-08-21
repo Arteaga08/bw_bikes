@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # apps/api's suite runs against an in-memory MongoDB replica set
+      # (mongodb-memory-server) — no external DB or secrets needed. See
+      # apps/api/tests/setup.ts.
+      - name: Test
+        run: pnpm test
+
+      # Fails the build on newly introduced high/critical advisories without
+      # blocking on pre-existing low/moderate ones a dependency bump alone
+      # can't always clear immediately.
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high
