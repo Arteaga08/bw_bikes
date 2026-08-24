@@ -10,11 +10,19 @@ afterEach(() => {
 });
 
 // jsdom doesn't implement `matchMedia` — `useMediaQuery` (Sidebar's `inert`
-// scoping) needs it present even though no test asserts on a real
-// breakpoint change; without this stub the hook throws on mount.
+// scoping, `DataTable`'s desktop/mobile layout choice) needs it present even
+// though most tests don't assert on a real breakpoint change; without this
+// stub the hook throws on mount.
+//
+// Defaults to `matches: true` (desktop) — jsdom's own default viewport is
+// desktop-sized, and every table-driven admin view's test was written
+// against the desktop table layout (querying rows, row actions, etc. by
+// role), not the `md:hidden` mobile card list. A test that specifically
+// exercises the mobile layout (e.g. `DataTable.test.tsx`) overrides this
+// locally rather than flipping the shared default under everyone else.
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = (query: string) => ({
-    matches: false,
+    matches: true,
     media: query,
     onchange: null,
     addListener: () => {},

@@ -74,12 +74,14 @@ async function list(query: Record<string, unknown>, options: { publicOnly: boole
     filter["label"] = { $regex: escapeRegex(search), $options: "i" };
   }
 
+  // `.lean()`: callers only ever map these through `toPublicBadge`/
+  // `toAdminBadge`, both plain-field readers with no document methods.
   const [documents, total] = await Promise.all([
-    Badge.find(filter).sort(sort).skip(skip).limit(limit).exec(),
+    Badge.find(filter).sort(sort).skip(skip).limit(limit).lean().exec(),
     Badge.countDocuments(filter).exec(),
   ]);
 
-  return { documents, meta: buildMeta(total, page, limit) };
+  return { documents: documents as unknown as IBadge[], meta: buildMeta(total, page, limit) };
 }
 
 async function create(input: BadgeInput, actor: ActorContext): Promise<IBadge> {

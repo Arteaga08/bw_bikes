@@ -7,7 +7,7 @@ import Joi from "joi";
  * `parseStatsRange` (utils/stats-range.ts), same split of responsibility as
  * `list-query.validator.ts` / `parseListQuery`.
  */
-export const STATS_PRESETS = ["today", "7d", "30d", "90d", "custom"] as const;
+export const STATS_PRESETS = ["today", "7d", "30d", "90d", "365d", "custom"] as const;
 
 export const statsRangeQuerySchema = Joi.object({
   preset: Joi.string()

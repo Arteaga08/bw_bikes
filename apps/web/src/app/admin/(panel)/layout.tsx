@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { OperationalAlerts } from "@bw-bikes/shared";
 import type { ReactNode } from "react";
 import { Breadcrumbs } from "@/components/shell/Breadcrumbs";
 import { CommandPaletteWrapper } from "@/components/shell/CommandPaletteWrapper";
@@ -7,7 +8,9 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { SkipLink } from "@/components/shell/SkipLink";
 import { TopBar } from "@/components/shell/TopBar";
 import { ToastProvider } from "@/components/ui/Toast";
+import { unstable_rethrow } from "next/navigation";
 import { requireAdminSession } from "@/lib/auth/session";
+import { serverApiFetch } from "@/lib/api/server";
 
 // Never indexed — this is an internal operations panel, not public content
 // (DASHBOARD_GUIDELINES.md §1).
@@ -26,6 +29,26 @@ export const metadata: Metadata = {
 export default async function AdminPanelLayout({ children }: { children: ReactNode }) {
   const user = await requireAdminSession();
 
+  // Seeds `TopBar`'s notification bell so it renders with real counts on
+  // the very first paint of *every* route, not just after its own
+  // mount-time client fetch resolves. Best-effort: a failure here just
+  // falls back to `TopBar`'s own client-side fetch (its default behavior
+  // when `initialAlerts` is `null`) — a transient alerts-endpoint hiccup
+  // shouldn't take the whole panel down.
+  let initialAlerts: OperationalAlerts | null = null;
+  try {
+    const { data } = await serverApiFetch<{ alerts: OperationalAlerts }>("/admin/stats/alerts");
+    initialAlerts = data.alerts;
+  } catch (error) {
+    // `serverApiFetch` itself calls Next's `redirect()` on a 401 — that
+    // throws a framework control-flow error that must propagate, never be
+    // swallowed as "the fetch failed". `unstable_rethrow` re-throws exactly
+    // that class of error (redirect/notFound/...) and falls through to here
+    // only for a genuine failure, which is the one case `initialAlerts`
+    // should stay `null` for.
+    unstable_rethrow(error);
+  }
+
   return (
     <ToastProvider>
       <MobileNavProvider>
@@ -33,7 +56,7 @@ export default async function AdminPanelLayout({ children }: { children: ReactNo
         <div className="flex h-dvh overflow-hidden bg-base">
           <Sidebar user={user} />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <TopBar />
+            <TopBar user={user} initialAlerts={initialAlerts} />
             <Breadcrumbs />
             <main
               id="panel-content"

@@ -7,10 +7,10 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 const ORDERS_BY_DAY = [
-  { date: "2026-08-14", count: 1, revenueCents: 80_000_00 },
-  { date: "2026-08-15", count: 2, revenueCents: 150_000_00 },
-  { date: "2026-08-16", count: 0, revenueCents: 0 },
-  { date: "2026-08-17", count: 1, revenueCents: 270_000_00 },
+  { date: "2026-08-14", count: 1, revenueCents: 80_000_00, bikeRevenueCents: 80_000_00, accessoryRevenueCents: 0 },
+  { date: "2026-08-15", count: 2, revenueCents: 150_000_00, bikeRevenueCents: 120_000_00, accessoryRevenueCents: 30_000_00 },
+  { date: "2026-08-16", count: 0, revenueCents: 0, bikeRevenueCents: 0, accessoryRevenueCents: 0 },
+  { date: "2026-08-17", count: 1, revenueCents: 270_000_00, bikeRevenueCents: 270_000_00, accessoryRevenueCents: 0 },
 ];
 
 // `orderCount: 2` (not 4) deliberately doesn't produce the same +25% delta
@@ -61,7 +61,9 @@ function preferencesStatsBody() {
         range: { preset: "30d", from: "2026-07-18", to: "2026-08-17" },
         mostViewedModels: [],
         mostViewedSizes: [],
-        mostSoldModels: [{ itemType: "bike", itemId: "1", name: "Tarmac SL7", brand: "Specialized", count: 8 }],
+        mostSoldModels: [
+          { itemType: "bike", itemId: "1", name: "Tarmac SL7", brand: "Specialized", count: 8, revenueCents: 3_500_000_00 },
+        ],
         mostSoldSizes: [],
       },
     },
@@ -134,12 +136,16 @@ describe("HomeStats", () => {
     expect(screen.getAllByText("Sin base de comparación").length).toBeGreaterThan(0);
   });
 
-  it("titles the time-series chart Ingresos por día, not Órdenes por día", async () => {
+  it("splits the time-series chart into bicicletas and accesorios, not a single combined chart", async () => {
     stubFetch();
     render(<HomeStats />);
 
-    expect(await screen.findByText("Ingresos por día")).toBeInTheDocument();
-    expect(screen.queryByText("Órdenes por día")).not.toBeInTheDocument();
+    expect(await screen.findByText("Ingresos por bicicletas")).toBeInTheDocument();
+    expect(screen.getByText("Ingresos por accesorios")).toBeInTheDocument();
+    expect(screen.queryByText("Ingresos por día")).not.toBeInTheDocument();
+    // Both charts disclose that shipping isn't attributed to either one —
+    // the two never sum back to the "Ingresos" KPI above.
+    expect(screen.getAllByText("No incluye envío")).toHaveLength(2);
   });
 
   it("renders the ranked-models chart card once preferences load", async () => {

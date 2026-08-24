@@ -3,7 +3,7 @@
 import type { AdminOrder, OrderActivityEntry, OrderPriority, OrderStatus, ShippingAddress } from "@bw-bikes/shared";
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, DataTableSkeleton, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -69,6 +69,11 @@ interface RejectDialogState {
 
 function apiErrorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
+}
+
+/** Module-level so its identity never changes — an inline `(order) => order.id` would defeat `DataTable`'s memoization on every render. */
+function getOrderRowKey(order: AdminOrder): string {
+  return order.id;
 }
 
 export interface OrdersViewProps {
@@ -190,33 +195,44 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
    * into an empty list: it's supplementary context, not worth blocking or
    * closing an otherwise-loaded detail over.
    */
-  async function loadDetail(id: string): Promise<void> {
-    setDetailLoading(true);
-    try {
-      const order = await getAdminOrder(id);
-      setDetailOrder(order);
-    } catch (error) {
-      toast({ variant: "error", title: "No se pudo cargar la orden", description: apiErrorMessage(error, "Intenta de nuevo.") });
-      setDetailOrderId(null);
+  const loadDetail = useCallback(
+    async (id: string): Promise<void> => {
+      setDetailLoading(true);
+      try {
+        const order = await getAdminOrder(id);
+        setDetailOrder(order);
+      } catch (error) {
+        toast({ variant: "error", title: "No se pudo cargar la orden", description: apiErrorMessage(error, "Intenta de nuevo.") });
+        setDetailOrderId(null);
+        setDetailLoading(false);
+        return;
+      }
       setDetailLoading(false);
-      return;
-    }
-    setDetailLoading(false);
 
-    try {
-      setDetailActivity(await getOrderActivity(id));
-    } catch {
+      try {
+        setDetailActivity(await getOrderActivity(id));
+      } catch {
+        setDetailActivity([]);
+      }
+    },
+    [toast],
+  );
+
+  // Stable across re-renders that don't touch `everOpenedDetail`/`loadDetail`
+  // — this closure ends up inside `actionsColumn`/`mobileRow`, so keeping its
+  // identity stable is what lets those stay stable too, which is what lets
+  // `DataTable` (now `React.memo`-wrapped) skip re-rendering every row on a
+  // re-render this table's own content doesn't depend on.
+  const openDetail = useCallback(
+    (id: string): void => {
+      if (!everOpenedDetail) setEverOpenedDetail(true);
+      setDetailOrderId(id);
+      setDetailOrder(null);
       setDetailActivity([]);
-    }
-  }
-
-  function openDetail(id: string): void {
-    if (!everOpenedDetail) setEverOpenedDetail(true);
-    setDetailOrderId(id);
-    setDetailOrder(null);
-    setDetailActivity([]);
-    void loadDetail(id);
-  }
+      void loadDetail(id);
+    },
+    [everOpenedDetail, loadDetail],
+  );
 
   function closeDetail(): void {
     setDetailOrderId(null);
@@ -369,89 +385,110 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
     }
   }
 
-  function toggleSelected(id: string): void {
+  // Functional updater, so this never needs `selectedIds` itself as a
+  // dependency — stable for the component's whole lifetime.
+  const toggleSelected = useCallback((id: string): void => {
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }
+  }, []);
 
   const isQueue = tab === "queue";
 
   // The queue folds `AuthorizationCountdown` into the folio cell (the clock
   // the operator is actually working against); "Todas" spans every status,
   // most of which have nothing to count down, so it drops the clock.
-  function orderCell(order: AdminOrder): ReactNode {
-    return (
+  //
+  // Everything from here down (`orderCell` through `mobileRow`) is memoized
+  // — this is the table whose columns/row renderer used to be rebuilt from
+  // scratch, with brand-new closures, on *every* render of a component that
+  // holds 20+ pieces of state. Most of that state (detail-panel loading,
+  // bulk-submit spinners, ...) has nothing to do with what a row renders;
+  // memoizing the pieces that feed `DataTable` (now `React.memo`-wrapped) is
+  // what lets an unrelated state change skip re-rendering every row instead
+  // of recomputing and re-diffing all of them.
+  const orderCell = useCallback(
+    (order: AdminOrder): ReactNode => (
       <OrderNumberCell
         order={order}
         showCountdown={isQueue}
         alertHours={orderAuthAlertHours}
         cancelHours={orderAuthCancelHours}
       />
-    );
-  }
-
-  const actionsColumn: DataTableColumn<AdminOrder> = {
-    key: "actions",
-    header: "Acciones",
-    kind: "actions",
-    className: "w-px whitespace-nowrap",
-    render: (order) => (
-      <OrderRowActions
-        showSupplierActions={isQueue}
-        busy={confirmDialogOrder?.id === order.id || rejectDialogOrder?.id === order.id}
-        onConfirm={() => setConfirmDialogOrder({ id: order.id, orderNumber: order.orderNumber, totalCents: order.totals.totalCents })}
-        onReject={() => setRejectDialogOrder({ id: order.id, orderNumber: order.orderNumber })}
-        onViewDetail={() => openDetail(order.id)}
-      />
     ),
-  };
+    [isQueue, orderAuthAlertHours, orderAuthCancelHours],
+  );
+
+  const actionsColumn: DataTableColumn<AdminOrder> = useMemo(
+    () => ({
+      key: "actions",
+      header: "Acciones",
+      kind: "actions",
+      className: "w-px whitespace-nowrap",
+      render: (order) => (
+        <OrderRowActions
+          showSupplierActions={isQueue}
+          busy={confirmDialogOrder?.id === order.id || rejectDialogOrder?.id === order.id}
+          onConfirm={() => setConfirmDialogOrder({ id: order.id, orderNumber: order.orderNumber, totalCents: order.totals.totalCents })}
+          onReject={() => setRejectDialogOrder({ id: order.id, orderNumber: order.orderNumber })}
+          onViewDetail={() => openDetail(order.id)}
+        />
+      ),
+    }),
+    [isQueue, confirmDialogOrder, rejectDialogOrder, openDetail],
+  );
 
   // Two genuinely different column sets, not one set with a conditional
   // column: the queue is five fields an operator triages at a glance;
   // "Todas" is the operational record (payment folded under status, items
   // folded into the folio, tracking, total) the reference's 10-column table
   // was reaching for, now at nine.
-  const queueColumns: DataTableColumn<AdminOrder>[] = [
-    { key: "order", header: "Orden", kind: "text", render: orderCell },
-    { key: "date", header: "Fecha", kind: "text", render: (order) => <OrderDateCell iso={order.createdAt} /> },
-    { key: "customer", header: "Cliente", kind: "text", render: (order) => <OrderCustomerCell order={order} /> },
-    { key: "priority", header: "Prioridad", kind: "status", render: (order) => <OrderPriorityBadge priority={order.priority} /> },
-    { key: "total", header: "Total", kind: "number", render: (order) => <OrderTotalsCell order={order} /> },
-    actionsColumn,
-  ];
+  const queueColumns: DataTableColumn<AdminOrder>[] = useMemo(
+    () => [
+      { key: "order", header: "Orden", kind: "text", render: orderCell },
+      { key: "date", header: "Fecha", kind: "text", render: (order) => <OrderDateCell iso={order.createdAt} /> },
+      { key: "customer", header: "Cliente", kind: "text", render: (order) => <OrderCustomerCell order={order} /> },
+      { key: "priority", header: "Prioridad", kind: "status", render: (order) => <OrderPriorityBadge priority={order.priority} /> },
+      { key: "total", header: "Total", kind: "number", render: (order) => <OrderTotalsCell order={order} /> },
+      actionsColumn,
+    ],
+    [orderCell, actionsColumn],
+  );
 
-  const allColumns: DataTableColumn<AdminOrder>[] = [
-    {
-      key: "select",
-      header: <span className="sr-only">Seleccionar</span>,
-      className: "w-px",
-      render: (order) => (
-        <input
-          type="checkbox"
-          checked={selectedIds.has(order.id)}
-          onChange={() => toggleSelected(order.id)}
-          aria-label={`Seleccionar ${order.orderNumber}`}
-        />
-      ),
-    },
-    { key: "order", header: "Orden", kind: "text", render: orderCell },
-    { key: "date", header: "Fecha", kind: "text", render: (order) => <OrderDateCell iso={order.createdAt} /> },
-    { key: "customer", header: "Cliente", kind: "text", render: (order) => <OrderCustomerCell order={order} /> },
-    { key: "priority", header: "Prioridad", kind: "status", render: (order) => <OrderPriorityBadge priority={order.priority} /> },
-    { key: "tracking", header: "Guía", kind: "text", render: (order) => <OrderTrackingCell order={order} /> },
-    { key: "state", header: "Estatus", kind: "status", render: (order) => <OrderStateCell order={order} /> },
-    { key: "total", header: "Total", kind: "number", render: (order) => <OrderTotalsCell order={order} /> },
-    actionsColumn,
-  ];
+  const allColumns: DataTableColumn<AdminOrder>[] = useMemo(
+    () => [
+      {
+        key: "select",
+        header: <span className="sr-only">Seleccionar</span>,
+        className: "w-px",
+        render: (order) => (
+          <input
+            type="checkbox"
+            checked={selectedIds.has(order.id)}
+            onChange={() => toggleSelected(order.id)}
+            aria-label={`Seleccionar ${order.orderNumber}`}
+          />
+        ),
+      },
+      { key: "order", header: "Orden", kind: "text", render: orderCell },
+      { key: "date", header: "Fecha", kind: "text", render: (order) => <OrderDateCell iso={order.createdAt} /> },
+      { key: "customer", header: "Cliente", kind: "text", render: (order) => <OrderCustomerCell order={order} /> },
+      { key: "priority", header: "Prioridad", kind: "status", render: (order) => <OrderPriorityBadge priority={order.priority} /> },
+      { key: "tracking", header: "Guía", kind: "text", render: (order) => <OrderTrackingCell order={order} /> },
+      { key: "state", header: "Estatus", kind: "status", render: (order) => <OrderStateCell order={order} /> },
+      { key: "total", header: "Total", kind: "number", render: (order) => <OrderTotalsCell order={order} /> },
+      actionsColumn,
+    ],
+    [selectedIds, toggleSelected, orderCell, actionsColumn],
+  );
 
   const columns = isQueue ? queueColumns : allColumns;
 
-  function mobileRow(order: AdminOrder): ReactNode {
-    return (
+  const mobileRow = useCallback(
+    (order: AdminOrder): ReactNode => (
       <button
         type="button"
         onClick={() => openDetail(order.id)}
@@ -468,8 +505,9 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
           <span className="font-ui text-ui text-negro">{formatCurrencyCents(order.totals.totalCents)}</span>
         </div>
       </button>
-    );
-  }
+    ),
+    [openDetail],
+  );
 
   return (
     <>
@@ -537,7 +575,7 @@ export function OrdersView({ orderAuthAlertHours, orderAuthCancelHours }: Orders
             <DataTable
               columns={columns}
               rows={orders}
-              getRowKey={(order) => order.id}
+              getRowKey={getOrderRowKey}
               mobileRow={mobileRow}
               minWidthClassName={isQueue ? "min-w-[46rem]" : "min-w-[64rem]"}
             />

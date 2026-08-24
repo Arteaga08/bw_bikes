@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { MAX_PAGE } from "../utils/list-query.js";
 import { objectId, priceCents } from "./common.validator.js";
 
 /**
@@ -12,9 +13,10 @@ import { objectId, priceCents } from "./common.validator.js";
 
 /** Exported so every list endpoint — catalog or not — spreads the same four params. */
 export const pagination = {
-  page: Joi.number().integer().min(1).optional().messages({
+  page: Joi.number().integer().min(1).max(MAX_PAGE).optional().messages({
     "number.base": 'El parámetro "page" debe ser un número.',
     "number.min": 'El parámetro "page" debe ser mayor a cero.',
+    "number.max": `El parámetro "page" no puede exceder ${MAX_PAGE}.`,
   }),
   limit: Joi.number().integer().min(1).optional().messages({
     "number.base": 'El parámetro "limit" debe ser un número.',

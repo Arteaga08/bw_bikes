@@ -1,20 +1,11 @@
 import type { OperationalAlerts } from "@bw-bikes/shared";
-import type { Icon } from "@phosphor-icons/react";
-import { ArrowRight, CheckCircle, Handshake, Package, ReceiptX, Timer, Truck } from "@phosphor-icons/react/ssr";
+import { ArrowRight, CheckCircle } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
+import { type AlertDescriptor, buildAlertDescriptors } from "@/lib/alerts/alert-descriptors";
 import { cn } from "@/lib/cn";
 
 export interface OperationsStripProps {
   alerts: OperationalAlerts;
-}
-
-interface AlertDescriptor {
-  key: string;
-  icon: Icon;
-  label: string;
-  count: number;
-  href: string;
-  tone: "advertencia" | "error";
 }
 
 const ROW_TONE_CLASSES: Record<AlertDescriptor["tone"], string> = {
@@ -36,59 +27,15 @@ const FEATURED_TONE_CLASSES: Record<AlertDescriptor["tone"], string> = {
  * single unwindowed `/admin/stats/alerts` fetch in `page.tsx`; this
  * component only orders and renders it.
  *
- * Ordered by operational urgency, most costly first: an authorization about
- * to lapse loses a captured payment outright; a stockout blocks every sale
- * of that SKU; a stale unpaid order and a stuck supplier confirmation are
- * both recoverable without money moving; a pending application is the least
- * time-sensitive of the five. Rows at zero are dropped rather than shown
- * dimmed — a zero here isn't a lesser version of the same fact, it's the
- * absence of one.
+ * Ordering and classification (icon/label/href/tone per alert) live in
+ * `buildAlertDescriptors` (`@/lib/alerts/alert-descriptors`), shared with the
+ * TopBar's `NotificationsPopover` so the two never disagree about what a
+ * count means or what color it gets. Rows at zero are dropped rather than
+ * shown dimmed — a zero here isn't a lesser version of the same fact, it's
+ * the absence of one.
  */
 export function OperationsStrip({ alerts }: OperationsStripProps) {
-  const descriptors: AlertDescriptor[] = [
-    {
-      key: "expiringAuthorizations",
-      icon: Timer,
-      label: "Autorizaciones por vencer",
-      count: alerts.expiringAuthorizations,
-      href: "/admin/ordenes",
-      tone: "error",
-    },
-    {
-      key: "outOfStockSkus",
-      icon: Package,
-      label: "Stock agotado",
-      count: alerts.outOfStockSkus,
-      href: "/admin/inventario",
-      tone: "error",
-    },
-    {
-      key: "staleUnpaidOrders",
-      icon: ReceiptX,
-      label: "Pagos sin conciliar",
-      count: alerts.staleUnpaidOrders,
-      href: "/admin/ordenes",
-      tone: "advertencia",
-    },
-    {
-      key: "awaitingSupplierConfirmation",
-      icon: Truck,
-      label: "Pedidos entrantes",
-      count: alerts.awaitingSupplierConfirmation,
-      href: "/admin/ordenes",
-      tone: "advertencia",
-    },
-    {
-      key: "pendingApplications",
-      icon: Handshake,
-      label: "Solicitudes pendientes",
-      count: alerts.pendingApplications,
-      href: "/admin/solicitudes",
-      tone: "advertencia",
-    },
-  ];
-
-  const active = descriptors.filter((descriptor) => descriptor.count > 0);
+  const active = buildAlertDescriptors(alerts).filter((descriptor) => descriptor.count > 0);
 
   if (active.length === 0) {
     return (
@@ -98,7 +45,7 @@ export function OperationsStrip({ alerts }: OperationsStripProps) {
           <span className="font-ui text-ui">Sin pendientes operativos</span>
         </div>
         <p className="font-body text-caption text-grafito">
-          Pedidos entrantes, stock, autorizaciones, pagos y solicitudes: todo al día.
+          Ventas, pedidos entrantes, stock, autorizaciones, pagos y solicitudes: todo al día.
         </p>
       </div>
     );

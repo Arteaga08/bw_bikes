@@ -67,12 +67,14 @@ async function list(query: Record<string, unknown>, options: { publicOnly: boole
     filter["title"] = { $regex: escapeRegex(search), $options: "i" };
   }
 
+  // `.lean()`: callers only ever map these through their plain-field DTO
+  // functions — no document methods needed downstream.
   const [documents, total] = await Promise.all([
-    SpecTemplate.find(filter).sort(sort).skip(skip).limit(limit).exec(),
+    SpecTemplate.find(filter).sort(sort).skip(skip).limit(limit).lean().exec(),
     SpecTemplate.countDocuments(filter).exec(),
   ]);
 
-  return { documents, meta: buildMeta(total, page, limit) };
+  return { documents: documents as unknown as ISpecTemplate[], meta: buildMeta(total, page, limit) };
 }
 
 async function create(input: SpecTemplateInput, actor: ActorContext): Promise<ISpecTemplate> {

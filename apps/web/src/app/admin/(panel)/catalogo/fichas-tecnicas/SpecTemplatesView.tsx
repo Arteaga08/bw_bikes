@@ -16,7 +16,6 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useToast } from "@/hooks/use-toast";
 import { adminSpecTemplatesApi, type AdminSpecTemplateListParams } from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
-import { cn } from "@/lib/cn";
 import { SpecTemplateFormModal } from "./SpecTemplateFormModal";
 
 const PAGE_SIZE = 20;
@@ -210,14 +209,10 @@ export function SpecTemplatesView() {
               getRowKey={(row) => row.id}
               mobileRow={(row) => (
                 <div className="flex items-center gap-sm px-md py-xs">
-                  <span
-                    className={cn("h-2 w-2 shrink-0 rounded-full", row.isActive ? "bg-dorado" : "bg-borde")}
-                    aria-hidden="true"
-                  />
                   <span className="min-w-0 truncate font-ui text-ui text-negro">{row.title}</span>
-                  <span className="ml-auto shrink-0 font-body text-caption text-grafito">
+                  <Badge variant={row.isActive ? "accent" : "neutral"} className="ml-auto shrink-0">
                     {row.isActive ? "Activa" : "Inactiva"}
-                  </span>
+                  </Badge>
                   <div className="flex shrink-0 items-center gap-xs">
                     <Button
                       variant="bare"

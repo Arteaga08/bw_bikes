@@ -1,19 +1,29 @@
 "use client";
 
 import type { AdminCategory } from "@bw-bikes/shared";
+import { PencilSimple, Trash } from "@phosphor-icons/react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataTable, TableRowActions, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Menu } from "@/components/ui/Menu";
 import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/cn";
 import { adminAccessoryCategoriesApi, adminBikeCategoriesApi, type CategoryTreeNode } from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
-import { CategoryFormModal } from "./CategoryFormModal";
+
+// Code-split: only ever mounted once `formDialog` is set (the admin opened
+// "Agregar"/"Editar"), so nothing changes at *runtime* — this only keeps the
+// 230-line form + its image-upload machinery out of the initial bundle for
+// a screen that spends most of its time just showing the tree.
+const CategoryFormModal = dynamic(() => import("./CategoryFormModal").then((mod) => mod.CategoryFormModal), {
+  ssr: false,
+});
 
 export type CategoriesKind = "bike" | "accessory";
 
@@ -178,7 +188,60 @@ export function CategoriesView({ kind, initialTree }: CategoriesViewProps) {
             description="Crea la primera categoría para empezar a organizar el catálogo."
           />
         ) : (
-          <DataTable columns={columns} rows={rows} getRowKey={(row) => row.category.id} minWidthClassName="min-w-[38rem]" />
+          <DataTable
+            columns={columns}
+            rows={rows}
+            getRowKey={(row) => row.category.id}
+            minWidthClassName="min-w-[38rem]"
+            mobileRow={({ category, depth, isRoot }) => (
+              <div className="flex items-center gap-sm px-md py-xs">
+                <div className={cn("flex min-w-0 flex-1 items-center gap-sm", depth === 1 && "border-l border-borde pl-md")}>
+                  {category.image ? (
+                    <Image
+                      src={category.image.url}
+                      alt={category.image.alt ?? ""}
+                      width={32}
+                      height={32}
+                      className="h-8 w-8 shrink-0 rounded-control object-cover"
+                    />
+                  ) : (
+                    <div className="h-8 w-8 shrink-0 rounded-control bg-inset" aria-hidden />
+                  )}
+                  <span className={cn("min-w-0 truncate text-negro", depth === 0 ? "font-ui text-ui" : "font-body text-body")}>
+                    {category.name}
+                  </span>
+                </div>
+                <Badge variant={category.isActive ? "accent" : "neutral"} className="ml-auto shrink-0">
+                  {category.isActive ? "Activa" : "Inactiva"}
+                </Badge>
+                <div className="flex shrink-0 items-center gap-xs">
+                  <Button variant="bare" size="icon" aria-label="Editar" onClick={() => setFormDialog({ mode: "edit", category })}>
+                    <PencilSimple size={16} aria-hidden="true" />
+                  </Button>
+                  <Button
+                    variant="bare"
+                    size="icon"
+                    tone="danger-strong"
+                    aria-label="Eliminar"
+                    onClick={() => setDeleteDialog({ id: category.id, name: category.name })}
+                  >
+                    <Trash size={16} aria-hidden="true" />
+                  </Button>
+                  {isRoot ? (
+                    <Menu
+                      ariaLabel="Más acciones"
+                      items={[
+                        {
+                          label: "Agregar subcategoría",
+                          onClick: () => setFormDialog({ mode: "create", defaultParent: category.id }),
+                        },
+                      ]}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            )}
+          />
         )}
       </div>
 

@@ -181,8 +181,10 @@ control (16px normal, 20px en `icon-lg`, 12px en `icon-sm`) — nunca se le pasa
   dorado, dorado sobre fondos oscuros o neutros.
 - Disabled: baja contraste, no cambia tamaño.
 - Loading: conserva el ancho original del botón (evita saltos de layout);
-  agrega un spinner de 10px a la izquierda del texto. Solo existe en `Button`,
-  no en `ButtonLink` — un enlace no tiene estado pendiente.
+  agrega un spinner de 10px centrado en la caja, sobre el texto (que queda
+  invisible pero sigue ocupando su espacio). Centrado en vez de anclado al
+  padding para que un botón estirado (`w-full`) no lo descuadre. Solo existe
+  en `Button`, no en `ButtonLink` — un enlace no tiene estado pendiente.
 - Success: ventana corta de confirmación (2 s) tras una acción que salió bien.
   Cambia la etiqueta por uno en pasado ("Agregado", "Guardado") con un check, y
   usa `estado-exito` sobre `estado-exito-soft` — no un verde nuevo. **Deshabilita
@@ -342,9 +344,15 @@ según la tabla — nunca 0, salvo checkout.
 chrome genérico — no como separador de secciones, divisor de tablas, ni
 decoración recurrente de UI funcional. Confirmado en sesión de
 `impeccable live` (2026-08-06): un separador de sección con el rinoceronte
-se sintió genérico y fuera de lugar en un panel operativo. Si el dashboard
-necesita un momento de marca, se reserva a un único lugar no-funcional (por
-ejemplo, la pantalla de login), nunca repetido como elemento de interfaz.
+se sintió genérico y fuera de lugar en un panel operativo.
+
+**Excepción, 2026-08-20:** el rinoceronte (`rhino-dorado.svg`, 20px) ahora
+también aparece junto a "Hola de nuevo" en el `TopBar` global
+(`apps/web/src/components/shell/TopBar.tsx`), decisión explícita de Manuel al
+rediseñar el header — chrome visible en cada vista del admin, así que deja de
+ser "un solo lugar no-funcional". Es la única segunda aparición permitida en
+el dashboard; sigue prohibido como separador de secciones, divisor de tablas
+o decoración recurrente en cualquier otro lugar de la UI funcional.
 
 ---
 

@@ -219,17 +219,15 @@ const SIZE_CLASSES: Record<ButtonSize, string> = {
   "icon-lg": "h-11 w-11 p-0",
 };
 
-// The `loading` spinner is positioned `left-lg`/`left-md` to match each
-// size's own horizontal padding, so it never sits closer to the edge than
-// the label it's replacing does. The icon sizes have no label to make room
-// for, so their spinner centers instead.
-const SPINNER_POSITION_CLASSES: Record<ButtonSize, string> = {
-  md: "left-lg",
-  sm: "left-md",
-  "icon-sm": "left-1/2 -translate-x-1/2",
-  icon: "left-1/2 -translate-x-1/2",
-  "icon-lg": "left-1/2 -translate-x-1/2",
-};
+// The `loading` spinner always centers in the button's own box, on both axes
+// — it used to anchor to each size's horizontal padding (`left-lg`/`left-md`)
+// so it would sit where the label's first character starts, but that only
+// matches the box's actual center when the box is sized to its content. A
+// caller that stretches the button past its content (`className="w-full"`,
+// e.g. LoginForm's submit buttons) still centers the invisible label via the
+// control's own `justify-center`, so a padding-anchored spinner drifted off
+// to the left of it. Centering unconditionally is correct at any width.
+const SPINNER_POSITION_CLASSES = "left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2";
 
 /**
  * The single class matrix behind every button-shaped control in the panel.
@@ -324,7 +322,7 @@ export function ButtonContent({ variant = "primary", size = "md", tone = "neutra
           aria-hidden="true"
           className={cn(
             "absolute inline-block h-[10px] w-[10px] animate-spin rounded-full border-2 border-current border-t-transparent",
-            variant === "text" ? "left-1" : SPINNER_POSITION_CLASSES[size],
+            variant === "text" ? "left-1 top-1/2 -translate-y-1/2" : SPINNER_POSITION_CLASSES,
           )}
         />
       ) : null}

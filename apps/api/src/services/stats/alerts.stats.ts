@@ -22,8 +22,9 @@ import { countOutOfStockSkus } from "./inventory.stats.js";
 export async function getOperationalAlerts(now: Date = new Date()): Promise<OperationalAlerts> {
   const { orders } = await settingsService.get();
 
-  const [awaitingSupplierConfirmation, expiringAuthorizations, staleUnpaidOrders, pendingApplications, outOfStockSkus] =
+  const [newOrders, awaitingSupplierConfirmation, expiringAuthorizations, staleUnpaidOrders, pendingApplications, outOfStockSkus] =
     await Promise.all([
+      Order.countDocuments({ status: "paid" }).exec(),
       Order.countDocuments({ status: "awaiting_supplier_confirmation" }).exec(),
       Order.countDocuments({
         status: { $in: ["authorized", "awaiting_supplier_confirmation"] },
@@ -38,5 +39,12 @@ export async function getOperationalAlerts(now: Date = new Date()): Promise<Oper
       countOutOfStockSkus(),
     ]);
 
-  return { awaitingSupplierConfirmation, expiringAuthorizations, staleUnpaidOrders, pendingApplications, outOfStockSkus };
+  return {
+    newOrders,
+    awaitingSupplierConfirmation,
+    expiringAuthorizations,
+    staleUnpaidOrders,
+    pendingApplications,
+    outOfStockSkus,
+  };
 }

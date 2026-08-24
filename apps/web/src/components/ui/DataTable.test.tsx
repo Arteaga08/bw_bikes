@@ -23,17 +23,57 @@ describe("DataTable", () => {
     expect(screen.getByText("Best Seller").closest("td")).toBeInTheDocument();
   });
 
-  it("renders both the mobile card list and the table when mobileRow is given, hiding the table below md", () => {
-    const { container } = render(
-      <DataTable columns={columns} rows={rows} getRowKey={(row) => row.id} mobileRow={(row) => <span>{row.label} card</span>} />,
-    );
+  /** `vitest.setup.ts`'s shared `matchMedia` stub defaults to desktop (`matches: true`) — override it locally to exercise the mobile layout. */
+  function mockMatches(matches: boolean): () => void {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+    return () => {
+      window.matchMedia = originalMatchMedia;
+    };
+  }
 
-    expect(screen.getByText("Best Seller card")).toBeInTheDocument();
-    expect(screen.getByText("Novedades card")).toBeInTheDocument();
+  // Below `md`, only the card list mounts — the table isn't in the DOM at
+  // all, not just hidden by CSS. That's the whole point of this change: a
+  // `mobileRow` table used to render both layouts and hide one with
+  // `md:hidden`, so every row (and every `column.render(row)` call) paid
+  // twice.
+  it("renders only the mobile card list when mobileRow is given and the viewport doesn't match md", () => {
+    const restore = mockMatches(false);
+    try {
+      const { container } = render(
+        <DataTable columns={columns} rows={rows} getRowKey={(row) => row.id} mobileRow={(row) => <span>{row.label} card</span>} />,
+      );
 
-    const table = container.querySelector("table");
-    expect(table).toBeInTheDocument();
-    expect(table?.parentElement).toHaveClass("hidden", "md:block");
+      expect(screen.getByText("Best Seller card")).toBeInTheDocument();
+      expect(screen.getByText("Novedades card")).toBeInTheDocument();
+      expect(container.querySelector("table")).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it("renders only the table when mobileRow is given and the viewport matches md", () => {
+    const restore = mockMatches(true);
+    try {
+      const { container } = render(
+        <DataTable columns={columns} rows={rows} getRowKey={(row) => row.id} mobileRow={(row) => <span>{row.label} card</span>} />,
+      );
+
+      expect(container.querySelector("table")).toBeInTheDocument();
+      expect(screen.getByText("Best Seller").closest("td")).toBeInTheDocument();
+      expect(screen.queryByText("Best Seller card")).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
   });
 });
 

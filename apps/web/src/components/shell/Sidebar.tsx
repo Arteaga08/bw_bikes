@@ -8,9 +8,8 @@ import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { apiFetch } from "@/lib/api/client";
+import { logout } from "@/lib/auth/logout";
 import { cn } from "@/lib/cn";
-import { LOGIN_PATH } from "@/lib/config";
 import { NAV_SECTIONS } from "@/lib/nav";
 import { useMobileNav } from "./MobileNavContext";
 
@@ -73,14 +72,6 @@ export function Sidebar({ user }: SidebarProps) {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open, closeNav]);
-
-  async function handleLogout(): Promise<void> {
-    try {
-      await apiFetch("/auth/logout", { method: "POST" });
-    } finally {
-      window.location.href = LOGIN_PATH;
-    }
-  }
 
   return (
     <>
@@ -151,7 +142,7 @@ export function Sidebar({ user }: SidebarProps) {
           <p className="font-ui text-caption text-blanco/40 uppercase">{user.role}</p>
           {/* `tone="inverse"` is the palette for controls on the `overlay`
               surface — what this used to spell out by hand. */}
-          <Button variant="text" tone="inverse" onClick={handleLogout} iconLeft={<SignOut />} className="mt-sm">
+          <Button variant="text" tone="inverse" onClick={logout} iconLeft={<SignOut />} className="mt-sm">
             Cerrar sesión
           </Button>
         </div>

@@ -17,6 +17,23 @@ describe("Button", () => {
     expect(button).toHaveClass("px-lg");
   });
 
+  it("centers the loading spinner in the button box regardless of width, so a stretched w-full submit isn't off-center", () => {
+    render(
+      <Button loading className="w-full">
+        Iniciar sesión
+      </Button>,
+    );
+    const button = screen.getByRole("button");
+    const spinner = button.querySelector("span[aria-hidden='true']");
+    expect(spinner).not.toBeNull();
+    expect(spinner).toHaveClass("left-1/2");
+    expect(spinner).toHaveClass("top-1/2");
+    expect(spinner).toHaveClass("-translate-x-1/2");
+    expect(spinner).toHaveClass("-translate-y-1/2");
+    // The old padding-anchored offset must be gone — that's what broke centering on w-full.
+    expect(spinner).not.toHaveClass("left-lg");
+  });
+
   it("disabled state never changes the control's size (DESIGN_SYSTEM.md §4)", () => {
     render(<Button disabled>Guardar</Button>);
     const button = screen.getByRole("button");

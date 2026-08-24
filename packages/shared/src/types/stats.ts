@@ -11,7 +11,7 @@ import type { OrderStatus } from "./order.js";
  * `custom` is only reachable by supplying both `from` and `to` explicitly;
  * every other preset is computed server-side from `now`.
  */
-export type StatsPreset = "today" | "7d" | "30d" | "90d" | "custom";
+export type StatsPreset = "today" | "7d" | "30d" | "90d" | "365d" | "custom";
 
 export interface StatsRange {
   preset: StatsPreset;
@@ -21,12 +21,24 @@ export interface StatsRange {
   to: string;
 }
 
-/** One day of the window's time series. `date` is `YYYY-MM-DD` in store time, not UTC. */
+/**
+ * One day of the window's time series. `date` is `YYYY-MM-DD` in store time,
+ * not UTC. Every day in `[range.from, range.to)` gets an entry, zero-filled —
+ * there is no gap between points a chart has to explain.
+ */
 export interface OrdersDailyPoint {
   date: string;
   count: number;
   /** Same revenue rule as `OrdersStats.revenueCents`, restricted to this day. */
   revenueCents: number;
+  /**
+   * `revenueCents` split by `lines[].itemType`. These two never sum back to
+   * `revenueCents` exactly — shipping belongs to the order, not to a product
+   * line, so it's excluded from both. A chart showing bikes + accessories
+   * must say so, not imply it equals the order-level total.
+   */
+  bikeRevenueCents: number;
+  accessoryRevenueCents: number;
 }
 
 /**
@@ -84,6 +96,17 @@ export interface PreferenceProductRanking {
   name: string;
   brand: string;
   count: number;
+  /**
+   * Sum of `lines[].lineTotalCents` for this model, restricted to
+   * `REVENUE_STATUSES` (excludes `refunded`) — kept consistent with
+   * `OrdersStats.revenueCents`'s own rule even though `mostSoldModels`
+   * itself is scoped by the broader `SOLD_STATUSES` (`count` still reflects
+   * a refunded sale as a popularity signal; `revenueCents` does not).
+   *
+   * Only present on `mostSoldModels` — a "most viewed" ranking has no money
+   * attached, so `mostViewedModels` never sets this.
+   */
+  revenueCents?: number;
 }
 
 export interface PreferenceSizeRanking {
@@ -112,6 +135,8 @@ export interface PreferencesStats {
  * dashboard to "last 7 days". See `stats/alerts.stats.ts`.
  */
 export interface OperationalAlerts {
+  /** Orders already paid that the admin hasn't moved to `processing` yet. */
+  newOrders: number;
   /** Orders currently sitting in the supplier-confirmation queue. */
   awaitingSupplierConfirmation: number;
   /** Orders whose authorization is close enough to trip the admin-alert threshold. */

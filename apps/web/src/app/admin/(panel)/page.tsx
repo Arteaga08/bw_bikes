@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { serverApiFetch } from "@/lib/api/server";
 import { HomeStats } from "./HomeStats";
 import { OperationsStrip } from "./OperationsStrip";
+import { QuickLinks } from "./QuickLinks";
 
 /**
  * Inicio is the accionable half of the two Inicio/Analítica screens: alerts
@@ -19,6 +20,7 @@ export default async function AdminHomePage() {
     <>
       <PageHeader title="Inicio" subtitle="Qué necesita tu atención hoy, y cómo va el negocio." />
       <div className="flex flex-col gap-lg p-md sm:p-lg">
+        <QuickLinks alerts={alerts} />
         <OperationsStrip alerts={alerts} />
         <HomeStats />
       </div>

@@ -196,10 +196,14 @@ async function loadCatalogLookup(items: IInventoryItem[]): Promise<Map<string, C
     const ids = idsByType[itemType];
     if (ids.length === 0) continue;
 
+    // `.lean()`: only plain fields are read below (`doc.brand` is cast
+    // directly, never checked via `.populated()`), so lean + populate is
+    // safe here — populate still resolves normally on a lean query.
     const docs = await CATALOG_LOOKUP_MODELS[itemType]
       .find({ _id: { $in: ids } })
       .select("name brand gallery variants")
       .populate("brand", "name")
+      .lean()
       .exec();
 
     for (const doc of docs) {
@@ -761,8 +765,13 @@ async function listItems(query: Record<string, unknown>): Promise<ListInventoryI
       InventoryItem.countDocuments(filter).exec(),
     ]);
   } else {
+    // `.lean()`: `toAdminInventoryItem` only reads plain fields — no
+    // document methods needed downstream, same as the aggregate branch
+    // above, which already returns plain objects by construction.
     [documents, total] = await Promise.all([
-      InventoryItem.find(filter).sort(sort).skip(skip).limit(limit).exec(),
+      InventoryItem.find(filter).sort(sort).skip(skip).limit(limit).lean().exec() as unknown as Promise<
+        IInventoryItem[]
+      >,
       InventoryItem.countDocuments(filter).exec(),
     ]);
   }
@@ -819,11 +828,19 @@ async function getSummaryTotals(defaultThreshold: number): Promise<InventorySumm
 /**
  * Category rollups for the inventory panel's band headers (M11) — total
  * SKUs, out-of-stock and low-stock counts per root category, without
- * fetching every row just to paint a summary. One pair of queries per root
- * (its product ids, then an aggregate over their inventory rows) rather than
- * a single cross-collection pipeline — the category count this milestone
- * targets (~5 roots) doesn't justify the complexity of a `$facet`/
- * `$unionWith` across two catalogs.
+ * fetching every row just to paint a summary.
+ *
+ * Batched per catalog (bike/accessory) into 4 queries total regardless of
+ * root count — roots, their children, the products under any of them, and
+ * one aggregate over every matching inventory row — instead of the
+ * original "2 + 3 × roots" shape, which fired 3 sequential queries *per
+ * root* (~5 roots meant ~17 round trips, one after another). The
+ * aggregate can't `$group` by root directly (an `InventoryItem` only knows
+ * its `itemId`, not which category that product sits under), so it comes
+ * back per-item flagged as out-of-stock/low-stock, and the tally by root
+ * happens in memory via the `itemId → root` map built from the batched
+ * category/product queries above — the same "join after the query, not
+ * per row" shape `loadCatalogLookup` already uses for the list endpoint.
  */
 async function buildSummaryGroups(defaultThreshold: number): Promise<InventorySummaryGroup[]> {
   const groups: InventorySummaryGroup[] = [];
@@ -831,56 +848,74 @@ async function buildSummaryGroups(defaultThreshold: number): Promise<InventorySu
   for (const itemType of ["bike", "accessory"] as const) {
     const CategoryModel = itemType === "bike" ? BikeCategory : AccessoryCategory;
 
-    const roots = await CategoryModel.find({ parent: null }).sort({ order: 1, name: 1 }).exec();
+    const roots = await CategoryModel.find({ parent: null }).sort({ order: 1, name: 1 }).lean().exec();
+    if (roots.length === 0) continue;
 
-    for (const root of roots) {
-      const children = await CategoryModel.find({ parent: root._id }).select("_id").exec();
-      const categoryIds = [root._id as Types.ObjectId, ...children.map((child) => child._id as Types.ObjectId)];
-      const products = await CATALOG_LOOKUP_MODELS[itemType]
-        .find({ category: { $in: categoryIds } })
-        .select("_id")
-        .exec();
-      const productIds = products.map((product) => product._id);
+    const rootIds = roots.map((root) => root._id as Types.ObjectId);
+    const children = await CategoryModel.find({ parent: { $in: rootIds } })
+      .select("_id parent")
+      .lean()
+      .exec();
 
-      if (productIds.length === 0) {
-        groups.push({
-          itemType,
-          categoryId: String(root._id),
-          categoryName: root.name,
-          totalSkus: 0,
-          outOfStockSkus: 0,
-          lowStockSkus: 0,
-        });
-        continue;
-      }
+    // Every category id (root or child) this catalog has, mapped back to
+    // the root it rolls up under — a root maps to itself.
+    const rootIdByCategoryId = new Map<string, string>();
+    for (const root of roots) rootIdByCategoryId.set(String(root._id), String(root._id));
+    for (const child of children) rootIdByCategoryId.set(String(child._id), String(child.parent));
 
-      const [row] = await InventoryItem.aggregate<{ total: number; outOfStock: number; lowStock: number }>([
-        { $match: { itemType, itemId: { $in: productIds } } },
+    const allCategoryIds = [...rootIdByCategoryId.keys()].map((id) => new Types.ObjectId(id));
+    const products = await CATALOG_LOOKUP_MODELS[itemType]
+      .find({ category: { $in: allCategoryIds } })
+      .select("_id category")
+      .lean()
+      .exec();
+
+    const rootIdByProductId = new Map<string, string>();
+    for (const product of products) {
+      const rootId = rootIdByCategoryId.get(String(product.category));
+      if (rootId) rootIdByProductId.set(String(product._id), rootId);
+    }
+
+    const totalsByRoot = new Map<string, { total: number; outOfStock: number; lowStock: number }>();
+    if (rootIdByProductId.size > 0) {
+      const rows = await InventoryItem.aggregate<{ itemId: Types.ObjectId; outOfStock: boolean; lowStock: boolean }>([
+        { $match: { itemType, itemId: { $in: [...rootIdByProductId.keys()].map((id) => new Types.ObjectId(id)) } } },
         {
-          $addFields: {
+          $project: {
+            itemId: 1,
             available: { $subtract: ["$onHand", "$reserved"] },
             threshold: { $ifNull: ["$lowStockThreshold", defaultThreshold] },
           },
         },
         {
-          $group: {
-            _id: null,
-            total: { $sum: 1 },
-            outOfStock: { $sum: { $cond: [{ $lte: ["$available", 0] }, 1, 0] } },
-            lowStock: {
-              $sum: { $cond: [{ $and: [{ $gt: ["$available", 0] }, { $lte: ["$available", "$threshold"] }] }, 1, 0] },
-            },
+          $project: {
+            itemId: 1,
+            outOfStock: { $lte: ["$available", 0] },
+            lowStock: { $and: [{ $gt: ["$available", 0] }, { $lte: ["$available", "$threshold"] }] },
           },
         },
       ]).exec();
 
+      for (const row of rows) {
+        const rootId = rootIdByProductId.get(String(row.itemId));
+        if (!rootId) continue;
+        const entry = totalsByRoot.get(rootId) ?? { total: 0, outOfStock: 0, lowStock: 0 };
+        entry.total += 1;
+        if (row.outOfStock) entry.outOfStock += 1;
+        if (row.lowStock) entry.lowStock += 1;
+        totalsByRoot.set(rootId, entry);
+      }
+    }
+
+    for (const root of roots) {
+      const totals = totalsByRoot.get(String(root._id));
       groups.push({
         itemType,
         categoryId: String(root._id),
         categoryName: root.name,
-        totalSkus: row?.total ?? 0,
-        outOfStockSkus: row?.outOfStock ?? 0,
-        lowStockSkus: row?.lowStock ?? 0,
+        totalSkus: totals?.total ?? 0,
+        outOfStockSkus: totals?.outOfStock ?? 0,
+        lowStockSkus: totals?.lowStock ?? 0,
       });
     }
   }
@@ -976,18 +1011,18 @@ async function seedInitialStock(
   variants: InitialStockVariant[],
   session: ClientSession | undefined,
 ): Promise<IInventoryItem[]> {
-  const created: IInventoryItem[] = [];
+  const rows = variants
+    .filter((variant) => variant.fulfillmentMode === "in_stock" && (variant.initialStock ?? 0) > 0)
+    .map((variant) => ({ itemType, itemId, sku: variant.sku, onHand: variant.initialStock ?? 0 }));
 
-  for (const variant of variants) {
-    if (variant.fulfillmentMode !== "in_stock") continue;
-    const onHand = variant.initialStock ?? 0;
-    if (onHand <= 0) continue;
+  if (rows.length === 0) return [];
 
-    const [item] = await InventoryItem.create([{ itemType, itemId, sku: variant.sku, onHand }], { session });
-    if (item) created.push(item);
-  }
-
-  return created;
+  // One `insertMany` instead of a `create()` per variant — up to
+  // `MAX_VARIANTS` sequential round trips inside the same transaction this
+  // runs under, now one. `ordered: true` (the default) still fails the whole
+  // batch on the first duplicate/validation error, matching the loop's
+  // stop-on-first-failure behavior.
+  return InventoryItem.insertMany(rows, { session });
 }
 
 /**

@@ -3,6 +3,7 @@
 import type { AdminInventoryItem } from "@bw-bikes/shared";
 import { Image as ImageIcon, Warning, WarningOctagon } from "@phosphor-icons/react";
 import Image from "next/image";
+import { memo } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
@@ -29,7 +30,7 @@ export interface InventoryRowProps {
  * its explanation. A healthy row carries no badge at all; only the
  * exception is marked, always with an icon, never color alone.
  */
-export function InventoryRow({ item, onAdjust, density = "comfortable" }: InventoryRowProps) {
+function InventoryRowInner({ item, onAdjust, density = "comfortable" }: InventoryRowProps) {
   const isOnRequest = item.variant?.fulfillmentMode === "on_request" || item.variant?.fulfillmentMode === "preorder";
   const isOut = !isOnRequest && item.available <= 0;
   const isLow = !isOnRequest && !isOut && item.available <= item.lowStockThresholdUnits;
@@ -103,3 +104,14 @@ export function InventoryRow({ item, onAdjust, density = "comfortable" }: Invent
     </div>
   );
 }
+
+/**
+ * `React.memo`-wrapped: this row is what `InventarioView`'s search results
+ * (up to `SEARCH_RESULT_LIMIT`) and every `CategoryBand` (up to `limit: 100`
+ * each, and every band can be open at once) render in bulk. Without this,
+ * a debounced keystroke or any unrelated state change in the parent
+ * re-rendered every visible row; with it, a row only re-renders when its
+ * own `item`/`onAdjust`/`density` actually change.
+ */
+export const InventoryRow = memo(InventoryRowInner);
+

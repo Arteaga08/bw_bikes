@@ -73,12 +73,14 @@ export function createSizeTemplateService(SizeTemplate: Model<ISizeTemplate>, mo
       filter["value"] = { $regex: escapeRegex(search), $options: "i" };
     }
 
+    // `.lean()`: callers only ever map these through their plain-field DTO
+    // functions — no document methods needed downstream.
     const [documents, total] = await Promise.all([
-      SizeTemplate.find(filter).sort(sort).skip(skip).limit(limit).exec(),
+      SizeTemplate.find(filter).sort(sort).skip(skip).limit(limit).lean().exec(),
       SizeTemplate.countDocuments(filter).exec(),
     ]);
 
-    return { documents, meta: buildMeta(total, page, limit) };
+    return { documents: documents as unknown as ISizeTemplate[], meta: buildMeta(total, page, limit) };
   }
 
   async function create(input: SizeTemplateInput, actor: ActorContext): Promise<ISizeTemplate> {

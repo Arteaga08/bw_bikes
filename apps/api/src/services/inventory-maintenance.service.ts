@@ -114,21 +114,27 @@ async function clearRecoveredAlerts(defaultThreshold: number): Promise<number> {
     lowStockAlertedAt: { $exists: true },
     $expr: aboveThresholdExpr(defaultThreshold),
   })
+    .select("_id")
     .limit(SWEEP_BATCH_SIZE)
+    .lean()
     .exec();
 
-  let cleared = 0;
+  if (recovered.length === 0) return 0;
 
-  for (const item of recovered) {
-    const result = await InventoryItem.updateOne(
-      { _id: item._id, lowStockAlertedAt: { $exists: true } },
-      { $unset: { lowStockAlertedAt: "" } },
-    ).exec();
+  // One `bulkWrite` instead of a sequential `updateOne` per row — the guard
+  // condition (`lowStockAlertedAt` still set) travels with each op, so this
+  // stays exactly as race-safe as the loop it replaces, just batched into a
+  // single round trip.
+  const result = await InventoryItem.bulkWrite(
+    recovered.map((item) => ({
+      updateOne: {
+        filter: { _id: item._id, lowStockAlertedAt: { $exists: true } },
+        update: { $unset: { lowStockAlertedAt: "" } },
+      },
+    })),
+  );
 
-    if (result.modifiedCount > 0) cleared++;
-  }
-
-  return cleared;
+  return result.modifiedCount;
 }
 
 async function sweepLowStock(now: Date = new Date()): Promise<{ alerted: number; cleared: number }> {

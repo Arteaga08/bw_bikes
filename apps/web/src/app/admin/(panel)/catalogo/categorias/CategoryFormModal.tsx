@@ -49,10 +49,8 @@ export interface CategoryFormModalProps {
  * directly from there, no data lost.
  *
  * `category` is local state, not a mirror of `initial` — it starts there,
- * but the first successful "Guardar" on a new category replaces it with what
- * the API just created. From that point on "Guardar" edits in place and
- * "Cerrar" (no longer "Cancelar", because there's now something saved to
- * walk away from) leaves the modal.
+ * but a successful "Guardar" replaces it with what the API just returned
+ * before the deferred-image upload (if any) runs and the modal closes.
  */
 export function CategoryFormModal({
   onClose,
@@ -140,8 +138,7 @@ export function CategoryFormModal({
         const fileToUpload = pendingFile;
         handleClearPendingImage();
         try {
-          const withImage = await onUploadImage(saved.id, fileToUpload);
-          setCategory(withImage);
+          await onUploadImage(saved.id, fileToUpload);
           onChanged();
         } catch (uploadError) {
           toast({
@@ -152,6 +149,7 @@ export function CategoryFormModal({
           });
         }
       }
+      onClose();
     } catch (error) {
       toast({
         variant: "error",

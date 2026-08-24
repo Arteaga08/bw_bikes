@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createBundleAnalyzer from "@next/bundle-analyzer";
 
 /**
  * Every browser request the dashboard makes stays same-origin: the API is
@@ -25,6 +26,17 @@ const nextConfig: NextConfig = {
   // Same rationale as `app.disable("x-powered-by")` on the API side: no
   // reason to tell the world which framework served the response.
   poweredByHeader: false,
+  experimental: {
+    // `@phosphor-icons/react` is a barrel export — every one of this app's
+    // 40+ `import { Foo } from "@phosphor-icons/react"` call sites pulls
+    // through the package's single entry point, and it isn't on Next's own
+    // default `optimizePackageImports` list (verified against the installed
+    // `next` build). This rewrites each barrel import into the equivalent
+    // per-icon import at build time, so a route that uses 3 icons ships 3
+    // icon modules instead of tree-shaking depending on it — the same
+    // transform this option applies out of the box to `lucide-react` et al.
+    optimizePackageImports: ["@phosphor-icons/react"],
+  },
   async rewrites() {
     return [
       {
@@ -63,4 +75,12 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * Wraps the config with `@next/bundle-analyzer`'s treemap generator — a
+ * no-op unless `ANALYZE=1` is set, so this never adds cost to a normal
+ * `pnpm build`. Run `ANALYZE=1 pnpm --filter @bw-bikes/web build` and it
+ * opens a client/server/edge treemap after the build finishes.
+ */
+const withBundleAnalyzer = createBundleAnalyzer({ enabled: process.env["ANALYZE"] === "1" });
+
+export default withBundleAnalyzer(nextConfig);

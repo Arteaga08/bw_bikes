@@ -1205,6 +1205,12 @@ inventario ni reserva — se muestran como "Bajo pedido", nunca como "Agotado".
   órdenes, solicitudes pendientes) en vez de campanita de notificaciones — decisión tomada con Manuel
   viendo que centralizar cuatro alertas distintas en un solo dropdown las vuelve indistinguibles.
   Debajo, `StatsRangePicker` + 4 `StatCard` + gráfico de órdenes por día + top-5 más vendidos.
+  **Revertida el 2026-08-20**: la campanita del `TopBar` ahora sí abre un panel
+  (`NotificationsPopover`), pero agrupado por categoría con su propio color — reutiliza la misma
+  clasificación de `OperationsStrip` (`buildAlertDescriptors`) en vez de una lista plana mezclada,
+  que era justo lo que se había rechazado. `OperationsStrip` (que reemplazó los 4 `AlertCard` en el
+  rediseño de Inicio de agosto 2026) sigue siendo la vista completa; la campanita solo agrega acceso
+  rápido desde cualquier pantalla, sin Solicitudes (no es una venta).
 - **`/admin/analitica`**: una sola llamada a `GET /admin/stats/overview` (resuelve la ventana una vez,
   la comparte entre módulos), cuatro barras rankeadas (top 10), tabla de órdenes por estatus,
   `StatCard`s de inventario/solicitudes.

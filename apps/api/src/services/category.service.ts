@@ -137,15 +137,17 @@ export function createCategoryService(
       filter["name"] = { $regex: escapeRegex(search), $options: "i" };
     }
 
+    // `.lean()`: `toPublicCategory`/`toAdminCategory` (whichever the caller
+    // picks) only read plain fields — no document methods needed downstream.
     const [documents, total] = await Promise.all([
-      Category.find(filter).sort(sort).skip(skip).limit(limit).exec(),
+      Category.find(filter).sort(sort).skip(skip).limit(limit).lean().exec(),
       Category.countDocuments(filter).exec(),
     ]);
 
     // Returns the raw documents, not a mapped DTO — the caller (public vs
     // admin controller) picks `toPublicCategory` or `toAdminCategory`, same
     // split the product catalog already uses via `product.service.ts`.
-    return { documents, meta: buildMeta(total, page, limit) };
+    return { documents: documents as unknown as ICategory[], meta: buildMeta(total, page, limit) };
   }
 
   /**
@@ -157,7 +159,9 @@ export function createCategoryService(
   async function tree(options: { publicOnly: boolean }): Promise<Array<{ root: ICategory; children: ICategory[] }>> {
     const filter: Record<string, unknown> = options.publicOnly ? { isActive: true } : {};
 
-    const all = await Category.find(filter).sort({ order: 1, name: 1 }).exec();
+    // `.lean()`: consumed only by `toPublicCategory`/`toAdminCategory`, same
+    // as `list()` above.
+    const all = (await Category.find(filter).sort({ order: 1, name: 1 }).lean().exec()) as unknown as ICategory[];
 
     const childrenByParent = new Map<string, ICategory[]>();
     for (const category of all) {

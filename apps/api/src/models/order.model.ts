@@ -279,4 +279,25 @@ orderSchema.index({ status: 1, createdAt: 1 });
 // a page of `normal` ones ahead of it.
 orderSchema.index({ priority: 1, status: 1, createdAt: -1 });
 
+// Stats windows (`services/stats/orders.stats.ts`): every daily/status/
+// revenue aggregate for Inicio and Analítica filters by `createdAt` alone,
+// with no leading `status`/`priority` prefix that an existing compound
+// index could serve — without this, each one is a full collection scan.
+// Verified with `.explain("executionStats")`: the planner picks this index
+// (`IXSCAN` on `createdAt_-1`) for the exact aggregation `orders.stats.ts`
+// runs, where it previously had no choice but `COLLSCAN`.
+orderSchema.index({ createdAt: -1 });
+
+// A `{ "payment.authorizedAt": 1, status: 1 }` index was tried here for
+// the expiring-authorization alert (`services/stats/alerts.stats.ts`),
+// which matches `payment.authorizedAt` — a different field from the sweep
+// index above (`payment.authorizationExpiresAt`). Removed after
+// `.explain()` showed the query planner never chose it: `status: { $in:
+// [...] }` on a small, inherently transient set of orders ("authorized",
+// "awaiting_supplier_confirmation") is selective enough on its own that
+// the planner prefers the sweep index's `status` prefix and fetches the
+// handful of matches, rather than seeking a second index. An index that
+// never gets picked is pure write overhead on this collection's every
+// insert/update — not kept on the strength of the theory alone.
+
 export const Order = model<IOrder>("Order", orderSchema);

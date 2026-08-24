@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
+import { memo } from "react";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/cn";
 import { MobileRowSkeleton, Skeleton } from "./Skeleton";
+
+/** Tailwind's default `md` breakpoint — the same width `md:hidden`/`hidden md:block` switch on. */
+const MD_BREAKPOINT_QUERY = "(min-width: 768px)";
 
 /**
  * What a column actually holds — drives its default alignment so that
@@ -80,51 +85,73 @@ function resolveAlign<TRow>(column: DataTableColumn<TRow>): "left" | "center" | 
  * `EmptyState` would force every caller through this component's opinion of
  * "empty", instead of the page's own fetch state machine.
  */
-export function DataTable<TRow>({
+function DataTableInner<TRow>({
   columns,
   rows,
   getRowKey,
   mobileRow,
   minWidthClassName = "min-w-[46rem]",
 }: DataTableProps<TRow>) {
-  return (
-    <>
-      {mobileRow ? (
-        <div className="rounded-card border border-borde bg-surface md:hidden">
-          {rows.map((row) => (
-            <div key={getRowKey(row)} className="border-b border-borde last:border-b-0">
-              {mobileRow(row)}
-            </div>
-          ))}
-        </div>
-      ) : null}
-      <div className={cn("overflow-x-auto rounded-card border border-borde bg-surface", mobileRow && "hidden md:block")}>
-        <table className={cn("w-full table-auto border-collapse text-left", minWidthClassName)}>
-          <TableHead columns={columns} />
-          <tbody>
-            {rows.map((row) => (
-              <tr key={getRowKey(row)} className="border-b border-borde last:border-b-0 hover:bg-base">
-                {columns.map((column, index) => (
-                  <td
-                    key={column.key}
-                    className={cn(
-                      "px-md py-sm font-body text-body text-negro",
-                      ALIGN_CLASSES[resolveAlign(column)],
-                      index < columns.length - 1 && "border-r border-borde/50",
-                      column.className,
-                    )}
-                  >
-                    {column.render(row)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+  // Only one layout actually renders now, not both hidden behind `md:` —
+  // with `mobileRow` set, every row used to mount twice (a card + a `<tr>`),
+  // so a 20-row table paid for 40 row subtrees and `column.render(row)` ran
+  // twice per row even though one copy was always `display: none`.
+  // `useMediaQuery`'s server snapshot is `false` (mobile), matching the
+  // server-rendered HTML, so hydration never mismatches; a real desktop
+  // client corrects to the table layout in the render right after.
+  const isDesktop = useMediaQuery(MD_BREAKPOINT_QUERY);
+
+  if (mobileRow && !isDesktop) {
+    return (
+      <div className="rounded-card border border-borde bg-surface">
+        {rows.map((row) => (
+          <div key={getRowKey(row)} className="border-b border-borde last:border-b-0">
+            {mobileRow(row)}
+          </div>
+        ))}
       </div>
-    </>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-card border border-borde bg-surface">
+      <table className={cn("w-full table-auto border-collapse text-left", minWidthClassName)}>
+        <TableHead columns={columns} />
+        <tbody>
+          {rows.map((row) => (
+            <tr key={getRowKey(row)} className="border-b border-borde last:border-b-0 hover:bg-base">
+              {columns.map((column, index) => (
+                <td
+                  key={column.key}
+                  className={cn(
+                    "px-md py-sm font-body text-body text-negro",
+                    ALIGN_CLASSES[resolveAlign(column)],
+                    index < columns.length - 1 && "border-r border-borde/50",
+                    column.className,
+                  )}
+                >
+                  {column.render(row)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
+
+/**
+ * `React.memo`-wrapped: the single table primitive every heavy admin list
+ * (órdenes, catálogo, inventario, ...) renders through, so a shallow-equal
+ * skip here pays off everywhere at once. It only helps as much as its
+ * callers keep `columns`/`rows`/`getRowKey`/`mobileRow` referentially
+ * stable across renders that don't actually change what a row shows — see
+ * `OrdersView.tsx` for the pattern (`useMemo` columns, `useCallback` row
+ * renderers, a module-level `getRowKey`). `as typeof DataTableInner`
+ * preserves the generic signature `memo()` would otherwise erase.
+ */
+export const DataTable = memo(DataTableInner) as typeof DataTableInner;
 
 /**
  * Exported so a loading skeleton can render the exact same header the real

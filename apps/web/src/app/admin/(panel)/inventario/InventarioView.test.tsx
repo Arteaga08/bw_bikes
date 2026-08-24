@@ -176,7 +176,10 @@ describe("InventarioView", () => {
     renderView();
 
     await user.click(await screen.findByRole("button", { name: "Ajustar" }));
-    await user.type(screen.getByLabelText("Unidades"), "5");
+    // `StockAdjustDialog` is code-split (`next/dynamic`, Sesión 2 de la
+    // auditoría de rendimiento) — it mounts asynchronously after the click
+    // that first reveals it, so its first field needs `findBy`, not `getBy`.
+    await user.type(await screen.findByLabelText("Unidades"), "5");
     await user.type(screen.getByLabelText("Motivo"), "Recepción de embarque");
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 

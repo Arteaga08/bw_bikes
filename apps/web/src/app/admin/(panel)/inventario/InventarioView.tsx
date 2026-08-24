@@ -2,7 +2,8 @@
 
 import type { AdminInventoryItem, InventorySummary, ItemType } from "@bw-bikes/shared";
 import { X } from "@phosphor-icons/react";
-import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { ComboboxOption } from "@/components/ui/Combobox";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -22,8 +23,19 @@ import { ApiError } from "@/lib/api/error";
 import { CategoryBand } from "./CategoryBand";
 import { InventoryAlertCards, type InventoryStockFilter } from "./InventoryAlertCards";
 import { InventoryRow } from "./InventoryRow";
-import { NewInventoryEntryDialog } from "./NewInventoryEntryDialog";
-import { StockAdjustDialog } from "./StockAdjustDialog";
+
+// Code-split, gated on their own "ever opened" flag rather than mounted
+// unconditionally — both dialogs used to always be in the tree (controlled
+// by `item`/`open` props alone), which would have made a plain
+// `next/dynamic` swap start loading their chunks on every visit to this
+// screen regardless of whether the admin ever opens either one.
+const NewInventoryEntryDialog = dynamic(
+  () => import("./NewInventoryEntryDialog").then((mod) => mod.NewInventoryEntryDialog),
+  { ssr: false },
+);
+const StockAdjustDialog = dynamic(() => import("./StockAdjustDialog").then((mod) => mod.StockAdjustDialog), {
+  ssr: false,
+});
 
 const SEARCH_DEBOUNCE_MS = 300;
 const SEARCH_RESULT_LIMIT = 50;
@@ -70,7 +82,21 @@ export function InventarioView() {
 
   const [adjustTarget, setAdjustTarget] = useState<AdminInventoryItem | null>(null);
   const [adjustSubmitting, setAdjustSubmitting] = useState(false);
+  // Same lazy-mount rationale as `everOpenedNewEntry` below — `StockAdjustDialog`
+  // used to be unconditionally in the tree (`item` alone gated its visible
+  // state), so the code-split chunk would otherwise start loading the
+  // moment this screen mounts, whether or not the admin ever adjusts stock.
+  const [everOpenedAdjust, setEverOpenedAdjust] = useState(false);
+  const handleAdjust = useCallback((item: AdminInventoryItem) => {
+    setEverOpenedAdjust(true);
+    setAdjustTarget(item);
+  }, []);
   const [newEntryOpen, setNewEntryOpen] = useState(false);
+  // Same lazy-mount rationale as `OrdersView`'s `everOpenedDetail`: the two
+  // product Combobox option lists below are only for this dialog, but used
+  // to fetch 200 products (`limit: 100` × 2) on every mount of the page,
+  // whether or not the admin ever opens "Nueva entrada".
+  const [everOpenedNewEntry, setEverOpenedNewEntry] = useState(false);
   const [newEntrySubmitting, setNewEntrySubmitting] = useState(false);
 
   function refetch(): void {
@@ -141,6 +167,7 @@ export function InventarioView() {
   }, [trimmedSearch, catalogTab, refetchToken]);
 
   useEffect(() => {
+    if (!everOpenedNewEntry) return;
     Promise.all([
       adminBikesApi.list({ limit: 100, sort: "name" }),
       adminAccessoriesApi.list({ limit: 100, sort: "name" }),
@@ -148,7 +175,7 @@ export function InventarioView() {
       setBikeOptions(bikes.data.map((bike) => ({ id: bike.id, label: bike.name })));
       setAccessoryOptions(accessories.data.map((accessory) => ({ id: accessory.id, label: accessory.name })));
     });
-  }, []);
+  }, [everOpenedNewEntry]);
 
   async function handleAdjustConfirm(input: { delta: number } | { onHand: number }, reason: string): Promise<void> {
     if (!adjustTarget) return;
@@ -255,7 +282,7 @@ export function InventarioView() {
               <EmptyState title="Sin resultados" description={`Ningún SKU coincide con "${trimmedSearch}".`} />
             ) : (
               searchResults.map((item) => (
-                <InventoryRow key={item.id} item={item} onAdjust={setAdjustTarget} density="comfortable" />
+                <InventoryRow key={item.id} item={item} onAdjust={handleAdjust} density="comfortable" />
               ))
             )}
           </div>
@@ -273,7 +300,7 @@ export function InventarioView() {
               <CategoryBand
                 key={`${group.itemType}-${group.categoryId}`}
                 group={group}
-                onAdjust={setAdjustTarget}
+                onAdjust={handleAdjust}
                 refetchToken={refetchToken}
                 stockFilter={stockFilter}
               />
@@ -283,25 +310,36 @@ export function InventarioView() {
       </section>
 
       {/* Captura - la mas ligera, sin card ni heading propio: el unico dorado de la vista */}
-      <Button variant="primary" onClick={() => setNewEntryOpen(true)} className="self-start">
+      <Button
+        variant="primary"
+        onClick={() => {
+          setEverOpenedNewEntry(true);
+          setNewEntryOpen(true);
+        }}
+        className="self-start"
+      >
         Registrar entrada
       </Button>
 
-      <StockAdjustDialog
-        item={adjustTarget}
-        onClose={() => setAdjustTarget(null)}
-        onConfirm={handleAdjustConfirm}
-        submitting={adjustSubmitting}
-      />
+      {everOpenedAdjust ? (
+        <StockAdjustDialog
+          item={adjustTarget}
+          onClose={() => setAdjustTarget(null)}
+          onConfirm={handleAdjustConfirm}
+          submitting={adjustSubmitting}
+        />
+      ) : null}
 
-      <NewInventoryEntryDialog
-        open={newEntryOpen}
-        onClose={() => setNewEntryOpen(false)}
-        onConfirm={handleNewEntryConfirm}
-        submitting={newEntrySubmitting}
-        bikeOptions={bikeOptions}
-        accessoryOptions={accessoryOptions}
-      />
+      {everOpenedNewEntry ? (
+        <NewInventoryEntryDialog
+          open={newEntryOpen}
+          onClose={() => setNewEntryOpen(false)}
+          onConfirm={handleNewEntryConfirm}
+          submitting={newEntrySubmitting}
+          bikeOptions={bikeOptions}
+          accessoryOptions={accessoryOptions}
+        />
+      ) : null}
     </div>
   );
 }

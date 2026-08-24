@@ -93,4 +93,9 @@ stockReservationSchema.index({ status: 1, expiresAt: 1 });
 // Release/commit of everything a cart or order holds, in one lookup.
 stockReservationSchema.index({ referenceType: 1, referenceId: 1 });
 
+// The committed-units stats window (`services/stats/inventory.stats.ts`)
+// matches `status: "committed"` plus `committedAt` — a different field from
+// the expiry job's `expiresAt` index above, so it needs its own.
+stockReservationSchema.index({ status: 1, committedAt: 1 });
+
 export const StockReservation = model<IStockReservation>("StockReservation", stockReservationSchema);

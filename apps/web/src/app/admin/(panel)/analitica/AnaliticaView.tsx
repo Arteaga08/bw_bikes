@@ -53,6 +53,26 @@ export function AnaliticaView() {
     };
   }, [params, canFetch]);
 
+  // Same reasoning as `HomeStats.tsx`'s series `useMemo`s — four fresh
+  // arrays otherwise, fed straight into four `RankedBarChart` instances on
+  // every render.
+  const mostViewedModelItems = useMemo(
+    () => overview?.preferences.mostViewedModels.map((model) => ({ label: model.name, count: model.count })) ?? [],
+    [overview],
+  );
+  const mostSoldModelItems = useMemo(
+    () => overview?.preferences.mostSoldModels.map((model) => ({ label: model.name, count: model.count })) ?? [],
+    [overview],
+  );
+  const mostViewedSizeItems = useMemo(
+    () => overview?.preferences.mostViewedSizes.map((size) => ({ label: size.size, count: size.count })) ?? [],
+    [overview],
+  );
+  const mostSoldSizeItems = useMemo(
+    () => overview?.preferences.mostSoldSizes.map((size) => ({ label: size.size, count: size.count })) ?? [],
+    [overview],
+  );
+
   return (
     <div className="flex flex-col gap-lg p-md sm:p-lg">
       <StatsRangePicker value={range} onChange={setRange} />
@@ -84,32 +104,16 @@ export function AnaliticaView() {
 
           <div className="grid grid-cols-1 gap-md xl:grid-cols-2">
             <ChartCard title="Modelos más vistos" empty={overview !== null && overview.preferences.mostViewedModels.length === 0}>
-              {overview ? (
-                <RankedBarChart
-                  items={overview.preferences.mostViewedModels.map((model) => ({ label: model.name, count: model.count }))}
-                />
-              ) : null}
+              {overview ? <RankedBarChart items={mostViewedModelItems} /> : null}
             </ChartCard>
             <ChartCard title="Modelos más vendidos" empty={overview !== null && overview.preferences.mostSoldModels.length === 0}>
-              {overview ? (
-                <RankedBarChart
-                  items={overview.preferences.mostSoldModels.map((model) => ({ label: model.name, count: model.count }))}
-                />
-              ) : null}
+              {overview ? <RankedBarChart items={mostSoldModelItems} /> : null}
             </ChartCard>
             <ChartCard title="Tallas más vistas" empty={overview !== null && overview.preferences.mostViewedSizes.length === 0}>
-              {overview ? (
-                <RankedBarChart
-                  items={overview.preferences.mostViewedSizes.map((size) => ({ label: size.size, count: size.count }))}
-                />
-              ) : null}
+              {overview ? <RankedBarChart items={mostViewedSizeItems} /> : null}
             </ChartCard>
             <ChartCard title="Tallas más vendidas" empty={overview !== null && overview.preferences.mostSoldSizes.length === 0}>
-              {overview ? (
-                <RankedBarChart
-                  items={overview.preferences.mostSoldSizes.map((size) => ({ label: size.size, count: size.count }))}
-                />
-              ) : null}
+              {overview ? <RankedBarChart items={mostSoldSizeItems} /> : null}
             </ChartCard>
           </div>
 

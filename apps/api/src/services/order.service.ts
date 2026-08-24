@@ -557,7 +557,7 @@ async function markAuthorized(order: IOrder, authorizedAt: Date): Promise<void> 
     after: { orderNumber: current.orderNumber, totalCents: current.totalCents },
   });
 
-  // Only the first time this order lands in the queue — a redelivered webhook
+  // Only the first ti me this order lands in the queue — a redelivered webhook
   // or the reconciliation sweep finding it already there must not re-alert.
   if (queued) {
     await createNotifier().notifyAdmin({

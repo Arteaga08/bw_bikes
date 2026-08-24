@@ -13,6 +13,12 @@ describe("Breadcrumbs", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it("renders nothing for a single crumb — Inicio's own PageHeader title already says it", () => {
+    usePathnameMock.mockReturnValue("/admin");
+    const { container } = render(<Breadcrumbs />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it("derives labels from the path segments; the last item is text, the rest are links", () => {
     usePathnameMock.mockReturnValue("/admin/ordenes");
     render(<Breadcrumbs />);

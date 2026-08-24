@@ -253,7 +253,10 @@ describe("ProductEditor — unified save (edit mode)", () => {
     await user.click(screen.getByRole("button", { name: "Siguiente" }));
     await user.click(screen.getByRole("button", { name: "Siguiente" }));
 
-    const colorSelect = screen.getByLabelText("Color") as HTMLSelectElement;
+    // `GallerySection` is code-split (`next/dynamic`, Sesión 2 de la
+    // auditoría de rendimiento) — it mounts asynchronously after the
+    // navigation that first reveals it, so this needs `findBy`, not `getBy`.
+    const colorSelect = (await screen.findByLabelText("Color")) as HTMLSelectElement;
     expect(Array.from(colorSelect.options).map((option) => option.textContent)).toEqual(["Sin asignar", "Negro"]);
 
     await user.selectOptions(colorSelect, "Negro");
@@ -483,7 +486,8 @@ describe("ProductEditor — deferred gallery on create", () => {
     await user.click(screen.getByRole("button", { name: "Siguiente" }));
     await user.click(screen.getByRole("button", { name: "Siguiente" }));
 
-    fireEvent.change(screen.getByLabelText("Subir imágenes"), { target: { files: [makeFile()] } });
+    // Same async-mount reasoning as the "Color" select above.
+    fireEvent.change(await screen.findByLabelText("Subir imágenes"), { target: { files: [makeFile()] } });
 
     await user.click(screen.getByRole("button", { name: "Siguiente" }));
     await user.click(screen.getByRole("button", { name: "Crear accesorio" }));
@@ -503,7 +507,8 @@ describe("ProductEditor — deferred gallery on create", () => {
     await user.click(screen.getByRole("button", { name: "Siguiente" }));
     await user.click(screen.getByRole("button", { name: "Siguiente" }));
 
-    fireEvent.change(screen.getByLabelText("Subir imágenes"), { target: { files: [makeFile()] } });
+    // Same async-mount reasoning as the "Color" select above.
+    fireEvent.change(await screen.findByLabelText("Subir imágenes"), { target: { files: [makeFile()] } });
 
     await user.click(screen.getByRole("button", { name: "Siguiente" }));
     await user.click(screen.getByRole("button", { name: "Crear accesorio" }));

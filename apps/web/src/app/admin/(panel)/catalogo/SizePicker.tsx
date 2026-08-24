@@ -2,7 +2,7 @@
 
 import type { SizeTemplate } from "@bw-bikes/shared";
 import { Check } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Input } from "@/components/ui/Input";
@@ -60,7 +60,10 @@ export function SizePicker({ sizeTemplates, variants, onChange }: SizePickerProp
   const [newSizeValue, setNewSizeValue] = useState("");
   const [pendingRemoval, setPendingRemoval] = useState<string | null>(null);
 
-  const chips = buildChips(sizeTemplates, variants);
+  // `useMemo`, not a plain call: `buildChips` copies and sorts `sizeTemplates`
+  // plus a full pass over `variants` on every call, and this component
+  // re-renders on every keystroke in a sibling variant field.
+  const chips = useMemo(() => buildChips(sizeTemplates, variants), [sizeTemplates, variants]);
   const atLimit = variants.length >= MAX_VARIANTS;
 
   function isChecked(value: string): boolean {

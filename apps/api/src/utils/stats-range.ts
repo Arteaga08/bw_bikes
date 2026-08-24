@@ -39,6 +39,8 @@ function presetToBounds(preset: Exclude<StatsPreset, "custom">, now: Date): { fr
       return { from: new Date(now.getTime() - 30 * MS_PER_DAY), to };
     case "90d":
       return { from: new Date(now.getTime() - 90 * MS_PER_DAY), to };
+    case "365d":
+      return { from: new Date(now.getTime() - 365 * MS_PER_DAY), to };
   }
 }
 

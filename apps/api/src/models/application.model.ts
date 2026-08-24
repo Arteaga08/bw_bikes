@@ -147,4 +147,10 @@ applicationSchema.index({ userId: 1, type: 1, createdAt: -1 });
 // The admin bandeja: newest first, optionally filtered by status.
 applicationSchema.index({ status: 1, createdAt: -1 });
 
+// The approvals/rejections stats window (`services/stats/applications.stats.ts`)
+// matches `status` plus `updatedAt`/`rejectedAt` — neither field is a prefix
+// of the index above, which leads on `createdAt`.
+applicationSchema.index({ status: 1, updatedAt: -1 });
+applicationSchema.index({ status: 1, rejectedAt: -1 });
+
 export const Application = model<IApplication>("Application", applicationSchema);

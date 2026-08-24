@@ -2,7 +2,7 @@
 
 import type { AdminInventoryItem, InventorySummaryGroup } from "@bw-bikes/shared";
 import { CaretDown } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { listAdminInventory } from "@/lib/api/admin-inventory";
 import type { InventoryStockFilter } from "./InventoryAlertCards";
@@ -25,7 +25,7 @@ export interface CategoryBandProps {
  * `bg-surface`, `bg-inset` only as the disclosure body separates from the
  * header hairline.
  */
-export function CategoryBand({ group, onAdjust, refetchToken, stockFilter }: CategoryBandProps) {
+function CategoryBandInner({ group, onAdjust, refetchToken, stockFilter }: CategoryBandProps) {
   const hasIssue = group.outOfStockSkus + group.lowStockSkus > 0;
   const [manualOpen, setManualOpen] = useState(hasIssue);
   const open = stockFilter !== null || manualOpen;
@@ -109,3 +109,16 @@ export function CategoryBand({ group, onAdjust, refetchToken, stockFilter }: Cat
     </div>
   );
 }
+
+/**
+ * `React.memo`-wrapped: with `stockFilter` set, every band opens and fetches
+ * up to 100 rows at once — a parent re-render from unrelated state (the
+ * search box, the adjust dialog) used to re-render every open band's rows
+ * along with it. `group` only changes identity when `InventarioView`'s
+ * `summary` actually refetches (see its `groupsByType` `useMemo`), and
+ * `onAdjust` is a `useState` setter (stable by React's own guarantee), so
+ * this skips re-rendering unless something the band actually depends on
+ * changed.
+ */
+export const CategoryBand = memo(CategoryBandInner);
+

@@ -9,7 +9,7 @@ describe("StatsRangePicker", () => {
     const user = userEvent.setup();
     render(<StatsRangePicker value={{ preset: "30d" }} onChange={onChange} />);
 
-    await user.click(screen.getByRole("tab", { name: "7 días" }));
+    await user.click(screen.getByRole("tab", { name: "Semana" }));
 
     expect(onChange).toHaveBeenCalledWith({ preset: "7d" });
   });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ColorTemplate, FulfillmentMode } from "@bw-bikes/shared";
 import { Button } from "@/components/ui/Button";
 import { ColorSwatch } from "@/components/ui/ColorSwatch";
@@ -140,7 +140,15 @@ export function VariantsEditor({
 }: VariantsEditorProps) {
   const duplicates = findDuplicateSkuIndices(variants);
   const groups = groupBySize(variants);
-  const sortedColorTemplates = colorTemplates.slice().sort((a, b) => a.order - b.order);
+  // `colorTemplates` can hold up to 100 rows, and every variant row below
+  // re-renders this `<Select>` option list from it — without `useMemo`, a
+  // keystroke in any variant field (`onChange` bubbles up, re-rendering this
+  // whole editor) re-copied and re-sorted the full template list once per
+  // keystroke.
+  const sortedColorTemplates = useMemo(
+    () => colorTemplates.slice().sort((a, b) => a.order - b.order),
+    [colorTemplates],
+  );
 
   // Rows currently showing the free-text "Nuevo color" input instead of the
   // `<Select>` — UI-only, never persisted; a row leaves this set the moment

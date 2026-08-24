@@ -14,6 +14,7 @@ import type {
   SpecTemplate,
   SummaryRow,
 } from "@bw-bikes/shared";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -42,15 +43,30 @@ import { EditorSection } from "./EditorSection";
 import { EditorStepper } from "./EditorStepper";
 import { ErrorSummary, type ErrorSummaryEntry } from "./ErrorSummary";
 import { PRODUCT_FIELD_IDS } from "./field-ids";
-import { GallerySection, MAX_GALLERY_IMAGES, type StagedGalleryFile } from "./GallerySection";
+import { MAX_GALLERY_IMAGES } from "./catalog-limits";
+import type { StagedGalleryFile } from "./GallerySection";
 import { ProductBasicsSection, type ProductBasicsValue } from "./ProductBasicsSection";
 import { findCategoryById, ProductOrganizationFields, type CategoryTreeNode } from "./ProductOrganizationFields";
 import { MAX_RELATED_ACCESSORIES, RelatedAccessoriesPicker } from "./RelatedAccessoriesPicker";
 import { SectionHelp } from "./SectionHelp";
 import { SizePicker } from "./SizePicker";
-import { SpecSheetEditor } from "./SpecSheetEditor";
 import { SummaryEditor } from "./SummaryEditor";
 import { findDuplicateSkuIndices, MAX_VARIANTS, VariantsEditor, type VariantRow } from "./VariantsEditor";
+
+/**
+ * Code-split, same pattern as `OrdersView.tsx`'s `OrderDetailModal` — these
+ * are two of the largest step components in this stepper (400+ lines each)
+ * and the wizard already renders only the active step's JSX (the `switch`
+ * below), so nothing was ever mounting both at once; the only thing a
+ * static import was buying was shipping both in the *first* step's JS
+ * regardless of whether the admin ever reaches "Galería"/"Ficha técnica".
+ * `MAX_GALLERY_IMAGES` still comes from `./catalog-limits`, not this import
+ * — pulling a value straight from `GallerySection.tsx` here would force
+ * that whole module back into the eager bundle no matter how the component
+ * itself is loaded.
+ */
+const GallerySection = dynamic(() => import("./GallerySection").then((mod) => mod.GallerySection), { ssr: false });
+const SpecSheetEditor = dynamic(() => import("./SpecSheetEditor").then((mod) => mod.SpecSheetEditor), { ssr: false });
 
 export type ProductEditorKind = "bike" | "accessory";
 
@@ -562,7 +578,7 @@ function ProductEditorContent({
       router.replace(`${listPath}/${savedId}`);
     } else {
       toast({ variant: "success", title: "Cambios guardados" });
-      router.refresh();
+      router.push(listPath);
     }
   }
 

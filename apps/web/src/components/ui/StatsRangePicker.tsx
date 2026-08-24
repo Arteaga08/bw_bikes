@@ -17,15 +17,30 @@ export interface StatsRangePickerProps {
   onChange: (value: StatsRangeValue) => void;
 }
 
-const PRESETS: StatsPreset[] = ["today", "7d", "30d", "90d", "custom"];
+// Only the four calendar units Manuel asked for, plus Personalizado —
+// "90d" stays a valid `StatsPreset` for the backend/type (nothing forces a
+// tab to exist for every preset value) but is deliberately not surfaced
+// here.
+const PRESETS: StatsPreset[] = ["today", "7d", "30d", "365d", "custom"];
 
+/**
+ * Relabeled from raw durations ("7 días", "30 días") to the calendar units
+ * they actually approximate — a merchant thinks "this week" / "this month",
+ * not "the last 168 hours". The underlying preset values (`"7d"`, `"30d"`)
+ * are untouched: only the label changed, so every consumer of `StatsRangeValue`
+ * keeps working unmodified.
+ */
 const PRESET_LABELS: Record<StatsPreset, string> = {
-  today: "Hoy",
-  "7d": "7 días",
-  "30d": "30 días",
-  "90d": "90 días",
+  today: "Día",
+  "7d": "Semana",
+  "30d": "Mes",
+  "90d": "Trimestre",
+  "365d": "Año",
   custom: "Personalizado",
 };
+// `PRESET_LABELS` still covers every `StatsPreset` (including the
+// UI-hidden "90d") since the type requires an exhaustive record — only
+// `PRESETS` decides which tabs actually render.
 
 /**
  * The date-window control shared by Inicio and Analítica — mirrors

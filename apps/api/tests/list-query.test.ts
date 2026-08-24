@@ -71,6 +71,16 @@ describe("pagination meta", () => {
 
     expect(response.status).toBe(400);
   });
+
+  // Regression: `page` used to have no ceiling — `?page=999999999` reached
+  // `parseListQuery` and produced an unbounded `.skip()` handed straight to
+  // Mongo. Now it's rejected before the query ever runs, at both the Joi
+  // layer (`page`'s `.max()`) and `parseListQuery` itself.
+  it("rejects a page far beyond any real collection with 400", async () => {
+    const response = await request(app).get(`${ADMIN}/bikes?page=999999999`).set("Cookie", adminCookie);
+
+    expect(response.status).toBe(400);
+  });
 });
 
 describe("sorting", () => {

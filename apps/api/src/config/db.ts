@@ -8,7 +8,16 @@ import { logger } from "./logger.js";
  */
 export async function connectDb(): Promise<typeof mongoose> {
   mongoose.set("strictQuery", true);
-  const connection = await mongoose.connect(env.mongoUri);
+  // `autoIndex` defaults to `true` in every environment, including
+  // production: each boot would otherwise walk every schema and issue a
+  // `createIndex` per declared index — redundant work against a live
+  // collection, and a background index build competing with real traffic
+  // the moment a new one ships. Off in production; deploys instead run
+  // `mongoose.syncIndexes()` explicitly, once, before traffic is cut over —
+  // see the deploy runbook. Left on everywhere else so `pnpm dev` and the
+  // test suite (mongodb-memory-server, always empty) keep building indexes
+  // on connect, which is what the uniqueness-constraint tests depend on.
+  const connection = await mongoose.connect(env.mongoUri, { autoIndex: !env.isProduction });
   logger.info({ db: connection.connection.name }, "MongoDB connected");
 
   // Probed at boot rather than lazily, so an operator who deployed against a

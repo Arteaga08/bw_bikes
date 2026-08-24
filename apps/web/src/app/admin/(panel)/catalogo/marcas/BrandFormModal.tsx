@@ -107,8 +107,7 @@ export function BrandFormModal({ onClose, onSaved, initial }: BrandFormModalProp
         const fileToUpload = pendingFile;
         handleClearPendingLogo();
         try {
-          const withLogo = await adminBrandsApi.uploadLogo(saved.id, fileToUpload);
-          setBrand(withLogo);
+          await adminBrandsApi.uploadLogo(saved.id, fileToUpload);
           onSaved();
         } catch (uploadError) {
           toast({
@@ -119,6 +118,7 @@ export function BrandFormModal({ onClose, onSaved, initial }: BrandFormModalProp
           });
         }
       }
+      onClose();
     } catch (error) {
       toast({
         variant: "error",

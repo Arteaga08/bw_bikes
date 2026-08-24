@@ -25,12 +25,18 @@ export function buildCrumbs(pathname: string): Crumb[] {
   });
 }
 
-/** Derived from `usePathname` against the {slug: label} map in `lib/nav.ts` — last item is text, the rest are links. */
+/**
+ * Derived from `usePathname` against the {slug: label} map in `lib/nav.ts` —
+ * last item is text, the rest are links. A single crumb (a top-level page
+ * like Inicio) says nothing the page's own `PageHeader` title doesn't already
+ * say right below it, so it renders nothing rather than a redundant one-word
+ * line — real hierarchy (Catálogo › Colores) still needs at least two.
+ */
 export function Breadcrumbs() {
   const pathname = usePathname();
   const crumbs = buildCrumbs(pathname);
 
-  if (crumbs.length === 0) return null;
+  if (crumbs.length <= 1) return null;
 
   return (
     <nav

@@ -6,6 +6,7 @@ import type {
   StatsRange,
 } from "@bw-bikes/shared";
 import { Accessory, Bike, Order, ProductView } from "../../models/index.js";
+import { REVENUE_STATUSES } from "./orders.stats.js";
 
 /**
  * Rankings, not a full list: a panel widget shows a top-N, and letting it
@@ -27,6 +28,7 @@ interface ProductGroupRow {
   count: number;
   name: string;
   brand: string;
+  revenueCents: number;
 }
 
 interface SizeGroupRow {
@@ -59,6 +61,11 @@ async function getMostSoldModels(range: StatsRange): Promise<PreferenceProductRa
         count: { $sum: "$lines.qty" },
         name: { $first: "$lines.name" },
         brand: { $first: "$lines.brand" },
+        // Same rule as `orders.stats.ts`'s `revenueCents`: a refunded sale
+        // still counts toward `count` (popularity), but not toward revenue —
+        // the money came back. Imported, not re-declared, so this can never
+        // drift from the KPI figure above it on Inicio.
+        revenueCents: { $sum: { $cond: [{ $in: ["$status", REVENUE_STATUSES] }, "$lines.lineTotalCents", 0] } },
       },
     },
     { $sort: { count: -1 } },
@@ -71,6 +78,7 @@ async function getMostSoldModels(range: StatsRange): Promise<PreferenceProductRa
     name: row.name,
     brand: row.brand,
     count: row.count,
+    revenueCents: row.revenueCents,
   }));
 }
 
@@ -99,12 +107,15 @@ async function resolveProductLabels(
   const bikeIds = rows.filter((row) => row.itemType === "bike").map((row) => row.itemId);
   const accessoryIds = rows.filter((row) => row.itemType === "accessory").map((row) => row.itemId);
 
+  // `.lean()`: only plain fields are read below (`bike.brand`/`accessory.brand`
+  // cast directly, never checked via `.populated()`) — populate still
+  // resolves normally on a lean query.
   const [bikes, accessories] = await Promise.all([
     bikeIds.length > 0
-      ? Bike.find({ _id: { $in: bikeIds } }, "name brand").populate("brand", "name").exec()
+      ? Bike.find({ _id: { $in: bikeIds } }, "name brand").populate("brand", "name").lean().exec()
       : Promise.resolve([]),
     accessoryIds.length > 0
-      ? Accessory.find({ _id: { $in: accessoryIds } }, "name brand").populate("brand", "name").exec()
+      ? Accessory.find({ _id: { $in: accessoryIds } }, "name brand").populate("brand", "name").lean().exec()
       : Promise.resolve([]),
   ]);
 

@@ -20,6 +20,16 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const MAX_SEARCH_LENGTH = 80;
 
+/**
+ * A `page` this high can only mean two things: a client bug, or a probe for
+ * how far `.skip()` can be pushed before Mongo notices — neither should
+ * silently succeed. Set well above any real collection: `MAX_LIMIT * this`
+ * is 10M documents `deep`, past every list this app has. Exported so
+ * `validators/list-query.validator.ts` rejects the same ceiling at the Joi
+ * layer instead of carrying a second number that could drift from this one.
+ */
+export const MAX_PAGE = 100_000;
+
 export interface ParseListQueryOptions {
   /**
    * Sortable fields, as an explicit whitelist. A field outside it is a 400 —
@@ -63,6 +73,25 @@ function parsePositiveInt(raw: unknown, fallback: number, max: number, label: st
   return Math.min(parsed, max);
 }
 
+/**
+ * Unlike `limit` (clamped — a dashboard asking for 500 rows degrades to 100
+ * rather than erroring), an out-of-range `page` is rejected outright.
+ * Clamping it would silently hand back the last page dressed up as whichever
+ * page the caller asked for; on `page=999999999` that's not a degraded
+ * response, it's a wrong one — and unclamped, it was an unbounded
+ * `.skip()` handed straight to Mongo on every one of this app's list
+ * endpoints.
+ */
+function parsePageInt(raw: unknown): number {
+  if (raw === undefined || raw === "") return DEFAULT_PAGE;
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_PAGE) {
+    throw new AppError(`El parámetro "page" debe ser un número entero entre 1 y ${MAX_PAGE}.`, 400);
+  }
+  return parsed;
+}
+
 function parseSort(raw: unknown, options: ParseListQueryOptions): Record<string, 1 | -1> {
   const requested = typeof raw === "string" && raw.trim() !== "" ? raw.trim() : options.defaultSort;
   const descending = requested.startsWith("-");
@@ -90,7 +119,7 @@ export function parseListQuery(
 ): ParsedListQuery {
   const maxLimit = Math.min(options.maxLimit ?? MAX_LIMIT, MAX_LIMIT);
 
-  const page = parsePositiveInt(query["page"], DEFAULT_PAGE, Number.MAX_SAFE_INTEGER, "page");
+  const page = parsePageInt(query["page"]);
   const limit = parsePositiveInt(query["limit"], DEFAULT_LIMIT, maxLimit, "limit");
   const sort = parseSort(query["sort"], options);
 

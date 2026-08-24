@@ -85,12 +85,15 @@ async function list(query: Record<string, unknown>, options: { publicOnly: boole
     ];
   }
 
+  // `.lean()`: every caller immediately maps these through `toPublicBrand`/
+  // `toAdminBrand`, both plain-field readers with no document methods — a
+  // full Mongoose document here is discarded work.
   const [documents, total] = await Promise.all([
-    Brand.find(filter).sort(sort).skip(skip).limit(limit).exec(),
+    Brand.find(filter).sort(sort).skip(skip).limit(limit).lean().exec(),
     Brand.countDocuments(filter).exec(),
   ]);
 
-  return { documents, meta: buildMeta(total, page, limit) };
+  return { documents: documents as unknown as IBrand[], meta: buildMeta(total, page, limit) };
 }
 
 async function getBySlug(slug: string, options: { publicOnly: boolean }): Promise<IBrand> {

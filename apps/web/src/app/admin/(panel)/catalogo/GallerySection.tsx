@@ -13,9 +13,9 @@ import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/lib/api/error";
 import { moveImage } from "@/lib/catalog/gallery";
 import { cn } from "@/lib/cn";
+import { MAX_GALLERY_IMAGES } from "./catalog-limits";
 
-/** Mirrors `MAX_GALLERY_IMAGES` in `apps/api/src/models/schemas/product-image.schema.ts`. */
-export const MAX_GALLERY_IMAGES = 15;
+export { MAX_GALLERY_IMAGES };
 
 /** Mirrors `MAX_FILE_SIZE_BYTES` in `apps/api/src/middlewares/upload-images.ts`. */
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;

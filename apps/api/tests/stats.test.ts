@@ -118,6 +118,22 @@ describe("Admin stats", () => {
     expect(res.body.data.overview.alerts.awaitingSupplierConfirmation).toBe(1);
   });
 
+  it("counts a paid order not yet moved to processing as a newOrders alert", async () => {
+    const app: App = buildApp();
+    const adminCookie = await createAdminSession(app);
+
+    await seedOrder({ status: "paid", createdAt: new Date() });
+    // A `processing` order is already being worked — it must not count as "new".
+    await seedOrder({ status: "processing", createdAt: new Date() });
+
+    const res = await request(app)
+      .get(`${ADMIN}/stats/overview?preset=today`)
+      .set("Cookie", adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.overview.alerts.newOrders).toBe(1);
+  });
+
   it("counts revenue only from orders inside the requested window", async () => {
     const app: App = buildApp();
     const adminCookie = await createAdminSession(app);
@@ -188,8 +204,17 @@ describe("Admin stats", () => {
 
     expect(res.status).toBe(200);
     const { ordersByDay } = res.body.data.stats;
-    expect(ordersByDay).toHaveLength(1);
-    expect(ordersByDay[0].date).toBe("2026-08-17");
+    // Zero-filled across the whole window (store-time days 2026-08-15/16/17
+    // for this UTC range) — the order itself only lands on the last one.
+    expect(ordersByDay).toHaveLength(3);
+    expect(ordersByDay.map((point: { date: string }) => point.date)).toEqual([
+      "2026-08-15",
+      "2026-08-16",
+      "2026-08-17",
+    ]);
+    expect(ordersByDay[0].revenueCents).toBe(0);
+    expect(ordersByDay[1].revenueCents).toBe(0);
+    expect(ordersByDay[2].revenueCents).toBe(1_000_00);
   });
 
   it("reports previous: null when the preceding equivalent window has no orders at all", async () => {
