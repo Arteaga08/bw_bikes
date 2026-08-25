@@ -53,3 +53,16 @@ if (typeof window !== "undefined" && !window.IntersectionObserver) {
   }
   window.IntersectionObserver = NoopIntersectionObserver as unknown as typeof IntersectionObserver;
 }
+
+// jsdom doesn't implement `ResizeObserver` either — `CategoryCarousel` needs
+// the constructor present to recompute its arrow-visibility edges on resize,
+// even for tests that never trigger a real resize. Same shared-stub shape as
+// `matchMedia`/`IntersectionObserver` above.
+if (typeof window !== "undefined" && !window.ResizeObserver) {
+  class NoopResizeObserver implements ResizeObserver {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  window.ResizeObserver = NoopResizeObserver as unknown as typeof ResizeObserver;
+}

@@ -13,7 +13,12 @@ import { publicApiFetch } from "./public";
  * accordion is more visible to a shopper than a stale hero slide).
  */
 export async function getPublicBikeCategoryTree(): Promise<PublicCategoryTreeNode[]> {
-  const res = await publicApiFetch<{ tree: PublicCategoryTreeNode[] }>("/bike-categories/tree", {
+  // `/catalog` prefix required — `bike-categories/tree` is mounted under
+  // `/api/v1/catalog` (`apps/api/src/routes/index.ts`), not at the API root.
+  // Fixed 2026-08-25: the bare path 404'd silently because `ApiError` here is
+  // always caught by the caller (`(storefront)/layout.tsx`, `HomeCategories`),
+  // so the nav accordion was rendering empty with no visible error.
+  const res = await publicApiFetch<{ tree: PublicCategoryTreeNode[] }>("/catalog/bike-categories/tree", {
     revalidateSeconds: 300,
   });
   return res.data.tree;
