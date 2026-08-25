@@ -53,13 +53,19 @@ export const specTemplateListQuerySchema = flatCatalogListQuerySchema;
 export const sizeTemplateListQuerySchema = flatCatalogListQuerySchema;
 export const colorTemplateListQuerySchema = flatCatalogListQuerySchema;
 
-/** Shared by both product catalogs; `isActive` is admin-only (public lists force it to true). */
+/**
+ * Shared by both product catalogs; `isActive` is admin-only (public lists force
+ * it to true). `isNewArrival` is not admin-only — the storefront's "Novedades" rail
+ * (M12) is exactly a public `?isNewArrival=true` read, and the admin catalog reuses
+ * the same filter to answer "which ones did I flag?".
+ */
 const productFilters = {
   ...pagination,
   category: objectId.optional().messages({ "string.pattern.base": "La categoría es inválida." }),
   brand: Joi.string().trim().max(60).optional(),
   minPrice: priceCents.optional(),
   maxPrice: priceCents.optional(),
+  isNewArrival: Joi.boolean().optional(),
 };
 
 export const publicProductListQuerySchema = Joi.object({

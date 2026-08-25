@@ -15,6 +15,8 @@ export interface CatalogFiltersValue {
   /** The brand's `slug` (see `adminProductListQuerySchema`'s `brand` param) — never a raw id or free text. */
   brand: string;
   isActive: "" | "true" | "false";
+  /** The home's "Novedades" curation flag (`Bike.isNewArrival`), not a badge. */
+  isNewArrival: "" | "true" | "false";
   sort: string;
 }
 
@@ -25,10 +27,19 @@ export interface CatalogFiltersProps {
   brands: AdminBrand[];
 }
 
-export const DEFAULT_FILTERS: CatalogFiltersValue = { search: "", category: "", brand: "", isActive: "", sort: "-createdAt" };
+export const DEFAULT_FILTERS: CatalogFiltersValue = {
+  search: "",
+  category: "",
+  brand: "",
+  isActive: "",
+  isNewArrival: "",
+  sort: "-createdAt",
+};
 
 /** Fields the mobile "Filtros" sheet owns — `search` stays out because it's always visible on its own. */
-const SHEET_FIELDS = ["category", "brand", "isActive", "sort"] as const satisfies ReadonlyArray<keyof CatalogFiltersValue>;
+const SHEET_FIELDS = ["category", "brand", "isActive", "isNewArrival", "sort"] as const satisfies ReadonlyArray<
+  keyof CatalogFiltersValue
+>;
 
 function countActiveFilters(value: CatalogFiltersValue): number {
   return SHEET_FIELDS.filter((field) => value[field] !== DEFAULT_FILTERS[field]).length;
@@ -104,6 +115,21 @@ function StatusSelect({ value, onChange, wrapperClassName }: SharedFieldProps) {
   );
 }
 
+function NewArrivalSelect({ value, onChange, wrapperClassName }: SharedFieldProps) {
+  return (
+    <Select
+      label="Novedad"
+      wrapperClassName={wrapperClassName}
+      value={value.isNewArrival}
+      onChange={(event) => onChange({ ...value, isNewArrival: event.target.value as CatalogFiltersValue["isNewArrival"] })}
+    >
+      <option value="">Todos</option>
+      <option value="true">Marcados</option>
+      <option value="false">Sin marcar</option>
+    </Select>
+  );
+}
+
 function SortSelect({ value, onChange, wrapperClassName }: SharedFieldProps) {
   return (
     <Select label="Ordenar por" wrapperClassName={wrapperClassName} value={value.sort} onChange={(event) => onChange({ ...value, sort: event.target.value })}>
@@ -151,6 +177,7 @@ export function CatalogFilters({ value, onChange, categoryTree, brands }: Catalo
         <CategorySelect value={value} onChange={onChange} categoryTree={categoryTree} />
         <BrandSelect value={value} onChange={onChange} brands={brands} />
         <StatusSelect value={value} onChange={onChange} />
+        <NewArrivalSelect value={value} onChange={onChange} />
         <SortSelect value={value} onChange={onChange} />
       </div>
 
@@ -173,6 +200,7 @@ export function CatalogFilters({ value, onChange, categoryTree, brands }: Catalo
           <CategorySelect value={value} onChange={onChange} categoryTree={categoryTree} wrapperClassName="w-full" />
           <BrandSelect value={value} onChange={onChange} brands={brands} wrapperClassName="w-full" />
           <StatusSelect value={value} onChange={onChange} wrapperClassName="w-full" />
+          <NewArrivalSelect value={value} onChange={onChange} wrapperClassName="w-full" />
           <SortSelect value={value} onChange={onChange} wrapperClassName="w-full" />
         </div>
       </SlideOver>

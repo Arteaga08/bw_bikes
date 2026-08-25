@@ -148,7 +148,13 @@ const compareAtPrice = priceCents.greater(Joi.ref("price")).messages({
   "number.greater": "El precio anterior debe ser mayor al precio actual.",
 });
 
-/** Fields shared by both catalogs. Neither `isActive` nor `archivedAt` is ever accepted from a payload. */
+/**
+ * Fields shared by both catalogs. Neither `isActive` nor `archivedAt` is ever
+ * accepted from a payload — those are server-owned lifecycle state, mutated
+ * only through the archive/restore routes. `isNewArrival` is the opposite case and
+ * belongs here: it's merchandising curation the admin sets by hand, no
+ * different from `badges`.
+ */
 const productBase = {
   name,
   slug: slug.optional(),
@@ -160,6 +166,7 @@ const productBase = {
   variants: variants.optional(),
   specGroups: specGroups.optional(),
   badges: badges.optional(),
+  isNewArrival: Joi.boolean().optional(),
 };
 
 const relatedAccessories = Joi.array()

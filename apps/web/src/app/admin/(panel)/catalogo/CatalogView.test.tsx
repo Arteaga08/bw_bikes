@@ -26,6 +26,7 @@ function makeBike(overrides: Partial<AdminBike> = {}): AdminBike {
     gallery: [],
     badges: [],
     relatedAccessories: [],
+    isNewArrival: false,
     isActive: true,
     archivedAt: null,
     createdAt: new Date().toISOString(),

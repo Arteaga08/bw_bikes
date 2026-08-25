@@ -80,6 +80,7 @@ export function CatalogView({ kind, categoryTree, brands }: CatalogViewProps) {
       ...(filters.category ? { category: filters.category } : {}),
       ...(filters.brand.trim() ? { brand: filters.brand.trim() } : {}),
       ...(filters.isActive ? { isActive: filters.isActive === "true" } : {}),
+      ...(filters.isNewArrival ? { isNewArrival: filters.isNewArrival === "true" } : {}),
     }),
     [page, filters],
   );

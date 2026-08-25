@@ -18,6 +18,7 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { Suspense, useEffect, useRef, useState } from "react";
+import { Toggle } from "@/components/ui/Toggle";
 import { useToast } from "@/hooks/use-toast";
 import type { AccessoryInput, BikeInput } from "@/lib/api/admin-catalog";
 import { adminAccessoriesApi, adminBikesApi } from "@/lib/api/admin-catalog";
@@ -248,6 +249,7 @@ function ProductEditorContent({
     return colors;
   })();
   const [badgeIds, setBadgeIds] = useState<string[]>(() => initialProduct?.badges.map((badge) => badge.id) ?? []);
+  const [isNewArrival, setIsNewArrival] = useState<boolean>(() => initialProduct?.isNewArrival ?? false);
 
   const [currentStepId, setCurrentStepId] = useState<EditorStepId>(() => initialStepIdFrom(searchParams));
   // Which steps the admin can jump straight to from the stepper. `edit`
@@ -477,6 +479,7 @@ function ProductEditorContent({
       ...(compareAtPriceCents !== null ? { compareAtPrice: compareAtPriceCents } : {}),
       variants: resolvedVariants,
       badges: badgeIds,
+      isNewArrival,
       // The sheet only rides along on create — on edit it's its own PUT,
       // fired below once the product itself has saved.
       ...(mode === "create" ? { specGroups } : {}),
@@ -612,6 +615,18 @@ function ProductEditorContent({
               count={{ current: badgeIds.length, max: MAX_PRODUCT_BADGES }}
             >
               <BadgesPicker available={availableBadges} selected={badgeIds} onChange={setBadgeIds} />
+            </EditorSection>
+
+            {/* Curation, so it sits next to Badges — but a separate section
+                because it isn't one: a badge is a label the shopper reads on
+                the card, this only decides which products the home's
+                "Novedades" rail picks up. */}
+            <EditorSection
+              id="section-novedad"
+              title="Novedad"
+              description="Aparece en la sección Novedades del inicio, que muestra los 10 productos marcados más recientes."
+            >
+              <Toggle label="Marcar como novedad" checked={isNewArrival} onChange={setIsNewArrival} />
             </EditorSection>
           </>
         );

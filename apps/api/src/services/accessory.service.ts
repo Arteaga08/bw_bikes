@@ -33,6 +33,7 @@ export interface AccessoryInput {
   variants?: ProductVariant[];
   specGroups?: SpecGroup[];
   badges?: string[];
+  isNewArrival?: boolean;
 }
 
 /** Storefront DTO — same contract as `toPublicBike`, minus the bike-only fields. */
@@ -60,6 +61,8 @@ export function toPublicAccessory(accessory: IAccessory): PublicAccessory {
     variants: accessory.variants.filter((variant) => variant.isActive),
     specGroups: [...accessory.specGroups].sort((a, b) => a.order - b.order),
     gallery: [...accessory.gallery].sort((a, b) => a.order - b.order),
+    // `isNewArrival` omitted, `createdAt` shipped — see `toPublicBike` for why.
+    createdAt: accessory.createdAt.toISOString(),
   };
 }
 
@@ -88,6 +91,7 @@ export function toAdminAccessory(accessory: IAccessory): AdminAccessory {
     variants: accessory.variants,
     specGroups: [...accessory.specGroups].sort((a, b) => a.order - b.order),
     gallery: [...accessory.gallery].sort((a, b) => a.order - b.order),
+    isNewArrival: accessory.isNewArrival,
     isActive: accessory.isActive,
     archivedAt: accessory.archivedAt ? accessory.archivedAt.toISOString() : null,
     createdAt: accessory.createdAt.toISOString(),
@@ -128,6 +132,7 @@ async function create(input: AccessoryInput, actor: ActorContext): Promise<IAcce
           specGroups: input.specGroups ?? [],
           gallery: [],
           badges: badges.map((id) => new Types.ObjectId(id)),
+          isNewArrival: input.isNewArrival ?? false,
         },
       ],
       { session },
@@ -199,6 +204,7 @@ async function update(id: string, input: AccessoryInput, actor: ActorContext): P
   if (input.price !== undefined) accessory.price = input.price;
   if (input.compareAtPrice !== undefined) accessory.compareAtPrice = input.compareAtPrice;
   if (input.specGroups !== undefined) accessory.specGroups = input.specGroups;
+  if (input.isNewArrival !== undefined) accessory.isNewArrival = input.isNewArrival;
 
   let seededInventory: Awaited<ReturnType<typeof inventoryService.seedInitialStock>> = [];
 

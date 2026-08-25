@@ -32,6 +32,7 @@ export interface IBike extends Document {
   gallery: ProductImage[];
   relatedAccessories: Types.ObjectId[];
   badges: Types.ObjectId[];
+  isNewArrival: boolean;
   isActive: boolean;
   archivedAt?: Date | null;
   createdAt: Date;
@@ -118,6 +119,16 @@ const bikeSchema = new Schema<IBike>(
       },
     },
 
+    // Curation flag for the home's "Novedades" rail (M12). Deliberately not
+    // the "Novedad" badge above: `MAX_PRODUCT_BADGES` is 1, so reusing it
+    // would spend the product's only badge slot, and it would tie which
+    // products the home features to which visual label they wear.
+    //
+    // Named `isNewArrival`, not `isNew`: Mongoose reserves `Document.isNew`
+    // for "this document hasn't been saved yet", so a field by that name is
+    // rejected by the schema definition outright.
+    isNewArrival: { type: Boolean, default: false },
+
     // Archiving is a logical delete: a bike that was ever purchasable keeps
     // existing so inventory (M4) and order history (M5) never point at a hole.
     isActive: { type: Boolean, default: true },
@@ -131,5 +142,7 @@ const bikeSchema = new Schema<IBike>(
 bikeSchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
 // The storefront's primary query: active bikes of a category, cheapest first.
 bikeSchema.index({ category: 1, isActive: 1, price: 1 });
+// The home's "Novedades" rail: the newest flagged bikes still on sale.
+bikeSchema.index({ isNewArrival: 1, isActive: 1, createdAt: -1 });
 
 export const Bike = model<IBike>("Bike", bikeSchema);

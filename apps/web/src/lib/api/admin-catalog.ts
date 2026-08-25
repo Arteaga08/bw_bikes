@@ -32,6 +32,7 @@ export interface AdminProductListParams {
   size?: string;
   color?: string;
   isActive?: boolean;
+  isNewArrival?: boolean;
 }
 
 /**
@@ -52,6 +53,7 @@ function buildProductListQuery(params: AdminProductListParams): string {
   if (params.size) entries.push(["size", params.size]);
   if (params.color) entries.push(["color", params.color]);
   if (params.isActive !== undefined) entries.push(["isActive", String(params.isActive)]);
+  if (params.isNewArrival !== undefined) entries.push(["isNewArrival", String(params.isNewArrival)]);
 
   const query = new URLSearchParams(entries).toString();
   return query ? `?${query}` : "";
@@ -103,6 +105,7 @@ interface ProductBasicsInput {
   variants?: ProductVariantInput[];
   specGroups?: SpecGroup[];
   badges?: string[];
+  isNewArrival?: boolean;
 }
 
 export interface BikeInput extends ProductBasicsInput {

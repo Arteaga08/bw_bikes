@@ -1620,3 +1620,72 @@ darán 404 hasta que esas entregas lleguen — esperado); las otras siete seccio
 programar slides por fecha; video de fondo; A/B testing.
 
 ---
+
+### Entrega 4/10 — Banner de marca (marquee de logos)
+
+Agrega la cuarta sección del home: un marquee infinito con los logos de las marcas activas del
+catálogo (`Brand.logo`, ya existente desde M3). Primera sección oscura de la home — Hero y
+"Explorar Bicicletas" (entrega 3) corren sobre `bg-base`; acá se rompe deliberadamente ese ritmo de
+card stack claro (fondo `bg-overlay` `#0A0A0A`), decisión de diseño confirmada con la skill
+`impeccable` sobre `PRODUCT.md`/`DESIGN.md` del proyecto.
+
+**Entregado:**
+- `getPublicBrands()` en `apps/web/src/lib/api/public-catalog.ts` — mismo seam que
+  `getPublicBikeCategoryTree`, contra `GET /catalog/brands` (ya existía desde M3, `listPublicBrands`
+  en `brand.controller.ts`). Pasa `limit=100` explícito: el endpoint pagina por default a 20
+  resultados (`DEFAULT_LIMIT`/`MAX_LIMIT` en `apps/api/src/utils/list-query.ts`), y sin el límite
+  explícito el marquee habría truncado el catálogo de marcas en silencio pasadas las primeras 20.
+- `components/storefront/brands/`: `HomeBrands` (Server Component, mismo contrato de degradación que
+  `HomeCategories` — una marca sin `logo` subido no aparece, y si ninguna tiene logo la sección
+  entera no se renderiza) y `BrandMarquee` (`"use client"`, track de traslación CSS pura vía
+  `--animate-brand-marquee` en `globals.css`, sin librería nueva). Tres copias del set de marcas
+  (`role="list"` visible + dos copias `aria-hidden="true"`) para un loop continuo sin salto y sin
+  hueco visible en pantallas anchas con pocas marcas.
+- **Tratamiento visual, iterado tras ver assets reales subidos por el admin** (Cannondale, Cube,
+  Orbea, Specialized, Trek): el primer intento (tarjeta blanca + `grayscale`) no funcionaba porque el
+  logo de Orbea llegó como JPG opaco con su propio fondo — la tarjeta blanca generaba un doble
+  recuadro. Se reemplazó por 3 mockups (`impeccable`, comparados en un artifact con el asset real) y
+  Manuel eligió combinar dos: fila editorial con hairlines verticales entre logos (`border-l
+  border-blanco/10`, sin dimming, color real) + un subrayado dorado que crece desde el centro en
+  hover, el mismo gesto que ya usa `CategoryCard` — la sección se siente parte del sistema en vez de
+  un tratamiento nuevo.
+- **Tamaño uniforme:** cada logo va en una caja de tamaño fijo (`h-10 w-28`/`sm:h-12 sm:w-32`) con
+  `object-contain` — sin esto, cada logo se veía a escala distinta según su propio aspect ratio (el
+  wordmark ancho de Cube vs. el cuadrado de Orbea).
+- **Inversión automática solo para logos oscuros sobre transparencia:** con 5 marcas reales cargadas,
+  Trek (wordmark negro puro sobre PNG con alfa) se volvía invisible sobre el fondo negro — un bug
+  real, no un hueco del loop. `lib/catalog/logo-luminance.ts` muestrea cada logo en un canvas oculto
+  (24×24, memoizado por URL) y decide invertir **solo** si el asset tiene transparencia real *y* su
+  trazo opaco es oscuro; un logo opaco de color (el rojo de Cannondale) nunca se toca — invertirlo
+  cambiaría su color de marca en vez de resolver contraste. `hooks/use-dark-logo.ts` expone el
+  resultado; empieza en `false` mientras el análisis corre, así que nunca hay un parpadeo de
+  "invertido de más". Decisión de Manuel tras comparar tres alternativas (tinte translúcido siempre,
+  dejarlo como responsabilidad del admin, o invertir automáticamente solo lo oscuro).
+- Marquee se pausa en hover (`animation-play-state: paused`) y se congela por completo bajo
+  `prefers-reduced-motion` (una sola copia montada, sin la clase de animación).
+- `apps/web/src/app/(storefront)/page.tsx`: `<HomeBrands />` insertado entre `<HomeCategories />` y
+  el placeholder de las secciones restantes.
+
+**Verificado:**
+```
+pnpm --filter web typecheck   → limpio
+pnpm --filter web lint        → limpio (1 warning preexistente en OrdersByDayChart.test.tsx, no
+                                 relacionado)
+pnpm --filter web test        → 455/456 pasan (incluye 2 nuevos de BrandMarquee.test.tsx); el 1 roto
+                                 es CategoryFormModal.test.tsx, preexistente en `main` sin ningún
+                                 cambio de esta entrega (confirmado con `git stash` + re-run) — mismo
+                                 caso ya documentado en la entrega 2.
+```
+Verificación visual con los 5 logos reales confirmada por Manuel en navegador (`localhost:3000`)
+tras las dos rondas de ajuste de arriba.
+
+**Sin test unitario:** `logo-luminance.ts` depende de `HTMLCanvasElement`/`Image` reales del
+navegador (decodificar el asset, leer píxeles) — el repo no tiene infraestructura de mock de canvas
+en jsdom, y montarla solo para esta utilidad no se justificó; queda cubierto por la verificación
+visual de arriba, mismo criterio que ya aplica `HomeCategories`/`HomeBrands` (sin test directo,
+cubiertos por sus hijos + verificación visual).
+
+**Fuera de esta entrega:** ajustar duración/velocidad del marquee contra un catálogo de marcas más
+grande; las cinco secciones restantes de la home.
+
+---

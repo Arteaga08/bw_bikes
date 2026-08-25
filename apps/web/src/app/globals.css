@@ -177,6 +177,21 @@
       transform: none;
     }
   }
+
+  /* ---- Marquee de marcas (M12, "banner de marca") ----
+     Traslada el track -33.333% (tres copias idénticas del mismo set de
+     logos) para un loop continuo sin salto visible al reiniciar. Solo
+     `transform`, nunca layout. */
+  --animate-brand-marquee: brand-marquee 28s linear infinite;
+
+  @keyframes brand-marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-33.3333%);
+    }
+  }
 }
 
 :root {

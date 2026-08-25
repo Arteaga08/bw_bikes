@@ -273,6 +273,14 @@ interface PublicProductBase {
   variants: ProductVariant[];
   specGroups: SpecGroup[];
   gallery: ProductImage[];
+  /**
+   * The one timestamp the storefront does need: the home's "Novedades" rail
+   * (M12) merges bikes and accessories into a single list and has to order the
+   * result by recency, which it can't do from two separately-sorted responses
+   * without a date to compare. The curation flag behind that rail
+   * (`Bike.isNewArrival`) stays admin-only — the rail filters by it, never paints it.
+   */
+  createdAt: string;
 }
 
 /**
@@ -310,13 +318,19 @@ export interface AdminCategory extends PublicCategory {
  * base. Two differences from `PublicProductBase` matter:
  * - `variants` is the **full** array, not filtered to `isActive` — the admin
  *   has to be able to re-enable a variant it turned off.
- * - `isActive`/`archivedAt`/timestamps are present — internal fields the
+ * - `isActive`/`archivedAt`/`updatedAt` are present — internal fields the
  *   storefront DTO deliberately omits, per `PublicBike`'s own doc comment.
+ *   (`createdAt` is the exception: it's already on `PublicProductBase`.)
  */
 interface AdminProductBase extends PublicProductBase {
+  /**
+   * Curation flag for the home's "Novedades" rail (M12), set by hand from the
+   * product editor. Admin-only: the storefront reads it as a query filter
+   * (`?isNewArrival=true`), never as a field on the response.
+   */
+  isNewArrival: boolean;
   isActive: boolean;
   archivedAt: string | null;
-  createdAt: string;
   updatedAt: string;
 }
 

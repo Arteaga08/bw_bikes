@@ -17,6 +17,7 @@ export interface IAccessory extends Document {
   specGroups: SpecGroup[];
   gallery: ProductImage[];
   badges: Types.ObjectId[];
+  isNewArrival: boolean;
   isActive: boolean;
   archivedAt?: Date | null;
   createdAt: Date;
@@ -78,6 +79,10 @@ const accessorySchema = new Schema<IAccessory>(
       },
     },
 
+    // Same curation flag as `Bike.isNewArrival` — the home's "Novedades" rail mixes
+    // both catalogs, so both carry it.
+    isNewArrival: { type: Boolean, default: false },
+
     isActive: { type: Boolean, default: true },
     archivedAt: { type: Date, default: null },
   },
@@ -86,5 +91,6 @@ const accessorySchema = new Schema<IAccessory>(
 
 accessorySchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
 accessorySchema.index({ category: 1, isActive: 1, price: 1 });
+accessorySchema.index({ isNewArrival: 1, isActive: 1, createdAt: -1 });
 
 export const Accessory = model<IAccessory>("Accessory", accessorySchema);

@@ -1,4 +1,4 @@
-export interface CategoryCarouselProgressProps {
+export interface ScrollRailProgressProps {
   /** Fraction of the track already scrolled past, 0–1. */
   scrollRatio: number;
   /** Fraction of the track's total width the viewport shows at once, 0–1. */
@@ -7,7 +7,7 @@ export interface CategoryCarouselProgressProps {
 
 /**
  * Mobile-only scroll indicator — Manuel's call after seeing the mobile
- * screenshot: on touch there's no hover, so `CategoryCarouselArrows` never
+ * screenshot: on touch there's no hover, so `ScrollRailArrows` never
  * appears and a shopper has no visual cue this row scrolls. `sm:hidden`
  * because from `sm` up the arrows already do that job on hover/focus; two
  * indicators for the same thing would be redundant chrome.
@@ -17,7 +17,7 @@ export interface CategoryCarouselProgressProps {
  * dash per slide — there's no discrete "slide index" here, just a scroll
  * position.
  */
-export function CategoryCarouselProgress({ scrollRatio, visibleRatio }: CategoryCarouselProgressProps) {
+export function ScrollRailProgress({ scrollRatio, visibleRatio }: ScrollRailProgressProps) {
   if (visibleRatio >= 1) return null;
 
   // The thumb's own width is `visibleRatio` of the track; a translateX

@@ -28,6 +28,7 @@ export interface ProductDocument extends Document {
   specGroups: SpecGroup[];
   gallery: ProductImage[];
   badges: Types.ObjectId[];
+  isNewArrival: boolean;
   isActive: boolean;
   archivedAt?: Date | null;
   createdAt: Date;
@@ -154,6 +155,12 @@ export function createProductService<TDoc extends ProductDocument>(
       Object.assign(filter, PUBLIC_VISIBILITY);
     } else if (typeof query["isActive"] === "boolean") {
       filter["isActive"] = query["isActive"];
+    }
+
+    // Unlike `isActive`, this one applies in both scopes: the storefront's
+    // "Novedades" rail reads it publicly, the admin catalog filters by it too.
+    if (typeof query["isNewArrival"] === "boolean") {
+      filter["isNewArrival"] = query["isNewArrival"];
     }
 
     const category = query["category"];
