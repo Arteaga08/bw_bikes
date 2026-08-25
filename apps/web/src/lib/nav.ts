@@ -8,6 +8,7 @@ import {
   Gear,
   Handshake,
   House,
+  Image,
   ListChecks,
   Package,
   Ruler,
@@ -121,6 +122,20 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         href: "/admin/catalogo/accesorios",
         icon: Package,
         keywords: ["catalogo", "accesorios", "productos"],
+      },
+    ],
+  },
+  {
+    // The storefront's editorial content — currently just the home hero,
+    // which is why this is its own section rather than folded into
+    // "Sistema": it isn't config, it's what a visitor sees.
+    title: "Contenido",
+    items: [
+      {
+        label: "Hero de inicio",
+        href: "/admin/contenido/inicio",
+        icon: Image,
+        keywords: ["hero", "inicio", "carrusel", "home", "banner"],
       },
     ],
   },

@@ -17,7 +17,7 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M9 — Órdenes y cola de confirmación | 2 | ✅ Hecho (mergeado); verificación Stripe pospuesta a M10 | `feat/m09-ordenes` (mergeado) | Ver `docs/DESIGN_REFERENCES.md`. Ver detalle abajo |
 | M10 — Catálogo en admin | 2 | ✅ Funcionalmente hecho; ⚠️ verificación Stripe en curso | `feat/m10-catalogo-admin` (en `main`, commit directo sin `merge:` propio) | Ver detalle abajo |
 | M11 — Inventario, solicitudes, settings, analítica, auditoría | 2 | ✅ Hecho (mergeado); cierra la fase 2 | `feat/m11-inventario-settings` (mergeado, rama borrada) | Ver detalle abajo y `docs/DESIGN_REFERENCES.md` |
-| M12 — Catálogo público | 3 | ⏳ Pendiente | — | |
+| M12 — Catálogo público | 3 | 🚧 En progreso — home sección por sección, entrega 2/10 (hero) | — | Ver detalle abajo |
 | M13 — Carrito, checkout y cuenta | 3 | ⏳ Pendiente | — | |
 | M14 — Embajadores, patrocinios y SEO | 3 | ⏳ Pendiente | — | |
 | M15 — Correos y alertas logísticas | 4 | ⏳ Pendiente | — | |
@@ -1296,3 +1296,261 @@ revisión y aprobación explícita de Manuel.
 `orders.stats.ts`) y la comparación contra el periodo anterior (`OrdersStats.previous`, misma ventana
 que el rango solicitado) — ambos tachados arriba. Ver `apps/api/src/services/stats/orders.stats.ts`
 y `packages/shared/src/types/stats.ts`.
+
+---
+
+## M12 — Catálogo público 🚧 en progreso
+
+Arranca la fase 3. `apps/web` solo tenía `/admin` hasta ahora — `app/page.tsx` redirigía a
+`/admin` con un comentario literal de que el storefront llegaría en M12–M14. Por decisión explícita
+de Manuel, la home se construye **sección por sección** (navbar → hero → tipo de bicis → banner de
+marca → bestseller → comprar bicis/accesorios → favoritos de los clientes → descubre tu bici →
+sucursal → footer), cada una su propia entrega revisable, sin archivos de miles de líneas.
+
+Diseño: `handoff/Black_and_White_Bikes_Mockups.pdf` (pantalla 01 = Home) y
+`handoff/DESIGN_SYSTEM.md` §5.1–5.2 (reglas del rinoceronte por pantalla) ya existían al arrancar
+— el brainstorming de M12 los usó como fuente visual en vez de re-diseñar desde cero.
+
+### Entrega 1/10 — Shell del storefront + Navbar
+
+**Entregado:**
+- `apps/web/src/app/(storefront)/layout.tsx` + `page.tsx`: abre `/` como route group público
+  (`SkipLink` + `Navbar` + `<main>`). `app/page.tsx` (el redirect a `/admin`) se borró — las dos
+  rutas habrían colisionado en `/`. `/admin` no cambia: sigue su propio `metadata` y su propio
+  guard, sin tocar.
+- `apps/web/src/components/storefront/`: `Navbar` (Server Component, compone el resto),
+  `Wordmark`, `StorefrontNavLinks` (`"use client"`, estado activo vía `usePathname`),
+  `NavbarActions` (Buscar/Cuenta/Carrito), `MobileMenu` (`"use client"`, drawer con focus trap —
+  mismo patrón que `Sidebar` del admin, sin `MobileNavContext` porque nada más en este shell
+  necesita el estado del drawer).
+- `apps/web/src/lib/storefront-nav.ts`: los cuatro destinos del mockup (Bicicletas, Eléctricas,
+  Accesorios, Compromiso) y `isStorefrontNavItemActive` (prefix match, mismo criterio que
+  `Sidebar`'s `isItemActive` del admin).
+- `SkipLink.tsx` ganó un `targetId` opcional (default `"panel-content"`, el storefront pasa
+  `"contenido"`) — reuso, no duplicado.
+- `app/layout.tsx`: la `metadata` raíz pasa de describir el panel admin a describir el sitio
+  público (el admin ya tenía la suya propia desde M8, así que no pierde nada).
+
+**Bug real encontrado y corregido en la verificación visual:** en 390px (iPhone estándar), Buscar +
+Cuenta + Carrito + hamburguesa (cuatro cuadros de 44px) no cabían junto al wordmark — Carrito y el
+menú se salían de la pantalla. `NavbarActions` oculta Buscar/Cuenta bajo `md` con `max-md:hidden`
+(Carrito y el menú siempre visibles — el patrón estándar de e-commerce). Un primer intento con
+`hidden md:inline-flex` falló en silencio: chocaba con el `inline-flex` que `Button` ya trae
+incondicionalmente en `CONTROL_CLASSES` — dos utilidades sin prefijo peleando por `display` en el
+mismo elemento, exactamente el caso que `lib/cn.ts` documenta ("generated-CSS order, not string
+order"). `max-md:` es una variante con media query, así que gana siempre sin ambigüedad.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm typecheck   (shared + api + web)  → limpio
+pnpm lint                              → limpio (1 warning preexistente, no relacionado)
+pnpm --filter @bw-bikes/web test       → 4 archivos nuevos, 15/15 pasan
+pnpm build                             → limpio, `/` sale como ruta estática
+```
+Verificación visual con Playwright contra un build de producción limpio (`next build` + `next
+start`, no `next dev` — el CLI de captura de Edge headless resultó no confiable contra Turbopack en
+dev, capturaba antes del pintado completo): desktop con navbar completa, móvil cerrado (Carrito +
+hamburguesa sin overflow, Buscar/Cuenta ocultos), móvil con el drawer abierto mostrando los cuatro
+enlaces.
+
+**Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
+- **"Eléctricas" apunta a `/bicicletas?categoria=electrica`, no a una ruta propia.** El árbol real
+  de categorías (`GET /catalog/bike-categories/tree`) hoy solo tiene datos de prueba ("Ruta"/
+  "Endurence", sin "Eléctrica" todavía) — el slug es el que se espera que use la categoría real
+  cuando Manuel la capture, no uno verificado en vivo. Revisar `storefront-nav.ts` si termina
+  siendo otro.
+- **Cuenta y Carrito quedan `disabled`, no omitidos.** Son de M13; renderizarlos ya con su
+  proporción final evita que M13 tenga que re-maquetar la barra — solo cambia cada `Button` por un
+  control real.
+- Iconos de Phosphor: `@phosphor-icons/react/ssr` en los Server Components de este shell
+  (`NavbarActions`), `@phosphor-icons/react` (entrada normal) en los Client Components
+  (`MobileMenu`) — mismo patrón que `QuickLinks.tsx`/`StatCard.tsx` del admin.
+
+**Fuera de esta entrega:** las nueve secciones de la home (placeholder en `page.tsx` por ahora);
+`publicApiFetch` (nace en la entrega 3, la primera que consume datos); el footer (entrega 10).
+
+> **Revisión (ronda 2, 2026-08-24):** al revisar la entrega 1, Manuel pidió un rediseño con
+> `orbea.com/es-mx` de referencia — logo centrado, enlaces a la izquierda, subrayado dorado creciendo
+> desde el centro, navbar transparente sobre el hero que se vuelve sólido al hacer scroll. Registro de
+> diseño: `brand`, no el `product` que declara `PRODUCT.md` — ese archivo describe el panel admin; la
+> superficie en foco aquí es pública, donde el diseño *es* el producto.
+>
+> **El subrayado ya existía.** `DESIGN.md` §5 lo especifica literal ("subrayado que crece desde el
+> centro") y `Button.tsx`/`ButtonLink.tsx` ya lo implementan en la variante `text`. El bug real era que
+> `StorefrontNavLinks.tsx` renderizaba un `<Link>` con clases a mano en vez de `ButtonLink
+> variant="text"` — arreglarlo no necesitó CSS nuevo. Se agregó una prop `active` a
+> `ButtonStyleOptions` (aditiva, default `false`, el admin no cambia) para fijar el subrayado en el
+> enlace de la sección actual — la variante `text` solo tenía estado hover, no "activo persistente".
+>
+> **Enlaces: Bicicletas · Accesorios · Ofertas** (antes cuatro). Eléctricas sale (cabe como filtro de
+> categoría dentro de Bicicletas); Compromiso se mueve al footer (entrega 10). "Ofertas" es un enlace
+> nuevo sin backend detrás todavía: `compareAtPrice` sí está en el DTO público, pero
+> `publicProductListQuerySchema` no acepta ningún filtro "en oferta" — trabajo de API pendiente para
+> quien construya esa página.
+>
+> **Layout:** `grid-cols-3` (no `flex justify-between`) — con lados de ancho muy distinto (tres
+> enlaces contra tres íconos), un flex centra el logo *entre los bloques*, no en el viewport. El
+> logo real queda pendiente; `Wordmark.tsx` sigue con las letras "B/W" como punto de intercambio.
+> `MobileMenu` pasa a entrar desde la izquierda (antes derecha), porque su botón ahora vive en la
+> columna izquierda junto al nav de escritorio.
+>
+> **Transparente sobre el hero, sólido al scrollear** — mecanismo nuevo, no existía ningún patrón de
+> scroll en `apps/web`: `apps/web/src/hooks/use-navbar-overlay.ts` (`useNavbarOverlay`), moldeado
+> sobre `use-media-query.ts`. Contrato: cualquier sección se marca a sí misma con
+> `data-navbar-overlay`; el hook usa `IntersectionObserver` con `rootMargin: "-64px 0px 0px 0px"`
+> (la altura del navbar) para decidir si esa sección todavía cruza la banda bajo la barra. Estado
+> inicial derivado de `usePathname()` contra `NAVBAR_OVERLAY_ROUTES` (hoy solo `/`), para que el HTML
+> de servidor ya salga correcto y no parpadee. El navbar pasa de `sticky` a `fixed`, y renderiza su
+> propio espaciador de 64px — omitido en rutas overlay, donde el hero debe empezar en `y=0` bajo la
+> barra transparente.
+>
+> **Bug preexistente encontrado y corregido: el anillo de foco dorado nunca se veía sobre fondo
+> oscuro, en ningún lugar del sitio.** No es de esta entrega — vive en `globals.css` desde antes, pero
+> se volvió visible al verificar el punto 7 del checklist (anillo de foco en ambos estados del
+> navbar). Causa: la regla global `:focus-visible { outline: ... negro }` en `globals.css` no estaba
+> dentro de ningún `@layer`, y por spec de CSS cascade layers un estilo sin capa gana **siempre**
+> sobre cualquier utilidad de Tailwind (capeada en `theme/base/components/utilities`),
+> independientemente de cuánta especificidad tenga esa utilidad — `focus-visible:outline-dorado`
+> (`Button.tsx`, tono `inverse`) perdía contra el negro fijo en todo control sobre fondo oscuro,
+> incluido el botón "Cerrar sesión" del `Sidebar` admin. Arreglo de una línea: envolver la regla en
+> `@layer base`. Verificado con Playwright leyendo `getComputedStyle(...).outlineColor` antes/después
+> del fix: `rgb(10,10,10)` (negro, roto) → `rgba(242,183,6,...)` (dorado, correcto) sobre el navbar
+> transparente; el estado sólido se confirmó intacto en negro.
+>
+> **Verificado (esta ronda):**
+> ```
+> pnpm --filter @bw-bikes/shared build   → limpio
+> pnpm typecheck   (web)                 → limpio
+> pnpm --filter @bw-bikes/web lint       → limpio (1 warning preexistente, no relacionado)
+> pnpm --filter @bw-bikes/web test       → 433/434 (el 1 roto es de CategoryFormModal.test.tsx,
+>                                           preexistente, sesión ajena, no tocado)
+> pnpm --filter @bw-bikes/web build      → limpio
+> ```
+> Visual con Playwright contra `next build` + `next start` (no `next dev`, ver nota de la entrega 1):
+> transparente arriba del hero, hover con subrayado dorado en ambos estados, sólido tras scrollear
+> más allá del hero (900px con hero `min-h-svh`), móvil 390px sin overflow con hamburguesa/logo/
+> carrito, drawer entrando desde la izquierda, anillo de foco dorado sobre transparente y negro sobre
+> sólido, `/admin` intacto.
+>
+> Dos lecciones de proceso, para la próxima entrega: (1) `pkill -f "next start"` no mata el proceso
+> real — Next lo renombra a `next-server (v16.3.0)` vía `process.title`, invisible a ese patrón; hay
+> que matar por PID. Un servidor de producción que sobrevive así sirve HTML **cacheado en memoria**
+> de antes del rebuild, indistinguible de un bug real hasta que se compara el timestamp del proceso
+> contra el del build. (2) El placeholder de `page.tsx` necesitó `min-h-screen` (no `min-h-[60vh]`)
+> para que hubiera suficiente alto de scroll y el mecanismo transparente→sólido fuera demostrable de
+> verdad, no solo clampeado al tope de la página.
+>
+> **Ajuste (ronda 3, 2026-08-24):** pulido visual pedido por Manuel tras ver la ronda 2 — enlaces más
+> a la izquierda, texto más grande, íconos más grandes con hover dorado.
+> - **Enlaces a la izquierda:** el contenedor tenía `mx-auto max-w-6xl`, un gutter centrado de ~150px
+>   en pantallas anchas antes de que empezara el primer enlace. Se quitó el cap de ancho — el navbar
+>   ahora es edge-to-edge (`px-lg lg:px-2xl`), como `orbea.com`.
+> - **Texto de los enlaces más grande:** el label se envuelve en un `<span className="text-body-l">`
+>   propio en vez de subir el tamaño vía `className` del `ButtonLink` — la variante `text` ya fija
+>   `text-ui` en el `<a>`, y dos utilidades de tamaño sin prefijo en el mismo elemento son la misma
+>   trampa de orden de generación que `max-md:hidden` (ver arriba). Un tamaño en un hijo, en cambio,
+>   solo sobrescribe el valor heredado — sin carrera.
+> - **Íconos más grandes:** `icon-lg` fija el glifo en 20px vía una clase en un `<span>` interno de
+>   `ButtonContent` que el `className` del caller no puede alcanzar. Se resolvió pasando
+>   `style={{width:24,height:24}}` directo al ícono de Phosphor — un `style` inline gana sobre
+>   cualquier regla de hoja de estilos externa apuntando al mismo elemento, sin depender del orden de
+>   generación de Tailwind.
+> - **Hover dorado en Buscar/Cuenta/Carrito, en ambos estados del navbar:** `bare`+`neutral` hoy
+>   hoverea a negro (correcto para las acciones de fila del admin, no para este nav). Cambiarlo en
+>   `Button.tsx` habría afectado cada botón `bare` del panel. Además, los tres íconos siguen
+>   `disabled` (M13 los activa), y `disabled:text-*` gana por defecto sobre un `hover:*` plano del
+>   mismo nivel — perdería contra el estado disabled, no solo contra el hover propio de `bare`. Se
+>   resolvió con `hover:!text-dorado` (con `!`) — el único mecanismo que gana determinísticamente
+>   sobre ambos sin tocar `Button.tsx`. El color es puramente cosmético: `disabled` sigue bloqueando
+>   el click y sacando el control del tab order.
+>
+> Verificado igual que las rondas anteriores (`typecheck`/`lint`/`test`/`build` limpios, visual con
+> Playwright contra `next build`+`next start`): 18/18 tests de storefront, hover dorado confirmado en
+> los tres íconos y en los tres enlaces, en ambos estados del navbar, sin overflow en 390px.
+
+### Entrega 2/10 — Hero del inicio (carrusel) + gestión desde el panel
+
+Reemplaza el placeholder `[ hero — entrega 2 ]` de la entrega 1 por el hero real, editable
+íntegramente desde el panel de administrador. Referencia visual dada por Manuel: `assos.com/int`
+(foto full-bleed, copy abajo a la izquierda, botones outline, controles de carrusel abajo a la
+izquierda). Requisito de negocio: 1–5 fotos propias, CTA a comprar, y hasta dos botones por slide
+cuando la foto muestra una bici concreta dentro de una categoría (uno a la bici, otro a la
+categoría).
+
+**Entregado:**
+- **Backend:** `HeroSlide`, colección propia (no una sección de `Settings` — es contenido con
+  imágenes y lectura pública, `Settings` es config numérica admin-only). `apps/api/src/models/
+  hero-slide.model.ts`, `services/hero-slide.service.ts`, `validators/content.validator.ts`,
+  `controllers/hero-slide.controller.ts`. Dos routers nuevos: `admin-content.route.ts`
+  (`/api/v1/admin/content/hero-slides`, CRUD + reorder + upload/removeImage, `protect` +
+  `restrictTo`) y `content.route.ts` (`/api/v1/content/hero-slides`, público,
+  `publicReadRateLimiter`). Imagen sube por la cadena completa de M3 (multer → magic bytes → strip
+  EXIF → Cloudinary), reutilizada sin código nuevo de storage.
+- **Referencias resueltas, no slugs congelados:** cada CTA guarda el `ObjectId` del destino
+  (bici/categoría de bicis/accesorio/categoría de accesorios) o una URL interna libre; el `href` se
+  resuelve en cada lectura (`resolveHrefs`), así que renombrar una bici no rompe el hero. Un destino
+  archivado o borrado hace que ese CTA se omita en el payload público (marcado `isBroken` en el
+  admin); si al slide no le queda ningún CTA, el slide entero se omite. `assertTargetsExist` rechaza
+  además una referencia inválida al momento de guardar.
+- **Imagen opcional a nivel de esquema**, mismo patrón que `Category.image`/`Brand.logo`: el slide
+  se crea primero (texto) y la foto se sube justo después en una segunda llamada — un solo click
+  para el admin, dos requests debajo. `listPublic` excluye cualquier slide sin imagen,
+  independientemente de `isActive`.
+- **Panel:** `/admin/contenido/inicio` (`HeroSlidesView` + `HeroSlideFormModal` + `HeroCtaFields`),
+  nueva sección "Contenido" en `lib/nav.ts`. Lista reordenable por arrastre (`useDragReorder`, el
+  mismo hook pensado para la galería táctil). El destino de cada CTA se elige con un `Combobox`
+  contra el catálogo real (bicis/accesorios/categorías, cargados server-side en `page.tsx`), no con
+  una URL escrita a mano — decisión explícita de Manuel.
+- **Storefront:** nace `apps/web/src/lib/api/public.ts` (`publicApiFetch`) — la entrega 1 lo daba
+  por nacido en la entrega 3, pero esta es la primera que consume datos. No reusa `serverApiFetch`:
+  ese redirige a `/admin/login` en un 401 y siempre pide `no-store`, ninguno de los dos tiene
+  sentido en una página anónima; este usa `next: { revalidate: 300 }`. `components/storefront/
+  hero/`: `HomeHero` (Server Component, con reintento a un bloque de respaldo si la API falla o no
+  hay slides — la home nunca se rompe por un fallo de contenido), `HeroCarousel` (cliente, mantiene
+  `data-navbar-overlay` y `min-h-svh` de la entrega 1), `HeroSlideMedia`, `HeroSlideContent`,
+  `HeroControls`. Los CTA son `ButtonLink variant="ghost" tone="inverse"` — ya el outline blanco con
+  hover dorado de la referencia, sin variante nueva de `Button`.
+- **Carrusel:** autoplay de 6s, pausado en hover/foco/pestaña oculta, apagado por completo bajo
+  `prefers-reduced-motion` (vía `useMediaQuery`, el mismo hook de `MobileMenu`). Navegación por
+  teclado (← →), rayitas de progreso clicables + contador «n | total» + flechas, todo `<button>`
+  real con `aria-label`. Un solo slide oculta los controles en vez de mostrarlos vacíos.
+
+**Bug real encontrado por el propio test suite:** `HeroSlideFormModal` mostraba "Quitar" en el
+primer botón (obligatorio) también, no solo en el segundo — `ctas.length > 1` como condición se
+evaluaba igual para ambos índices. `HeroSlideFormModal.test.tsx` lo atrapó antes de llegar a manos
+de Manuel; el fix fue `index > 0` en vez de `ctas.length > 1`.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm typecheck   (shared + api)        → limpio
+pnpm --filter @bw-bikes/api lint       → limpio
+pnpm --filter @bw-bikes/api test       → 47 archivos, 525/525 pasan (incluye 11 nuevos de
+                                          hero-slides.test.ts: CRUD, tope de 5, CTA sin destino
+                                          válido, URL externa rechazada, magic-bytes en la imagen,
+                                          reorder con lista parcial rechazada, resolución de href y
+                                          caída de CTA/slide cuando el destino se archiva)
+pnpm typecheck   (web)                 → limpio (verificado antes de que una sesión concurrente
+                                          dejara en curso una edición no relacionada de
+                                          Navbar/MobileMenu — ver nota abajo)
+pnpm --filter @bw-bikes/web lint       → limpio (1 warning preexistente, no relacionado)
+pnpm --filter @bw-bikes/web test       → 446/447 pasan (incluye 10 nuevos: 6 de
+                                          HeroCarousel.test.tsx, 4 de HeroSlideFormModal.test.tsx;
+                                          el 1 roto es CategoryFormModal.test.tsx, preexistente,
+                                          sesión ajena, no tocado — mismo caso que la entrega 1)
+```
+
+**Nota de cierre:** al terminar, otra sesión concurrente tenía en curso (sin commitear) una edición
+de `Navbar.tsx`/`MobileMenu.tsx`/`(storefront)/layout.tsx` para agregar el árbol de categorías de
+bicis al drawer móvil — ese trabajo quedó a medias (`MobileMenu` sin la prop que `Navbar` ya le
+pasaba) y rompía el `tsc` del repo completo en el momento de cerrar esta entrega. No es código de
+esta entrega ni se tocó: los archivos de esta entrega (`hero/`, `admin-content.route.ts`,
+`hero-slide.*`, `lib/api/public.ts` y `admin-content.ts`) typecheckearon limpio de forma aislada
+antes de que esa edición ajena aterrizara. Ver `concurrent-sessions-shared-checkout.md` en memoria.
+
+**Fuera de esta entrega:** `/bicicletas`, `/accesorios`, `/ofertas` (los CTA del hero apuntan ahí y
+darán 404 hasta que esas entregas lleguen — esperado); las otras siete secciones de la home;
+programar slides por fecha; video de fondo; A/B testing.
+
+---
