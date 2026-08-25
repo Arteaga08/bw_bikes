@@ -10,6 +10,20 @@ import { ORDER_STATUSES } from "../order-state.js";
 export const REVENUE_STATUSES: OrderStatus[] = ["paid", "processing", "shipped", "delivered"];
 
 /**
+ * The single definition of "this order's money is still the shop's" — status
+ * says it wasn't given back, and `disputeStatus` says a chargeback didn't
+ * take it back either. A lost dispute moves money out through Stripe's own
+ * process, not through `markRefunded`, so `status` alone would keep counting
+ * it forever without this second condition. `$ne` against a field most
+ * orders never set evaluates to `true` in Mongo, so this needs no migration.
+ *
+ * Two shapes because Mongo wants a query in `$match` and an expression in
+ * `$cond`/`$group` — same rule, twice, on purpose (see `REVENUE_SUM_EXPR`).
+ */
+export const REVENUE_MATCH = { status: { $in: REVENUE_STATUSES }, disputeStatus: { $ne: "lost" } };
+export const IS_REVENUE_EXPR = { $and: [{ $in: ["$status", REVENUE_STATUSES] }, { $ne: ["$disputeStatus", "lost"] }] };
+
+/**
  * Every day-boundary calculation in this module ($dateToString and the
  * "today" preset both) uses store time, not UTC — otherwise a "today" filter
  * (computed server-local in `stats-range.ts`) and the daily series it's
@@ -43,7 +57,7 @@ interface DailyTypeRevenueRow {
 
 /** `$cond`-summed revenue, reused for both the aggregate total and the per-day series. */
 const REVENUE_SUM_EXPR = {
-  $sum: { $cond: [{ $in: ["$status", REVENUE_STATUSES] }, "$totalCents", 0] },
+  $sum: { $cond: [IS_REVENUE_EXPR, "$totalCents", 0] },
 };
 
 function windowFilterFor(range: Pick<StatsRange, "from" | "to">) {
@@ -130,7 +144,7 @@ export async function getOrdersStats(range: StatsRange): Promise<OrdersStats> {
       { $group: { _id: "$status", count: { $sum: 1 } } },
     ]).exec(),
     Order.aggregate<RevenueRow>([
-      { $match: { ...windowFilter, status: { $in: REVENUE_STATUSES } } },
+      { $match: { ...windowFilter, ...REVENUE_MATCH } },
       { $group: { _id: null, revenueCents: { $sum: "$totalCents" }, orders: { $sum: 1 } } },
     ]).exec(),
     Order.aggregate<DailyRow>([
@@ -149,7 +163,7 @@ export async function getOrdersStats(range: StatsRange): Promise<OrdersStats> {
     // the order, not on a line, so `bikeRevenueCents + accessoryRevenueCents`
     // never reconciles to `revenueCents` above. See `OrdersDailyPoint`'s doc.
     Order.aggregate<DailyTypeRevenueRow>([
-      { $match: { ...windowFilter, status: { $in: REVENUE_STATUSES } } },
+      { $match: { ...windowFilter, ...REVENUE_MATCH } },
       { $unwind: "$lines" },
       {
         $group: {

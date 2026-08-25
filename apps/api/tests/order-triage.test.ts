@@ -180,9 +180,15 @@ describe("order triage — priority, notes, summary, activity, card (M11.5)", ()
       expect(summary.body.data.summary.countsByStatus.pending_payment).toBe(1);
       expect(summary.body.data.summary.disputed).toBe(0);
 
-      await Order.updateOne({ _id: first }, { $set: { disputedAt: new Date() } }).exec();
+      await Order.updateOne({ _id: first }, { $set: { disputedAt: new Date(), disputeStatus: "open" } }).exec();
       const afterDispute = await request(app).get(`${ADMIN}/orders/summary`).set("Cookie", adminCookie);
       expect(afterDispute.body.data.summary.disputed).toBe(1);
+
+      // Won/withdrawn is no longer a "problem" — see `getSummary`'s own
+      // comment (Sesión 3 audit): only `open`/`lost` count here.
+      await Order.updateOne({ _id: first }, { $set: { disputeStatus: "won" } }).exec();
+      const afterWon = await request(app).get(`${ADMIN}/orders/summary`).set("Cookie", adminCookie);
+      expect(afterWon.body.data.summary.disputed).toBe(0);
     });
 
     it("refuses a customer and an anonymous caller", async () => {

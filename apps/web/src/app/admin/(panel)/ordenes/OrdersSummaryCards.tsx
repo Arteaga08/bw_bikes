@@ -30,10 +30,14 @@ export interface OrdersSummaryCardsProps {
  * - **Envíos**: on its way or delivered (`shipped` + `delivered`). Same
  *   `exito` tone when there's at least one — orders are actually moving.
  * - **Problemas**: anything that ended badly (`cancelled` +
- *   `authorization_expired` + `refunded` + open disputes). `disputed` can
- *   double-count a `refunded` order that was also disputed — the backend has
- *   no "dispute resolved" flag to disambiguate, an existing gap, not one this
- *   tile tries to fix.
+ *   `authorization_expired` + `refunded` + unresolved/lost disputes).
+ *   `disputed` now excludes a dispute the shop won or that was withdrawn
+ *   (`AdminOrdersSummary.disputed`'s own doc) — but it can still double-count
+ *   a `refunded` order whose dispute Stripe hasn't closed yet: the backend
+ *   only tracks *its own* refund decision on `status`, and a dispute's
+ *   `open`/`lost` outcome independently, on `disputeStatus`. A manual refund
+ *   issued before Stripe resolves the chargeback leaves both true at once.
+ *   Narrow enough a window not to be worth reconciling here.
  */
 export function OrdersSummaryCards({ refetchToken, onNavigate }: OrdersSummaryCardsProps) {
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof getAdminOrdersSummary>> | null>(null);

@@ -30,6 +30,7 @@ async function seedOrder(overrides: {
   status: string;
   createdAt: Date;
   totalCents?: number;
+  disputeStatus?: string;
 }): Promise<void> {
   const totalCents = overrides.totalCents ?? 10_000_00;
   const order = await Order.create({
@@ -55,6 +56,7 @@ async function seedOrder(overrides: {
     payment: { provider: "stripe", state: "pending", captureMethod: "automatic" },
     shippingAddress: SHIPPING_ADDRESS,
     statusHistory: [{ status: overrides.status, at: overrides.createdAt, actorType: "system" }],
+    ...(overrides.disputeStatus ? { disputeStatus: overrides.disputeStatus } : {}),
   });
 
   // `timestamps: true` sets `createdAt` on insert — backdate it with the raw
@@ -186,6 +188,28 @@ describe("Admin stats", () => {
     expect(ordersByDay[0].count).toBe(2);
     // ...but only the paid one is money the shop actually took in.
     expect(ordersByDay[0].revenueCents).toBe(5_000_00);
+  });
+
+  it("a lost dispute counts in ordersByDay's order volume but not its revenue (Sesión 3 audit)", async () => {
+    const app: App = buildApp();
+    const adminCookie = await createAdminSession(app);
+
+    const sameInstant = new Date();
+    await seedOrder({ status: "paid", createdAt: sameInstant, totalCents: 5_000_00 });
+    // Still `paid` — a chargeback moves money through Stripe's own process,
+    // never through `markRefunded` — but `disputeStatus: "lost"` must pull
+    // it out of revenue all the same, or the shop's own dashboard would keep
+    // counting money the bank already took back.
+    await seedOrder({ status: "paid", createdAt: sameInstant, totalCents: 3_000_00, disputeStatus: "lost" });
+
+    const res = await request(app).get(`${ADMIN}/stats/orders?preset=today`).set("Cookie", adminCookie);
+
+    expect(res.status).toBe(200);
+    const { stats } = res.body.data;
+    expect(stats.ordersByDay).toHaveLength(1);
+    expect(stats.ordersByDay[0].count).toBe(2);
+    expect(stats.ordersByDay[0].revenueCents).toBe(5_000_00);
+    expect(stats.revenueCents).toBe(5_000_00);
   });
 
   it("groups a daily bucket by the store's Mexico City calendar day, not UTC", async () => {

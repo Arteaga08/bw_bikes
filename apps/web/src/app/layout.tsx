@@ -3,9 +3,15 @@ import type { ReactNode } from "react";
 import { hankenGrotesk } from "./fonts";
 import "./globals.css";
 
+/**
+ * Public-site default — the storefront (`(storefront)/layout.tsx`) is the
+ * only route tree that inherits this without overriding it. The admin panel
+ * defines its own, more specific `metadata` (`admin/(panel)/layout.tsx`,
+ * `admin: { index: false }`), so it never shows this description.
+ */
 export const metadata: Metadata = {
-  title: "Black and White Bikes",
-  description: "Panel administrativo de Black and White Bikes.",
+  title: { default: "Black and White Bikes", template: "%s · Black and White Bikes" },
+  description: "Bicicletas de alto rendimiento — catálogo, pedidos y todo lo que necesitas saber sobre tu bici.",
 };
 
 /** `viewportFit: "cover"` habilita `env(safe-area-inset-*)` (Toast, drawers) en dispositivos con notch. */

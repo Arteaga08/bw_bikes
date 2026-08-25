@@ -172,3 +172,53 @@ describe("stripeProvider — card details (M11.5)", () => {
     expect(snapshot.card).toBeUndefined();
   });
 });
+
+/**
+ * `mapState`'s full table (Sesión 3 audit) — every other test in this file
+ * only ever exercises `succeeded`, so a status this domain gets wrong would
+ * otherwise pass unnoticed. Driven through `retrievePayment` since `mapState`
+ * itself isn't exported — the adapter boundary is `PaymentSnapshot.state`,
+ * not the private Stripe-status switch behind it.
+ */
+describe("stripeProvider — payment state mapping (all 7 Stripe statuses)", () => {
+  beforeEach(() => {
+    retrieveMock.mockReset();
+  });
+
+  const intentWithStatus = (status: string, overrides: Record<string, unknown> = {}) => ({
+    id: "pi_state_test",
+    status,
+    created: Math.floor(Date.now() / 1000),
+    last_payment_error: null,
+    latest_charge: null,
+    ...overrides,
+  });
+
+  it.each([
+    ["succeeded", "captured"],
+    ["requires_capture", "authorized"],
+    ["canceled", "canceled"],
+    ["requires_payment_method", "pending"],
+    ["requires_confirmation", "pending"],
+    ["requires_action", "pending"],
+    ["processing", "pending"],
+  ] as const)("maps Stripe status %s to PaymentState %s", async (stripeStatus, expectedState) => {
+    retrieveMock.mockResolvedValue(intentWithStatus(stripeStatus));
+    const { stripeProvider } = await import("../src/services/payments/stripe.provider.js");
+
+    const snapshot = await stripeProvider.retrievePayment("pi_state_test");
+
+    expect(snapshot.state).toBe(expectedState);
+  });
+
+  it("maps requires_payment_method with a last_payment_error to failed, not pending", async () => {
+    retrieveMock.mockResolvedValue(
+      intentWithStatus("requires_payment_method", { last_payment_error: { message: "Tarjeta rechazada" } }),
+    );
+    const { stripeProvider } = await import("../src/services/payments/stripe.provider.js");
+
+    const snapshot = await stripeProvider.retrievePayment("pi_state_test");
+
+    expect(snapshot.state).toBe("failed");
+  });
+});

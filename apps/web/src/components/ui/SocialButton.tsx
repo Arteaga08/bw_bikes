@@ -1,11 +1,11 @@
 "use client";
 
-import { FacebookLogo, InstagramLogo, WhatsappLogo, YoutubeLogo } from "@phosphor-icons/react";
+import { FacebookLogo, InstagramLogo, TiktokLogo, WhatsappLogo, YoutubeLogo } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { buttonClasses, type ButtonSize, type ButtonTone } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 
-export type SocialNetwork = "instagram" | "facebook" | "whatsapp" | "youtube";
+export type SocialNetwork = "instagram" | "facebook" | "tiktok" | "whatsapp" | "youtube";
 
 /**
  * Label and glyph per network. The label is what a screen reader announces —
@@ -15,6 +15,7 @@ export type SocialNetwork = "instagram" | "facebook" | "whatsapp" | "youtube";
 const NETWORKS: Record<SocialNetwork, { label: string; Glyph: Icon }> = {
   instagram: { label: "Instagram", Glyph: InstagramLogo },
   facebook: { label: "Facebook", Glyph: FacebookLogo },
+  tiktok: { label: "TikTok", Glyph: TiktokLogo },
   whatsapp: { label: "WhatsApp", Glyph: WhatsappLogo },
   youtube: { label: "YouTube", Glyph: YoutubeLogo },
 };
@@ -43,6 +44,10 @@ export interface SocialButtonProps {
  */
 export function SocialButton({ network, href, tone = "inverse", size = "icon", className }: SocialButtonProps) {
   const { label, Glyph } = NETWORKS[network];
+  // `Button`'s own `ICON_SLOT_CLASSES` only fixes glyph size for icons passed
+  // through `iconLeft`/`iconRight` — this renders the glyph directly as
+  // `children`, so it needs its own size-to-box mapping to grow with `size`.
+  const glyphSize = size === "icon-lg" ? 20 : 16;
 
   return (
     <a
@@ -52,7 +57,7 @@ export function SocialButton({ network, href, tone = "inverse", size = "icon", c
       aria-label={label}
       className={cn(buttonClasses({ variant: "bare", size, tone }), className)}
     >
-      <Glyph aria-hidden="true" size={16} />
+      <Glyph aria-hidden="true" size={glyphSize} />
     </a>
   );
 }

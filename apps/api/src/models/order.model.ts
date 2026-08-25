@@ -2,6 +2,7 @@ import type {
   BillingInfo,
   CaptureMethod,
   CURRENCY,
+  DisputeStatus,
   OrderLineSnapshot,
   OrderPriority,
   OrderStatus,
@@ -75,6 +76,8 @@ export interface IOrder extends Document {
   /** Sealed once, when the day-5 warning about the expiring authorization went out. */
   adminAlertedAt?: Date;
   disputedAt?: Date;
+  /** Set once a chargeback has been opened; absent otherwise. Not cleared on a win — see `disputedAt`'s own doc. */
+  disputeStatus?: DisputeStatus;
   cancelReason?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -236,6 +239,7 @@ const orderSchema = new Schema<IOrder>(
 
     adminAlertedAt: { type: Date },
     disputedAt: { type: Date },
+    disputeStatus: { type: String, enum: ["open", "won", "lost", "withdrawn"] },
     cancelReason: { type: String, trim: true, maxlength: MAX_CANCEL_REASON_LENGTH },
   },
   { timestamps: true },

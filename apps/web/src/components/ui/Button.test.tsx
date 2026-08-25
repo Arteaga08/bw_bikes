@@ -71,6 +71,17 @@ describe("Button", () => {
     expect(underline).toHaveClass("bg-dorado");
   });
 
+  it("text variant with active pins the underline at full width instead of growing on hover", () => {
+    render(
+      <Button variant="text" active>
+        Bicicletas
+      </Button>,
+    );
+    const underline = screen.getByRole("button", { name: "Bicicletas" }).querySelector("span[aria-hidden='true']");
+    expect(underline).toHaveClass("scale-x-100");
+    expect(underline).not.toHaveClass("scale-x-0");
+  });
+
   it("ghost tone defaults to neutral (invert to solid negro on hover) and opts into danger tiers", () => {
     const { rerender } = render(<Button variant="ghost">Editar</Button>);
     let button = screen.getByRole("button");

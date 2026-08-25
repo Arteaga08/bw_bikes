@@ -19,10 +19,14 @@ export interface HeroCarouselProps {
  * attribute existing on the first section of `/`, and this replaces the
  * placeholder that used to carry it.
  *
- * Every slide stays mounted, stacked in `absolute inset-0`, and crossfades
- * via opacity — simpler than mounting/unmounting on every advance, and it's
- * what lets the inactive slides' links go `aria-hidden`/`tabIndex={-1}`
- * instead of disappearing from the DOM mid-transition.
+ * Every slide stays mounted side by side in one flex row, and advancing
+ * translates that row by a whole viewport width — a real horizontal slide,
+ * not an opacity crossfade (Manuel's explicit call: the photo should feel
+ * like it physically moves left/right, not fade). `translateX(-index *
+ * 100%)` handles both directions for free from the index arithmetic alone —
+ * no separate "which way" state to track. Every slide stays mounted (not
+ * swapped in/out) so the inactive ones can still go `aria-hidden`/
+ * `tabIndex={-1}` instead of disappearing from the DOM mid-transition.
  */
 export function HeroCarousel({ slides }: HeroCarouselProps) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -83,16 +87,20 @@ export function HeroCarousel({ slides }: HeroCarouselProps) {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPaused(document.hidden);
       }}
     >
-      {slides.map((slide, index) => (
-        <div
-          key={slide.image.publicId}
-          aria-hidden={index !== activeIndex}
-          className={`absolute inset-0 transition-opacity duration-700 ${index === activeIndex ? "opacity-100" : "pointer-events-none opacity-0"}`}
-        >
-          <HeroSlideMedia slide={slide} isFirst={index === 0} />
-          <HeroSlideContent slide={slide} isActive={index === activeIndex} />
-        </div>
-      ))}
+      <div
+        // No transition class at all under `prefers-reduced-motion` — not
+        // just a shorter duration — so the slide change is an instant jump,
+        // same treatment the autoplay effect already gives that media query.
+        className={`flex min-h-svh ${prefersReducedMotion ? "" : "transition-transform duration-500 ease-out"}`}
+        style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+      >
+        {slides.map((slide, index) => (
+          <div key={slide.image.publicId} aria-hidden={index !== activeIndex} className="relative w-full shrink-0">
+            <HeroSlideMedia slide={slide} isFirst={index === 0} />
+            <HeroSlideContent slide={slide} isActive={index === activeIndex} />
+          </div>
+        ))}
+      </div>
 
       {total > 1 ? (
         <HeroControls total={total} activeIndex={activeIndex} onSelect={goTo} onPrev={prev} onNext={next} />

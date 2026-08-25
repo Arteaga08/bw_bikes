@@ -20,6 +20,8 @@ const ORDER_AUDIT_ACTION_LABELS: Partial<Record<AuditAction, string>> = {
   "order.authorization_expired": "Autorización vencida",
   "order.refunded": "Orden reembolsada",
   "order.disputed": "Contracargo abierto",
+  "order.dispute_updated": "Contracargo actualizado",
+  "order.dispute_closed": "Contracargo resuelto",
   "order.reconciled": "Pago reconciliado",
   "order.shipping_address_updated": "Dirección de envío actualizada",
   "order.shipped": "Orden enviada",

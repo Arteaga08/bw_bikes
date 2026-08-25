@@ -17,7 +17,9 @@ import { HeroCarousel } from "./HeroCarousel";
 export async function HomeHero() {
   let slides: PublicHeroSlide[] = [];
   try {
-    const res = await publicApiFetch<{ slides: PublicHeroSlide[] }>("/content/hero-slides");
+    const res = await publicApiFetch<{ slides: PublicHeroSlide[] }>("/content/hero-slides", {
+      tags: ["hero-slides"],
+    });
     slides = res.data.slides;
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;

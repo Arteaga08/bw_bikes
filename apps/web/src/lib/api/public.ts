@@ -20,17 +20,23 @@ import { parseApiResponse, type ParsedResponse } from "./parse-response";
  * A failure here is handled by the caller, not thrown past it — see
  * `HomeHero.tsx`'s fallback. The storefront must never show a blank page or
  * an error screen because a content fetch failed.
+ *
+ * `tags`, when passed, lets a caller be invalidated on demand instead of
+ * only waiting out `revalidateSeconds` — see
+ * `app/api/revalidate/hero-slides/route.ts`, called by every admin mutation
+ * in `lib/api/admin-content.ts` so a slide the admin just published doesn't
+ * sit behind a stale 5-minute cache.
  */
 export async function publicApiFetch<TData = unknown>(
   path: string,
-  options: { revalidateSeconds?: number } = {},
+  options: { revalidateSeconds?: number; tags?: string[] } = {},
 ): Promise<ParsedResponse<TData>> {
   const revalidate = options.revalidateSeconds ?? 300;
 
   let res: Response;
   try {
     res = await fetch(`${apiInternalUrl()}${API_BASE_PATH}${path}`, {
-      next: { revalidate },
+      next: { revalidate, ...(options.tags ? { tags: options.tags } : {}) },
     });
   } catch {
     throw new ApiError(NETWORK_ERROR_MESSAGE, 0);

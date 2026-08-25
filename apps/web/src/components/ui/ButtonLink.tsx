@@ -28,10 +28,20 @@ export interface ButtonLinkProps extends Omit<NextLinkProps, "children">, Omit<B
  * `loading` is not available — a link has no pending state; if an action can be
  * in flight, it is a `Button`.
  */
-export function ButtonLink({ variant = "primary", size = "md", tone = "neutral", className, children, iconLeft, iconRight, ...props }: ButtonLinkProps) {
+export function ButtonLink({
+  variant = "primary",
+  size = "md",
+  tone = "neutral",
+  active = false,
+  className,
+  children,
+  iconLeft,
+  iconRight,
+  ...props
+}: ButtonLinkProps) {
   return (
     <Link className={cn(buttonClasses({ variant, size, tone }), className)} {...props}>
-      <ButtonContent variant={variant} size={size} tone={tone} iconLeft={iconLeft} iconRight={iconRight}>
+      <ButtonContent variant={variant} size={size} tone={tone} active={active} iconLeft={iconLeft} iconRight={iconRight}>
         {children}
       </ButtonContent>
     </Link>

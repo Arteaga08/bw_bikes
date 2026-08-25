@@ -530,7 +530,14 @@ el túnel del CLI):
   proveedor. El webhook llega después y encuentra la orden ya `paid`, así que no hace nada — dos
   caminos, un resultado, sin doble commit. Verificado en test y en el escenario 2.
 - **`charge.dispute.created` no cambia el estatus.** Una disputa es un reclamo, no un desenlace; se
-  sella `disputedAt` y se audita. Si se pierde, el reembolso resultante sí mueve el estatus.
+  sella `disputedAt` y se audita.
+  > **Corrección (auditoría pre-producción, Sesión 3, 2026-08-24):** el supuesto original de esta
+  > línea — "si se pierde, el reembolso resultante sí mueve el estatus" — era incorrecto. Stripe
+  > **no** emite `charge.refunded` al perder un contracargo; el dinero sale por su propio proceso de
+  > chargeback, no por el flujo de reembolso de esta tienda. `charge.dispute.updated`/`.closed`
+  > (ausentes hasta M5, cerrados en Sesión 3) persisten el desenlace en `disputeStatus` sin tocar
+  > `status`, que se queda en `paid` — y se excluye del ingreso reportado (`orders.stats.ts`) para
+  > que Analítica no siga contando dinero que el banco ya retiró. Ver detalle en M10.
 - **`delivered` no es terminal**, porque un reembolso todavía puede seguirle. `cancelled`,
   `authorization_expired` y `refunded` sí lo son.
 - **Una orden nunca capturada termina en `cancelled` o `authorization_expired`, jamás en
@@ -1010,15 +1017,16 @@ POST real → toast → refetch de la lista, con `fetch` mockeado).
 `apps/api` en esta máquina, ya se resolvió (Network Access → Add IP Address con la IP pública
 correcta — la que estaba puesta había quedado desactualizada por IP dinámica).
 
-**⚠️ Verificación manual contra Stripe test — pospuesta a M10, a propósito:** el criterio de cierre
-exige confirmar/rechazar de verdad contra Stripe en modo test (`stripe listen`), no solo el código.
-Existe un script de siembra por API (`verify-m9-stripe.ts`, escrito durante esta sesión, en el
-scratchpad — **no sobrevive entre sesiones**, hay que reescribirlo si se retoma esa vía) que crea
-categoría + bici `on_request` directo contra la API admin, sin pasar por ningún CRUD real. Decisión
-de Manuel: mejor esperar a que M10 exista y sembrar el producto de prueba desde el CRUD real del
-panel — así la verificación de M9 corre sobre datos creados por el propio sistema, no por un script
-sintético, y de paso ejercita M10 de punta a punta. **M10 debe cerrar con esta verificación
-pendiente de M9 resuelta**, no solo con su propio criterio de cierre.
+**✅ Verificación manual contra Stripe test — cerrada en la auditoría pre-producción, Sesión 3
+(2026-08-24).** Pospuesta aquí a propósito, retomada en `apps/api/src/scripts/seed-batch-orders.ts`
+(sucesor de `verify-m9-stripe.ts`, que en efecto no sobrevivió entre sesiones como se anticipaba):
+22 órdenes reales contra Stripe test-mode (`stripe listen --api-key ... --forward-to
+localhost:4000/api/v1/webhooks/stripe`), cubriendo los 9 `OrderStatus` alcanzables más las dos
+resoluciones de contracargo. Cada orden se releyó de Mongo después de correr — no autoreportada —
+y las 22 coincidieron con su objetivo. Detalle completo en la sección M10 de abajo (la verificación
+pendiente de M9 se resolvió como parte del cierre de esa sesión, tal como este mismo renglón ya
+preveía) y en el plan de auditoría (`~/.claude/plans/el-dashboard-ya-esta-encapsulated-whale.md`,
+"Sesión 3 — resultado").
 
 **Incidente de sesión, para quien retome:** durante el cierre de M9 un `git branch <nombre>` sin
 `-f` falló en silencio porque la rama ya existía (de un checkout previo), y el siguiente comando
@@ -1049,7 +1057,8 @@ sobre todo si el chat anterior lo dejó creado sin usar.
 **Fuera de este milestone:** catálogo en admin (M10); inventario, solicitudes, settings y analítica
 visuales (M11); gráficos/KPIs de la referencia de Dribbble (M11 — librería de charts sin decidir);
 rediseño del Sidebar a dos columnas (cambio transversal al shell, se decide aparte); reembolsos y
-cancelación de órdenes ya pagadas (el backend no los expone al admin); búsqueda libre, filtro por
+cancelación de órdenes ya pagadas (el backend no los expone al admin — decisión cerrada en la
+auditoría Sesión 3: se queda así a propósito, ver M10); búsqueda libre, filtro por
 fecha/cliente/monto (el backend no los soporta); correos al cliente (M15).
 
 ---
@@ -1115,10 +1124,67 @@ pnpm -r build (con API_URL)            → limpio
 pnpm audit --prod                      → sin vulnerabilidades conocidas (override de nanoid a ^3.3.18,
                                           ver decisiones abajo)
 ```
-**⚠️ Verificación manual pendiente de M9, en curso al cerrar M10:** confirmar/rechazar contra Stripe
-test desde el panel, sembrando el producto `on_request` desde el CRUD real en vez de un script
-sintético — el criterio que M9 dejó pospuesto explícitamente (`MILESTONES.md`, sección M9). Manuel la
-está corriendo; este renglón se actualiza con el resultado al terminar.
+**✅ Verificación manual pendiente de M9 — cerrada en la auditoría pre-producción, Sesión 3
+(2026-08-24), varias sesiones después de quedar "en curso" aquí.** El criterio que M9 dejó pospuesto
+(confirmar/rechazar de verdad contra Stripe test) se resolvió sembrando **22 órdenes reales** vía
+`apps/api/src/scripts/seed-batch-orders.ts` — no un script sintético contra la API admin, sino el
+mismo camino cliente→checkout→Stripe→webhook que usa un comprador real, más las transiciones de
+admin (confirmar/rechazar proveedor, captura, envío, entrega) llamando a `orderService` en proceso
+por la pared del TOTP que un script no puede cruzar (ver el propio header del script). Corrida real
+contra `stripe listen`, verificada releyendo cada orden de Mongo al terminar, no autoreportada:
+
+| # | Objetivo | Resultado real | Notas |
+|---|---|---|---|
+| 1–2 | `pending_payment` | ✅ `pending_payment` | Cliente desechable propio por orden — ver por qué abajo |
+| 3–4 | `awaiting_supplier_confirmation` | ✅ | |
+| 5 | `authorization_expired` | ✅ | Vía el sweep real de `orderMaintenanceService.cancelExpiredAuthorizations` |
+| 6–7 | `cancelled` | ✅ | Rechazo de proveedor real (`rejectSupplierStock`) |
+| 8–10 | `paid` | ✅ | Captura automática e instantánea (2) + confirmación de proveedor (1) |
+| 11–13 | `processing` | ✅ | |
+| 14–16 | `shipped` | ✅ | |
+| 17–18 | `delivered` | ✅ | |
+| 19–20 | `refunded` | ✅ | Reembolso real vía `stripe.refunds.create`, webhook `charge.refunded` real |
+| 21 | `dispute_won` | ✅ `paid` + `disputeStatus: won` | `pm_card_createDispute` real + evidencia `winning_evidence`, resuelto por Stripe en ~6s |
+| 22 | `dispute_lost` | ✅ `paid` + `disputeStatus: lost` | `pm_card_createDispute` real + `disputes.close`, resuelto en ~1s |
+
+Dos defectos del propio script de siembra, encontrados y corregidos **antes** de esta corrida (no
+detectados en M9/M10 porque el script no existía todavía): `cancelStalePendingOrders`
+(`order.service.ts`) cancela cualquier `pending_payment` anterior del mismo cliente en cada
+checkout — con un solo cliente compartido para las 20+ compras, la orden #1 nunca habría
+sobrevivido a la #2. Cada `pending_payment` ahora usa una cuenta de un solo uso. Y el retrodatado de
+`createdAt` (para que Inicio/Analítica tengan datos de dos semanas) se excluyó deliberadamente de
+las `pending_payment`: el job real de reconciliación de pagos las resuelve solo, en su propio reloj
+(~20-30 min), igual que a un checkout abandonado real — retrodatarlas habría sembrado un estado que
+el sistema nunca puede producir por sí mismo.
+
+**Notificaciones — resultado real, no supuesto:** Telegram (`order.authorized`/`order.paid`/
+`order.dispute_closed`) configurado y sin errores en el log de la corrida. Los correos
+transaccionales al cliente (`sendOrderPaidEmail`, `sendShipmentNotification`,
+`sendOrderDeliveredEmail`, `sendRefundConfirmedEmail`) **fallaron los 22/22** con un 403 de Resend:
+la cuenta usada en este entorno de prueba solo puede mandar correo a su propia dirección verificada
+(`bwbikes2026@outlook.com`), no a `TEST_CUSTOMER_EMAIL`. No es una regresión — el manejo de errores
+(`.catch()` best-effort en cada callsite) funcionó exactamente como está diseñado y ninguna orden se
+detuvo por esto — pero significa que la entrega real de estos 5 correos sigue sin verificarse en
+este entorno. Para cerrarla de verdad: verificar un dominio en Resend, o apuntar `TEST_CUSTOMER_EMAIL`
+a `bwbikes2026@outlook.com` en una corrida futura. Los correos de alerta al admin
+(`sendAdminAlertEmail`, "nueva venta"/contracargo perdido) tampoco se pudieron verificar por
+separado — `ADMIN_ALERT_EMAIL` no está configurado en este entorno, gap preexistente sin relación
+con Stripe.
+
+Verificación visual de `/admin/ordenes` en el panel: bloqueada para mí por el 2FA obligatorio de la
+cuenta admin (TOTP real, que solo el autenticador de Manuel puede producir) — confirmado hasta la
+pantalla de "Ingresa el código de 6 dígitos", sin errores de consola, con los cambios de esta sesión
+(badge de contracargo en el detalle de orden) ya compilados. El recorrido visual del panel con las
+22 órdenes y las dos disputas queda como el único paso manual real pendiente, para Manuel.
+
+**Decisión de reembolsos, cerrada en la auditoría Sesión 3 (2026-08-24):** `refundPayment` existía
+en `PaymentProvider`/`stripeProvider` pero ningún controller lo llamaba — el único camino real hacia
+`orderService.markRefunded` siempre fue el webhook `charge.refunded`. Decisión con Manuel: **no**
+construir un flujo de reembolso admin-iniciado; el reembolso se hace desde el Dashboard de Stripe y
+llega vía webhook, como ya funcionaba. Razón, no solo pereza: exigir las credenciales de Stripe para
+mover dinero de vuelta es un control más fuerte que una sesión de admin del panel. `refundPayment` se
+eliminó del provider y de la interfaz como código muerto — verificado con las órdenes #19–20
+(`refunded`) de la tabla de arriba, el flujo sigue intacto sin ese método.
 
 **Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
 - **`brakeType` salió del sistema por completo** — nunca filtró nada en la práctica (ausente del

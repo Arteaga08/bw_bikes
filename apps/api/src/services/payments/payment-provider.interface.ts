@@ -1,4 +1,4 @@
-import type { CaptureMethod, PaymentState, ShippingAddress, ThreeDSecurePolicy } from "@bw-bikes/shared";
+import type { CaptureMethod, DisputeStatus, PaymentState, ShippingAddress, ThreeDSecurePolicy } from "@bw-bikes/shared";
 
 /**
  * The narrow, domain-owned surface every payment gateway must implement.
@@ -87,6 +87,8 @@ export interface PaymentEventEnvelope {
   amountCents?: number;
   refundedAmountCents?: number;
   failureMessage?: string;
+  /** Present only on a `charge.dispute.*` event. */
+  disputeStatus?: DisputeStatus;
   occurredAt: Date;
 }
 
@@ -106,7 +108,9 @@ export interface PaymentProvider {
   /** Asks the gateway what really happened — the reconciliation job's only tool. */
   retrievePayment(intentId: string): Promise<PaymentSnapshot>;
 
-  refundPayment(intentId: string, idempotencyKey: string): Promise<PaymentSnapshot>;
+  // Deliberately no `refundPayment` — see the comment above `stripeProvider`'s
+  // own definition for why a refund is a Stripe Dashboard action, not an API
+  // call this codebase makes.
 
   /**
    * Verifies a webhook's signature against the **raw** request body and

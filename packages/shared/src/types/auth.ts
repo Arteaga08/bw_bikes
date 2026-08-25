@@ -101,6 +101,8 @@ export type AuditAction =
   | "order.authorization_expired"
   | "order.refunded"
   | "order.disputed"
+  | "order.dispute_updated"
+  | "order.dispute_closed"
   | "order.reconciled"
   | "order.shipping_address_updated"
   | "order.shipped"
@@ -178,6 +180,8 @@ export const AUDIT_ACTIONS = [
   "order.authorization_expired",
   "order.refunded",
   "order.disputed",
+  "order.dispute_updated",
+  "order.dispute_closed",
   "order.reconciled",
   "order.shipping_address_updated",
   "order.shipped",

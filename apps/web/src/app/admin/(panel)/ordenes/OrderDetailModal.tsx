@@ -26,6 +26,7 @@ import { formatCurrencyCents } from "@/lib/format";
 import { formatDateTime } from "@/lib/orders/format";
 import { ALL_ORDER_PRIORITIES, ORDER_PRIORITY_LABELS, shipmentEligibility } from "@/lib/orders/status";
 import { AuthorizationCountdown } from "./AuthorizationCountdown";
+import { DisputeStatusBadge } from "./DisputeStatusBadge";
 import { OrderActivityList } from "./OrderActivityList";
 import { OrderDetailCard } from "./OrderDetailCard";
 import { OrderInternalNotes } from "./OrderInternalNotes";
@@ -473,6 +474,14 @@ export function OrderDetailModal({
                     <div className="flex justify-between gap-sm">
                       <dt className="text-grafito">PaymentIntent</dt>
                       <dd className="truncate font-mono text-caption">{order.paymentIntentId}</dd>
+                    </div>
+                  ) : null}
+                  {order.disputeStatus ? (
+                    <div className="flex items-center justify-between">
+                      <dt className="text-grafito">Contracargo</dt>
+                      <dd>
+                        <DisputeStatusBadge status={order.disputeStatus} />
+                      </dd>
                     </div>
                   ) : null}
                 </dl>

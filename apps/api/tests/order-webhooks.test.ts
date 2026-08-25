@@ -12,7 +12,7 @@ import {
 import { captureNextAdminAlertEmail, captureNextOrderPaidEmail, captureNextPaymentFailedEmail, captureNextRefundConfirmedEmail } from "./helpers/mailer.js";
 import { captureNextAdminNotification } from "./helpers/notifier.js";
 import { setShippingAddress } from "./helpers/shipping.js";
-import { chargeObject, paymentIntentObject, signStripeEvent, stubStripe } from "./helpers/stripe.js";
+import { chargeObject, disputeObject, paymentIntentObject, signStripeEvent, stubStripe } from "./helpers/stripe.js";
 
 const CART = "/api/v1/cart";
 const ORDERS = "/api/v1/orders";
@@ -455,15 +455,101 @@ describe("payment webhook", () => {
 
       const { body, signature } = signStripeEvent({
         type: "charge.dispute.created",
-        object: { id: "dp_test_1", object: "dispute", payment_intent: intentId, metadata: { orderId } },
+        object: disputeObject({ intentId, status: "needs_response", orderId }),
       });
       const res = await postEvent(app, body, signature);
 
       expect(res.status).toBe(200);
       const order = await Order.findById(orderId).exec();
       expect(order?.disputedAt).toBeTruthy();
+      expect(order?.disputeStatus).toBe("open");
       // Money has not moved back yet; only a later refund event would say so.
       expect(order?.status).toBe("paid");
+    });
+
+    describe("charge.dispute.updated / charge.dispute.closed", () => {
+    async function disputedOrder() {
+      const { orderId, intentId } = await paidOrder();
+      const { body, signature } = signStripeEvent({
+        type: "charge.dispute.created",
+        object: disputeObject({ intentId, status: "needs_response", orderId }),
+      });
+      await postEvent(app, body, signature);
+      return { orderId, intentId };
+    }
+
+    it("advances the dispute's status without touching order.status or notifying", async () => {
+      const { orderId, intentId } = await disputedOrder();
+      const notification = captureNextAdminNotification();
+
+      const { body, signature } = signStripeEvent({
+        type: "charge.dispute.updated",
+        object: disputeObject({ intentId, status: "under_review", orderId }),
+      });
+      const res = await postEvent(app, body, signature);
+
+      expect(res.status).toBe(200);
+      const order = await Order.findById(orderId).exec();
+      expect(order?.disputeStatus).toBe("open");
+      expect(order?.status).toBe("paid");
+      // No intermediate-status ping — see `recordDisputeUpdate`'s own comment.
+      expect(notification.getNotification()).toBeUndefined();
+    });
+
+    it("a won dispute keeps disputedAt, leaves status paid, and alerts the admin", async () => {
+      const { orderId, intentId } = await disputedOrder();
+      const notification = captureNextAdminNotification();
+
+      const { body, signature } = signStripeEvent({
+        type: "charge.dispute.closed",
+        object: disputeObject({ intentId, status: "won", orderId }),
+      });
+      const res = await postEvent(app, body, signature);
+
+      expect(res.status).toBe(200);
+      const order = await Order.findById(orderId).exec();
+      expect(order?.disputeStatus).toBe("won");
+      expect(order?.disputedAt).toBeTruthy();
+      expect(order?.status).toBe("paid");
+      expect(notification.getNotification()).toMatchObject({ kind: "order.dispute_closed" });
+    });
+
+    it("warning_closed maps to withdrawn, this domain's own vocabulary, not Stripe's", async () => {
+      const { orderId, intentId } = await disputedOrder();
+
+      const { body, signature } = signStripeEvent({
+        type: "charge.dispute.closed",
+        object: disputeObject({ intentId, status: "warning_closed", orderId }),
+      });
+      await postEvent(app, body, signature);
+
+      const order = await Order.findById(orderId).exec();
+      expect(order?.disputeStatus).toBe("withdrawn");
+      expect(order?.status).toBe("paid");
+    });
+
+    it("a lost dispute leaves status paid — a chargeback is not a refund, so it never sends the refund-confirmed email", async () => {
+      const { orderId, intentId } = await disputedOrder();
+      const refundEmail = captureNextRefundConfirmedEmail();
+      const adminAlertEmail = captureNextAdminAlertEmail();
+      const notification = captureNextAdminNotification();
+
+      const { body, signature } = signStripeEvent({
+        type: "charge.dispute.closed",
+        object: disputeObject({ intentId, status: "lost", orderId }),
+      });
+      const res = await postEvent(app, body, signature);
+
+      expect(res.status).toBe(200);
+      const order = await Order.findById(orderId).exec();
+      expect(order?.disputeStatus).toBe("lost");
+      // The chargeback moved money through Stripe's own process, not through
+      // `markRefunded` — `status` must stay `paid`, never `refunded`.
+      expect(order?.status).toBe("paid");
+      expect(refundEmail.getParams()).toBeUndefined();
+      expect(notification.getNotification()).toMatchObject({ kind: "order.dispute_closed" });
+      expect(adminAlertEmail.getParams()).toMatchObject({ subject: expect.stringContaining(order!.orderNumber) });
+    });
     });
   });
 

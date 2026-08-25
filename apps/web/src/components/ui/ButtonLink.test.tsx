@@ -42,6 +42,16 @@ describe("ButtonLink", () => {
     expect(underline).toHaveClass("bg-dorado");
   });
 
+  it("active pins the underline at full width — the storefront navbar's current-section link", () => {
+    render(
+      <ButtonLink href="/bicicletas" variant="text" active>
+        Bicicletas
+      </ButtonLink>,
+    );
+    const underline = screen.getByRole("link", { name: "Bicicletas" }).querySelector("span[aria-hidden='true']");
+    expect(underline).toHaveClass("scale-x-100");
+  });
+
   it("hides icon slots from assistive tech so the accessible name is the label alone", () => {
     render(
       <ButtonLink href="/x" iconLeft={<svg data-testid="glyph" />}>

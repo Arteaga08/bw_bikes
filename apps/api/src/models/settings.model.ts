@@ -10,6 +10,7 @@ import { type Document, model, Schema } from "mongoose";
 import {
   DEFAULT_LOW_STOCK_ALERT_INTERVAL_MS,
   DEFAULT_LOW_STOCK_THRESHOLD_UNITS,
+  DEFAULT_REQUEST_THREE_D_SECURE,
   SETTINGS_DEFAULTS,
 } from "../config/settings.defaults.js";
 
@@ -56,7 +57,18 @@ const ordersSchema = new Schema<OrdersSettings>(
     orderAuthAlertHours: { type: Number, required: true, min: 1 },
     orderAuthCancelHours: { type: Number, required: true, min: 1 },
     paymentReconciliationAfterMinutes: { type: Number, required: true, min: 1 },
-    requestThreeDSecure: { type: String, required: true, enum: ["automatic", "any"] },
+    // Field-level default, same reasoning as `inventory.lowStockThresholdUnits`
+    // above: the singleton predates this field (M9), so an existing document
+    // has `orders` set but not this path. Found missing this treatment during
+    // the Sesión 3 audit — without it, `doc.orders.requestThreeDSecure` reads
+    // back `undefined` on any settings singleton created before M9, despite
+    // `required: true`, because Mongoose only enforces `required` on save.
+    requestThreeDSecure: {
+      type: String,
+      required: true,
+      enum: ["automatic", "any"],
+      default: DEFAULT_REQUEST_THREE_D_SECURE,
+    },
   },
   { _id: false },
 );

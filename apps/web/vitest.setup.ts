@@ -32,3 +32,24 @@ if (typeof window !== "undefined" && !window.matchMedia) {
     dispatchEvent: () => false,
   }) as unknown as MediaQueryList;
 }
+
+// jsdom doesn't implement `IntersectionObserver` either — `useNavbarOverlay`
+// (the storefront navbar's transparent-over-hero/solid-on-scroll switch)
+// needs the constructor present even for tests that never assert on a real
+// intersection. Same shape as the `matchMedia` stub above: a shared default
+// that a test exercising the real behavior (`use-navbar-overlay.test.tsx`)
+// overrides locally with a fake it can trigger by hand.
+if (typeof window !== "undefined" && !window.IntersectionObserver) {
+  class NoopIntersectionObserver implements IntersectionObserver {
+    readonly root = null;
+    readonly rootMargin = "";
+    readonly thresholds: readonly number[] = [];
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  }
+  window.IntersectionObserver = NoopIntersectionObserver as unknown as typeof IntersectionObserver;
+}

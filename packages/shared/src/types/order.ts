@@ -72,6 +72,16 @@ export type PaymentState =
 export type PaymentProviderName = "stripe";
 
 /**
+ * How an open chargeback resolved, in **this domain's** vocabulary — not
+ * Stripe's `needs_response`/`under_review`/`won`/`lost`/`warning_closed`. The
+ * Stripe adapter is the only place that vocabulary is read; everything past
+ * it sees `open` (still contested), `won`/`withdrawn` (money stays with the
+ * shop), or `lost` (money left for good, without a `refunded` order status —
+ * a dispute is not a refund).
+ */
+export type DisputeStatus = "open" | "won" | "lost" | "withdrawn";
+
+/**
  * One purchased line, frozen at checkout.
  *
  * This is a **snapshot, not a reference**: name, brand, size, colour and price
@@ -217,6 +227,8 @@ export interface AdminOrder extends Omit<PublicOrder, "statusHistory"> {
   customer: { id: string; email: string; firstName: string; lastName: string } | null;
   paymentIntentId?: string;
   disputedAt?: string;
+  /** Present once a chargeback has been opened on this order; absent otherwise. */
+  disputeStatus?: DisputeStatus;
   adminAlertedAt?: string;
   cancelReason?: string;
   statusHistory: AdminOrderStatusHistoryEntry[];
@@ -231,7 +243,13 @@ export interface AdminOrder extends Omit<PublicOrder, "statusHistory"> {
  */
 export interface AdminOrdersSummary {
   countsByStatus: Record<OrderStatus, number>;
-  /** Orders with an open chargeback flag (`disputedAt` set), regardless of current status. */
+  /**
+   * Orders whose chargeback is still unresolved (`disputeStatus: "open"`) or
+   * resolved against the shop (`"lost"`) — regardless of current `status`.
+   * `"won"`/`"withdrawn"` are excluded: money stayed with the shop, so they no
+   * longer belong in a "problems" count even though `disputedAt` still records
+   * that a dispute happened.
+   */
   disputed: number;
   /** Authorizations past the alert threshold, not yet swept — same clock the background job acts on. */
   expiringAuthorizations: number;

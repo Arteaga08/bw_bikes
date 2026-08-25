@@ -21,6 +21,9 @@ describe("SocialButton", () => {
 
     rerender(<SocialButton network="youtube" href="https://youtube.com/@x" />);
     expect(screen.getByRole("link", { name: "YouTube" })).toBeInTheDocument();
+
+    rerender(<SocialButton network="tiktok" href="https://tiktok.com/@x" />);
+    expect(screen.getByRole("link", { name: "TikTok" })).toBeInTheDocument();
   });
 
   it("defaults to the inverse tone — its home is the footer over the overlay surface", () => {

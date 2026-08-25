@@ -6,7 +6,7 @@ import type {
   StatsRange,
 } from "@bw-bikes/shared";
 import { Accessory, Bike, Order, ProductView } from "../../models/index.js";
-import { REVENUE_STATUSES } from "./orders.stats.js";
+import { IS_REVENUE_EXPR } from "./orders.stats.js";
 
 /**
  * Rankings, not a full list: a panel widget shows a top-N, and letting it
@@ -61,11 +61,12 @@ async function getMostSoldModels(range: StatsRange): Promise<PreferenceProductRa
         count: { $sum: "$lines.qty" },
         name: { $first: "$lines.name" },
         brand: { $first: "$lines.brand" },
-        // Same rule as `orders.stats.ts`'s `revenueCents`: a refunded sale
-        // still counts toward `count` (popularity), but not toward revenue —
-        // the money came back. Imported, not re-declared, so this can never
-        // drift from the KPI figure above it on Inicio.
-        revenueCents: { $sum: { $cond: [{ $in: ["$status", REVENUE_STATUSES] }, "$lines.lineTotalCents", 0] } },
+        // Same rule as `orders.stats.ts`'s `revenueCents`: a refunded sale, or
+        // one lost to a chargeback, still counts toward `count`
+        // (popularity), but not toward revenue — the money came back or left
+        // for good. Imported, not re-declared, so this can never drift from
+        // the KPI figure above it on Inicio.
+        revenueCents: { $sum: { $cond: [IS_REVENUE_EXPR, "$lines.lineTotalCents", 0] } },
       },
     },
     { $sort: { count: -1 } },

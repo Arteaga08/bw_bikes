@@ -126,7 +126,25 @@ async function dispatch(envelope: PaymentEventEnvelope, order: IOrder): Promise<
 
     // A claim, not an outcome: flagged for the admin, status untouched.
     case "charge.dispute.created":
-      await orderService.markDisputed(order, envelope.occurredAt);
+      await orderService.markDisputed(order, envelope.occurredAt, envelope.disputeStatus ?? "open");
+      return "processed";
+
+    // An intermediate step in an already-open dispute — evidence submitted,
+    // moved under review. No notification; see `recordDisputeUpdate`'s own
+    // comment for why.
+    case "charge.dispute.updated":
+      await orderService.recordDisputeUpdate(order, envelope.disputeStatus ?? "open");
+      return "processed";
+
+    // The dispute resolved. `disputeStatus` is always present on this event
+    // shape (the adapter reads it straight off the object), so the fallback
+    // below only guards a malformed payload, not the normal case.
+    case "charge.dispute.closed":
+      await orderService.closeDispute(
+        order,
+        envelope.disputeStatus && envelope.disputeStatus !== "open" ? envelope.disputeStatus : "lost",
+        envelope.occurredAt,
+      );
       return "processed";
 
     default:

@@ -37,6 +37,16 @@ export interface ButtonStyleOptions {
   loading?: boolean;
   /** Transient "it worked" state — see `ButtonProps.success`. */
   success?: boolean;
+  /**
+   * `text` variant only: pins the underline at full width instead of growing it
+   * on hover — the "you are here" state for inline navigation. Added for the
+   * storefront navbar, where the current section has to stay marked while the
+   * cursor is somewhere else entirely; `:hover` alone can't express that.
+   *
+   * Ignored by every other variant: they have no underline to pin, and a
+   * "current page" link is never a solid/ghost/bare button.
+   */
+  active?: boolean;
 }
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, ButtonStyleOptions {
@@ -314,7 +324,16 @@ export interface ButtonContentProps extends ButtonStyleOptions {
  * label, and the `text` variant's hover underline. Kept as one component so a
  * `<a>` styled as a button can never drift from the `<button>` it mirrors.
  */
-export function ButtonContent({ variant = "primary", size = "md", tone = "neutral", loading = false, iconLeft, iconRight, children }: ButtonContentProps) {
+export function ButtonContent({
+  variant = "primary",
+  size = "md",
+  tone = "neutral",
+  loading = false,
+  active = false,
+  iconLeft,
+  iconRight,
+  children,
+}: ButtonContentProps) {
   return (
     <>
       {loading ? (
@@ -343,7 +362,8 @@ export function ButtonContent({ variant = "primary", size = "md", tone = "neutra
         <span
           aria-hidden="true"
           className={cn(
-            "absolute inset-x-0 bottom-0 h-px origin-center scale-x-0 transition-transform duration-150 group-hover:scale-x-100",
+            "absolute inset-x-0 bottom-0 h-px origin-center transition-transform duration-150 group-hover:scale-x-100",
+            active ? "scale-x-100" : "scale-x-0",
             TEXT_UNDERLINE_CLASSES[tone],
           )}
         />
@@ -359,6 +379,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     tone = "neutral",
     loading = false,
     success = false,
+    active = false,
     successLabel,
     disabled,
     className,
@@ -389,7 +410,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
           {successLabel ?? children}
         </>
       ) : (
-        <ButtonContent variant={variant} size={size} tone={tone} loading={loading} iconLeft={iconLeft} iconRight={iconRight}>
+        <ButtonContent variant={variant} size={size} tone={tone} loading={loading} active={active} iconLeft={iconLeft} iconRight={iconRight}>
           {children}
         </ButtonContent>
       )}

@@ -1,4 +1,4 @@
-import type { OrderPriority, OrderStatus, PaymentState } from "@bw-bikes/shared";
+import type { DisputeStatus, OrderPriority, OrderStatus, PaymentState } from "@bw-bikes/shared";
 import type { BadgeVariant } from "@/components/ui/Badge";
 
 /**
@@ -73,6 +73,27 @@ export function paymentStateBadgeVariant(state: PaymentState): BadgeVariant {
     refunded: "error",
   };
   return variants[state];
+}
+
+/**
+ * Spanish labels for `DisputeStatus` — the outcome row in the "Pago" section
+ * of `OrderDetailModal`, only rendered when `order.disputeStatus` is set.
+ */
+export const DISPUTE_STATUS_LABELS: Record<DisputeStatus, string> = {
+  open: "en curso",
+  won: "ganado",
+  lost: "perdido",
+  withdrawn: "retirado",
+};
+
+export function disputeStatusBadgeVariant(status: DisputeStatus): BadgeVariant {
+  const variants: Record<DisputeStatus, BadgeVariant> = {
+    open: "advertencia",
+    won: "exito",
+    lost: "error",
+    withdrawn: "neutral",
+  };
+  return variants[status];
 }
 
 /** Spanish labels for `OrderPriority` — the triage `Select` in the detail and the "Todas" column. */

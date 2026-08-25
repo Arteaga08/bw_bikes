@@ -9,15 +9,19 @@ export interface HeroControlsProps {
 }
 
 /**
- * Bottom-left carousel chrome — progress dashes, "n | total" counter, and
- * ‹ › arrows, matching the reference (assos.com/int). Every control is a
- * real `<button>` with its own `aria-label`, never a bare `div` with a click
- * handler — the dashes double as direct-jump controls, not just a status
- * readout.
+ * Bottom-left carousel chrome, matching the reference's exact two-row shape
+ * (assos.com/int): a row of progress dashes spanning a fixed width, and
+ * below it — same width — the counter centered between the two arrows
+ * pinned to its edges. Every control is a real `<button>` with its own
+ * `aria-label`, never a bare `div` with a click handler — the dashes double
+ * as direct-jump controls, not just a status readout.
  */
 export function HeroControls({ total, activeIndex, onSelect, onPrev, onNext }: HeroControlsProps) {
   return (
-    <div className="absolute bottom-lg right-lg z-10 flex items-center gap-md text-blanco sm:right-2xl">
+    // `left-lg`/`sm:left-xl`, matching `HeroSlideContent`'s own horizontal
+    // padding exactly — this stacks directly under the CTA button in the
+    // same left column.
+    <div className="absolute bottom-sm left-lg z-10 flex w-64 flex-col gap-sm text-blanco sm:bottom-md sm:left-xl sm:w-80">
       <div className="flex gap-xs" role="group" aria-label="Ir a un slide">
         {Array.from({ length: total }, (_, index) => (
           <button
@@ -26,16 +30,12 @@ export function HeroControls({ total, activeIndex, onSelect, onPrev, onNext }: H
             aria-label={`Slide ${index + 1} de ${total}`}
             aria-current={index === activeIndex}
             onClick={() => onSelect(index)}
-            className="h-[2px] w-8 rounded-full bg-blanco/40 transition-colors focus-visible:outline-3 focus-visible:outline-dorado focus-visible:outline-offset-4 aria-[current=true]:bg-dorado"
+            className="h-[2px] flex-1 rounded-full bg-blanco/40 transition-colors focus-visible:outline-3 focus-visible:outline-dorado focus-visible:outline-offset-4 aria-[current=true]:bg-dorado"
           />
         ))}
       </div>
 
-      <p className="font-ui text-ui text-blanco/80" aria-hidden="true">
-        {activeIndex + 1} | {total}
-      </p>
-
-      <div className="flex gap-xs">
+      <div className="flex items-center justify-between">
         <button
           type="button"
           aria-label="Slide anterior"
@@ -44,6 +44,11 @@ export function HeroControls({ total, activeIndex, onSelect, onPrev, onNext }: H
         >
           <CaretLeft size={20} aria-hidden="true" />
         </button>
+
+        <p className="font-ui text-ui text-blanco/80" aria-hidden="true">
+          {activeIndex + 1} | {total}
+        </p>
+
         <button
           type="button"
           aria-label="Siguiente slide"

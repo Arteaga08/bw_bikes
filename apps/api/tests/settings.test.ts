@@ -40,6 +40,42 @@ describe("Settings — singleton editable by section", () => {
     expect(stored).not.toBeNull();
   });
 
+  it("self-heals orders.requestThreeDSecure on read for a singleton that predates the field (Sesión 3 audit)", async () => {
+    const app: App = buildApp();
+    const adminCookie = await createAdminSession(app);
+
+    // Bypasses Mongoose entirely to write the shape a pre-M9 singleton
+    // actually has in production/dev — Mongoose's own `default` would mask
+    // the bug this test guards against if the raw driver weren't used here.
+    await Settings.collection.insertOne({
+      key: "global",
+      inventory: { stockReservationTtlMinutes: 30, reservationRetentionDays: 30, lowStockThresholdUnits: 5 },
+      orders: {
+        orderPaymentTtlMinutes: 15,
+        orderAuthAlertHours: 120,
+        orderAuthCancelHours: 156,
+        paymentReconciliationAfterMinutes: 20,
+        // requestThreeDSecure intentionally absent.
+      },
+      pricing: { taxRateBps: 1600 },
+      shipping: { accessoryFlatCents: 25_000, freeShippingThresholdCents: 200_000 },
+      applications: { cooldownDays: 90 },
+      jobs: {
+        reservationReaperIntervalMs: 60_000,
+        orderAuthSweepIntervalMs: 300_000,
+        paymentReconciliationIntervalMs: 600_000,
+        lowStockAlertIntervalMs: 300_000,
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const res = await request(app).get(`${ADMIN}/settings`).set("Cookie", adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.settings.orders.requestThreeDSecure).toBe("automatic");
+  });
+
   it("rejects an anonymous caller with 401 and a customer with 403", async () => {
     const app: App = buildApp();
     const customerCookie = await createCustomerSession(app);

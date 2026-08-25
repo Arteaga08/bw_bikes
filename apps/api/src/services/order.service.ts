@@ -6,6 +6,7 @@ import type {
   BillingInfo,
   Carrier,
   CheckoutResult,
+  DisputeStatus,
   OrderActivityEntry,
   OrderLineSnapshot,
   OrderPriority,
@@ -172,6 +173,7 @@ function toAdminOrder(order: IOrder, customer?: Pick<IUser, "_id" | "email" | "f
       : null,
     ...(order.payment.intentId !== undefined ? { paymentIntentId: order.payment.intentId } : {}),
     ...(order.disputedAt ? { disputedAt: order.disputedAt.toISOString() } : {}),
+    ...(order.disputeStatus ? { disputeStatus: order.disputeStatus } : {}),
     ...(order.adminAlertedAt ? { adminAlertedAt: order.adminAlertedAt.toISOString() } : {}),
     ...(order.cancelReason !== undefined ? { cancelReason: order.cancelReason } : {}),
     internalNotes: (order.internalNotes ?? []).map((note) => ({
@@ -742,19 +744,103 @@ async function markRefunded(order: IOrder, refundedAmountCents: number, refunded
 /**
  * A chargeback was opened. Deliberately **not** a status change: a dispute is
  * a claim, not an outcome, and money has not moved yet. The order is flagged
- * so the admin can act; if it is later lost, the resulting refund event moves
- * the status.
+ * so the admin can act — `recordDisputeUpdate`/`closeDispute` below carry the
+ * story forward as Stripe reports more.
  */
-async function markDisputed(order: IOrder, occurredAt: Date): Promise<void> {
-  await Order.updateOne({ _id: order._id }, { $set: { disputedAt: occurredAt } }).exec();
+async function markDisputed(order: IOrder, occurredAt: Date, status: DisputeStatus): Promise<void> {
+  await Order.updateOne({ _id: order._id }, { $set: { disputedAt: occurredAt, disputeStatus: status } }).exec();
 
   await recordAuditLog({
     actorType: "system",
     action: "order.disputed",
     module: MODULE_NAME,
     targetId: String(order._id),
-    after: { orderNumber: order.orderNumber, disputedAt: occurredAt.toISOString() },
+    after: { orderNumber: order.orderNumber, disputedAt: occurredAt.toISOString(), disputeStatus: status },
   });
+}
+
+/**
+ * An intermediate step in an already-open dispute (evidence submitted, moved
+ * under review, ...). Recorded for the audit trail; no notification — the
+ * admin was already alerted when the dispute opened, and pinging them again
+ * on every intermediate Stripe status would be noise for a claim that hasn't
+ * resolved.
+ */
+async function recordDisputeUpdate(order: IOrder, status: DisputeStatus): Promise<void> {
+  await Order.updateOne({ _id: order._id }, { $set: { disputeStatus: status } }).exec();
+
+  await recordAuditLog({
+    actorType: "system",
+    action: "order.dispute_updated",
+    module: MODULE_NAME,
+    targetId: String(order._id),
+    after: { orderNumber: order.orderNumber, disputeStatus: status },
+  });
+}
+
+/**
+ * The dispute resolved. `disputedAt` is left untouched — it is the historical
+ * fact that a chargeback was opened, not a flag to clear — only
+ * `disputeStatus` moves, which is what `getSummary`'s "problems" tile and
+ * `orders.stats.ts`'s revenue rule both read.
+ *
+ * A **lost** dispute deliberately does not touch `status`: money already left
+ * through Stripe's own chargeback process, not through this shop's refund
+ * flow, so there is no `refunded` order to show and no
+ * `sendRefundConfirmedEmail` to the customer — that email means "we gave your
+ * money back", which would be a lie here. The admin is alerted instead, on
+ * both channels `markPaid` uses for a new sale, because this is the same
+ * kind of fact: money that just left the shop.
+ */
+async function closeDispute(order: IOrder, status: Exclude<DisputeStatus, "open">, occurredAt: Date): Promise<void> {
+  await Order.updateOne({ _id: order._id }, { $set: { disputeStatus: status } }).exec();
+
+  await recordAuditLog({
+    actorType: "system",
+    action: "order.dispute_closed",
+    module: MODULE_NAME,
+    targetId: String(order._id),
+    after: { orderNumber: order.orderNumber, disputeStatus: status, closedAt: occurredAt.toISOString() },
+  });
+
+  if (status === "won" || status === "withdrawn") {
+    const title = status === "won" ? "Contracargo ganado" : "Contracargo retirado";
+    await createNotifier()
+      .notifyAdmin({
+        kind: "order.dispute_closed",
+        title: `${title} — orden ${order.orderNumber}`,
+        body: "El contracargo se resolvió a favor de la tienda. El dinero se queda.",
+        meta: { orderId: String(order._id), orderNumber: order.orderNumber, disputeStatus: status },
+      })
+      .catch((error: unknown) => {
+        logger.error({ err: error, orderId: String(order._id) }, "Failed to notify the admin that a dispute closed");
+      });
+    return;
+  }
+
+  // status === "lost"
+  const summaryBody = `Se perdió el contracargo de la orden ${order.orderNumber} por $${(order.totalCents / 100).toFixed(2)} MXN. El banco retiró el dinero.`;
+
+  await createNotifier()
+    .notifyAdmin({
+      kind: "order.dispute_closed",
+      title: `Contracargo perdido — orden ${order.orderNumber}`,
+      body: summaryBody,
+      meta: { orderId: String(order._id), orderNumber: order.orderNumber, disputeStatus: status, totalCents: order.totalCents },
+    })
+    .catch((error: unknown) => {
+      logger.error({ err: error, orderId: String(order._id) }, "Failed to notify the admin that a dispute was lost");
+    });
+
+  await createMailer()
+    .sendAdminAlertEmail({
+      subject: `Contracargo perdido — orden ${order.orderNumber}`,
+      title: `Contracargo perdido — orden ${order.orderNumber}`,
+      bodyParagraphs: [summaryBody],
+    })
+    .catch((error: unknown) => {
+      logger.error({ err: error, orderId: String(order._id) }, "Failed to send the lost-dispute admin alert email");
+    });
 }
 
 // --- Admin actions --------------------------------------------------------
@@ -1314,7 +1400,10 @@ async function getActivity(orderId: string): Promise<OrderActivityEntry[]> {
 async function getSummary(): Promise<AdminOrdersSummary> {
   const [statusRows, disputed, settings] = await Promise.all([
     Order.aggregate<{ _id: OrderStatus; count: number }>([{ $group: { _id: "$status", count: { $sum: 1 } } }]).exec(),
-    Order.countDocuments({ disputedAt: { $exists: true } }).exec(),
+    // `open` still needs a decision; `lost` is a problem that already
+    // happened. `won`/`withdrawn` are resolved in the shop's favor and no
+    // longer belong in a "problems" count — see `DisputeStatus`'s own doc.
+    Order.countDocuments({ disputeStatus: { $in: ["open", "lost"] } }).exec(),
     settingsService.get(),
   ]);
 
@@ -1378,6 +1467,8 @@ export const orderService = {
   markCanceled,
   markRefunded,
   markDisputed,
+  recordDisputeUpdate,
+  closeDispute,
   applyTransition,
 };
 

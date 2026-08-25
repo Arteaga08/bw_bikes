@@ -14,8 +14,8 @@ import type {
  *
  * ## What is stubbed, and what deliberately is not
  *
- * The four **outbound** calls (create/capture/cancel/retrieve/refund) are
- * replaced with spies: they would otherwise dial Stripe over the network, and
+ * The four **outbound** calls (create/capture/cancel/retrieve) are replaced
+ * with spies: they would otherwise dial Stripe over the network, and
  * a test suite that depends on a third party is a test suite that fails on
  * their bad day, not on ours.
  *
@@ -35,7 +35,6 @@ export interface StripeStubs {
   capturePayment: MockInstance<PaymentProvider["capturePayment"]>;
   cancelPayment: MockInstance<PaymentProvider["cancelPayment"]>;
   retrievePayment: MockInstance<PaymentProvider["retrievePayment"]>;
-  refundPayment: MockInstance<PaymentProvider["refundPayment"]>;
   /** The id of the most recently created payment, ready to sign a webhook for. */
   lastIntentId(): string;
   /** What `retrievePayment` should answer next — the reconciliation job's input. */
@@ -133,16 +132,11 @@ export function stubStripe(options: { intentId?: string } = {}): StripeStubs {
       };
     });
 
-  const refundPayment = vi
-    .spyOn(stripeProvider, "refundPayment")
-    .mockImplementation(async (intentId): Promise<PaymentSnapshot> => ({ intentId, state: "refunded", amountCents: 0 }));
-
   return {
     createPayment,
     capturePayment,
     cancelPayment,
     retrievePayment,
-    refundPayment,
     lastIntentId: () => lastIntentId,
     setRetrievedState: (state) => {
       retrievedState = state;
@@ -218,6 +212,27 @@ export function chargeObject(overrides: {
     object: "charge",
     payment_intent: overrides.intentId,
     amount_refunded: overrides.amountRefunded ?? 0,
+    metadata: overrides.orderId ? { orderId: overrides.orderId } : {},
+  };
+}
+
+/**
+ * A Dispute object, as `charge.dispute.created`/`.updated`/`.closed`
+ * deliver it. `status` is Stripe's own raw vocabulary
+ * (`needs_response`/`under_review`/`won`/`lost`/`warning_closed`/...) — the
+ * adapter under test is what maps it onto `DisputeStatus`, so the fixture
+ * must not pre-translate it.
+ */
+export function disputeObject(overrides: {
+  intentId: string;
+  status: string;
+  orderId?: string;
+}): Record<string, unknown> {
+  return {
+    id: `dp_test_${Math.random().toString(16).slice(2, 10)}`,
+    object: "dispute",
+    payment_intent: overrides.intentId,
+    status: overrides.status,
     metadata: overrides.orderId ? { orderId: overrides.orderId } : {},
   };
 }

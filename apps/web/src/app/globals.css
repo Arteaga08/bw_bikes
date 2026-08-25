@@ -146,6 +146,17 @@
    * utilidades (a diferencia de --color-*, --text-*, --spacing-*, --radius-*),
    * así que declararlos aquí no habría producido `h-control`/`duration-fast`.
    */
+
+  /* ---- Curvas de movimiento ----
+     A diferencia de la duración, --ease-* SÍ es un namespace de @theme, así
+     que estos generan `ease-drawer` / `ease-out-strong`. Existen porque las
+     curvas nativas de CSS son demasiado suaves para leerse como decisión: un
+     panel con `ease` por defecto arranca y frena con la misma indecisión.
+     `drawer` es la curva de iOS (salida larguísima, entrada casi inmediata)
+     para superficies que se deslizan; `out-strong` es el ease-out con
+     suficiente pendiente inicial para que un control responda al instante. */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 :root {
@@ -205,10 +216,20 @@ body {
 }
 
 /* Foco visible global (WCAG AA) — cada componente interactivo hereda esto a
-   menos que defina su propio color de anillo (dorado sobre fondo oscuro). */
-:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-negro);
-  outline-offset: var(--focus-ring-offset);
+   menos que defina su propio color de anillo (dorado sobre fondo oscuro).
+   Dentro de `@layer base`, a propósito: sin capa, esta regla es CSS "no
+   capeado" y por spec de cascade layers gana SIEMPRE sobre cualquier
+   utilidad de Tailwind (que sí vive en capas: theme/base/components/
+   utilities), sin importar cuánta especificidad tenga esa utilidad —
+   `focus-visible:outline-dorado` (Button.tsx, tono `inverse`) perdía contra
+   este negro fijo en cualquier control sobre fondo oscuro, incluida la
+   navbar transparente del storefront. Encontrado y corregido al verificar
+   el foco de teclado en la revisión del navbar (M12 entrega 1, ronda 2). */
+@layer base {
+  :focus-visible {
+    outline: var(--focus-ring-width) solid var(--color-negro);
+    outline-offset: var(--focus-ring-offset);
+  }
 }
 
 /* Skip link — oculto hasta recibir foco por teclado (FRONTEND_GUIDELINES §5). */

@@ -1,4 +1,4 @@
-import type { PaymentState } from "@bw-bikes/shared";
+import type { DisputeStatus, PaymentState } from "@bw-bikes/shared";
 import Stripe from "stripe";
 import { env } from "../../config/env.js";
 import { AppError } from "../../utils/index.js";
@@ -88,6 +88,29 @@ function mapState(intent: Stripe.PaymentIntent): PaymentState {
       return intent.last_payment_error ? "failed" : "pending";
     default:
       return "pending";
+  }
+}
+
+/**
+ * Maps Stripe's five dispute statuses onto the four this domain recognises.
+ *
+ * `needs_response`/`under_review` (still open, either side) collapse to
+ * `open` — nothing distinguishes "we haven't answered yet" from "Stripe is
+ * deciding" for an admin's purposes, both just mean "unresolved". The two
+ * `warning_*` statuses are Stripe's early-warning product (no money moved
+ * yet); `warning_closed` maps to `withdrawn` because it means exactly that —
+ * the bank dropped the inquiry before it became a real dispute.
+ */
+function mapDisputeStatus(status: string): DisputeStatus {
+  switch (status) {
+    case "won":
+      return "won";
+    case "lost":
+      return "lost";
+    case "warning_closed":
+      return "withdrawn";
+    default:
+      return "open";
   }
 }
 
@@ -267,17 +290,12 @@ async function retrievePayment(intentId: string): Promise<PaymentSnapshot> {
   }
 }
 
-async function refundPayment(intentId: string, idempotencyKey: string): Promise<PaymentSnapshot> {
-  try {
-    const stripe = stripeClient();
-    await stripe.refunds.create({ payment_intent: intentId }, { idempotencyKey });
-    // Re-read rather than deriving from the refund object: the PaymentIntent is
-    // the single source of truth for what state this payment is now in.
-    return toSnapshot(await stripe.paymentIntents.retrieve(intentId));
-  } catch (error) {
-    throw toAppError(error, "No se pudo reembolsar el pago.");
-  }
-}
+// Deliberately no `refundPayment` here. A refund moves money back out the
+// door, and the shop's chosen control for that is the Stripe Dashboard
+// itself — it demands the owner's own Stripe credentials, a stronger bar than
+// an admin-panel session. The Dashboard refund lands here as a `charge.refunded`
+// webhook (`payment-webhook.service.ts`), which is the only path that ever
+// calls `orderService.markRefunded`. See that function's own comment.
 
 /**
  * Verifies the signature against the **raw** body bytes.
@@ -313,6 +331,10 @@ function verifyWebhook(rawBody: Buffer, signature: string | undefined): PaymentE
   const amount = object["amount"];
   const refunded = object["amount_refunded"];
   const failure = (object["last_payment_error"] as { message?: unknown } | undefined)?.message;
+  // Read only on a dispute event: a `payment_intent` also has a `status`
+  // field, and reading it generically here would silently mislabel it as a
+  // dispute status.
+  const rawDisputeStatus = event.type.startsWith("charge.dispute.") ? object["status"] : undefined;
 
   return {
     id: event.id,
@@ -322,6 +344,7 @@ function verifyWebhook(rawBody: Buffer, signature: string | undefined): PaymentE
     ...(typeof amount === "number" ? { amountCents: amount } : {}),
     ...(typeof refunded === "number" ? { refundedAmountCents: refunded } : {}),
     ...(typeof failure === "string" ? { failureMessage: failure } : {}),
+    ...(typeof rawDisputeStatus === "string" ? { disputeStatus: mapDisputeStatus(rawDisputeStatus) } : {}),
     occurredAt: new Date(event.created * 1000),
   };
 }
@@ -335,7 +358,6 @@ export const stripeProvider: PaymentProvider = {
   capturePayment,
   cancelPayment,
   retrievePayment,
-  refundPayment,
   verifyWebhook,
 };
 
