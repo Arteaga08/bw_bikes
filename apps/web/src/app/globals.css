@@ -157,6 +157,26 @@
      suficiente pendiente inicial para que un control responda al instante. */
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+
+  /* ---- Entrada del copy del hero ----
+     El carrusel de inicio traslada las fotos pero deja la columna de texto
+     fija (es lo que mantiene alineados CTA, dashes y flechas sobre un mismo
+     riel), así que el texto necesita su propia entrada o cambiaría de golpe.
+     `--hero-in-from` lo fija `HeroCarousel` según la dirección del salto, y
+     se hereda hasta cada hijo animado; el fallback cubre cualquier uso suelto.
+     Solo `transform` y `opacity`: nada que dispare layout. */
+  --animate-hero-in: hero-in 500ms var(--ease-out-strong) both;
+
+  @keyframes hero-in {
+    from {
+      opacity: 0;
+      transform: translateX(var(--hero-in-from, 2rem));
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }
 
 :root {

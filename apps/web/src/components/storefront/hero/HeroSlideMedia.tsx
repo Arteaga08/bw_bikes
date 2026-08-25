@@ -32,6 +32,10 @@ export function HeroSlideMedia({ slide, isFirst }: HeroSlideMediaProps) {
         style={{ objectPosition: OBJECT_POSITION[slide.focalPoint] }}
       />
       <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-negro/80 via-negro/20 to-transparent" />
+      {/* A second, lateral scrim. The copy sits bottom *left*, so a purely
+          bottom-up gradient leaves the title fighting whatever the photo puts
+          on that side. This is what holds the text at AA over a bright frame. */}
+      <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-negro/70 via-negro/10 to-transparent" />
     </div>
   );
 }
