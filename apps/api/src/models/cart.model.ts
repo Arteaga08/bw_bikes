@@ -1,6 +1,7 @@
 import type { BillingInfo, ItemType, ShippingAddress } from "@bw-bikes/shared";
 import { type Document, model, Schema, type Types } from "mongoose";
 import { billingInfoSchema } from "./schemas/billing-info.schema.js";
+import { MAX_COUPON_CODE_LENGTH } from "./coupon.model.js";
 import { MAX_SKU_LENGTH } from "./schemas/product-variant.schema.js";
 import { shippingAddressSchema } from "./schemas/shipping-address.schema.js";
 import { MAX_RESERVATION_QTY } from "./stock-reservation.model.js";
@@ -30,6 +31,8 @@ export interface ICart extends Document {
   shippingAddress?: ShippingAddress;
   /** Optional CFDI data (M7), same capture-here-copy-at-checkout pattern as `shippingAddress`. */
   billingInfo?: BillingInfo;
+  /** A coupon code the customer entered (M18). Only the code — see the schema note below. */
+  couponCode?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -85,6 +88,12 @@ const cartSchema = new Schema<ICart>(
     // no CFDI data at all (design-spec open decision #3, captured but not
     // timbrado in M7).
     billingInfo: { type: billingInfoSchema },
+    // **Only the code, never the amount.** The discount is re-evaluated on
+    // every cart render for exactly the reason line prices are: a number
+    // cached here is a number the checkout might be tempted to trust, and a
+    // customer could otherwise hold a stale discount across a campaign ending.
+    // Frozen into a real figure only once the order exists (`Order.coupon`).
+    couponCode: { type: String, trim: true, uppercase: true, maxlength: MAX_COUPON_CODE_LENGTH },
   },
   { timestamps: true },
 );

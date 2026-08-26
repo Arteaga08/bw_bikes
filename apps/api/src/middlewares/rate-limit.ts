@@ -110,6 +110,25 @@ export const applicationRateLimiter = createRateLimiter({
 });
 
 /**
+ * Applying a coupon (`POST /cart/coupon`).
+ *
+ * A coupon code is a short, guessable secret sitting behind an endpoint that
+ * says "válido" or "no válido" — which is a brute-force oracle unless it is
+ * bounded. Twenty attempts per quarter hour leaves plenty of room for a
+ * customer fumbling a code off a printed card, and none for a script walking
+ * the keyspace.
+ *
+ * This is also the only *customer-facing* coupon surface: there is no public
+ * listing route, so guessing is the only way to discover a campaign, and this
+ * is the control that makes it not worth trying.
+ */
+export const couponRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: "Demasiados intentos con cupones. Espera unos minutos e intenta de nuevo.",
+});
+
+/**
  * Checkout (`POST /orders`). Strict, because this is the anti card-testing
  * control the e-commerce standard asks for: an endpoint that creates a payment
  * intent per call is exactly what a stolen-card script wants, and each call

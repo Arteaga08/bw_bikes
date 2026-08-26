@@ -45,12 +45,15 @@ export async function createUser(overrides: {
   password?: string;
   role?: UserRole;
   emailVerified?: boolean;
+  /** Pinned only by tests that assert on the rendered name (the CRM list, the top-buyer ranking). */
+  firstName?: string;
+  lastName?: string;
 }): Promise<IUser> {
   return User.create({
     email: overrides.email,
     password: overrides.password ?? "Correct-Horse-Battery-Staple-1",
-    firstName: "Test",
-    lastName: "User",
+    firstName: overrides.firstName ?? "Test",
+    lastName: overrides.lastName ?? "User",
     role: overrides.role ?? "customer",
     emailVerified: overrides.emailVerified ?? true,
   });

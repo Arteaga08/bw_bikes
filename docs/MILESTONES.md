@@ -23,6 +23,11 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M15 — Correos y alertas logísticas | 4 | ⏳ Pendiente | — | |
 | M16 — Bot Instagram/Facebook DM | 4 | ⏳ Pendiente | — | Requiere trámite Meta iniciado en fase 3 |
 | M17 — Bot WhatsApp | 4 | ⏳ Pendiente | — | Requiere número dedicado + verificación Meta |
+| M18 — Cupones: backend núcleo | 5 | ✅ Hecho | `feat/m18-cupones-backend` | Cierra parte de la decisión abierta #3. Ver detalle abajo |
+| M19 — Cupones: panel admin | 5 | ✅ Hecho | `feat/m18-cupones-backend` | Ver detalle abajo |
+| M20 — Clientes: backend CRM | 5 | ✅ Hecho | `feat/m18-cupones-backend` | Ver detalle abajo |
+| M21 — Envío de cupones por correo | 5 | ✅ Hecho | `feat/m18-cupones-backend` | Cierra la fase 5. Ver detalle abajo |
+| M22 — Clientes: panel admin | 5 | ✅ Hecho | `feat/m18-cupones-backend` | Ver detalle abajo |
 
 ---
 
@@ -1771,5 +1776,283 @@ pnpm --filter web test                 → 455/456 (mismo roto preexistente que 
 
 **Fuera de esta entrega:** la ficha de producto (`/bicicletas/producto/[slug]`), a la que apuntan las
 tarjetas y que hoy da 404; las cuatro secciones restantes de la home.
+
+### Ajuste posterior — Separar accesorios de "Novedades" + nueva sección "Accesorios más vendidos"
+
+Las entregas 6-10 de M12 ("comprar bicis/accesorios", "bici del mes", "favoritas de los ciclistas",
+"descubre tu bici" → `HomeComparatorBanner`) se construyeron pero no quedaron documentadas aquí
+entrega por entrega — ver el propio comentario de cabecera de `apps/web/src/app/(storefront)/page.tsx`
+para su historial. Este ajuste sí queda registrado porque cambia el contrato de datos de "Novedades".
+
+Manuel decidió dejar de mezclar bicis y accesorios en "Novedades": la sección pasa a mostrar solo
+bicis, y se agrega una sección propia, "Accesorios más vendidos", después de `HomeComparatorBanner`.
+
+- **`fetchCuratedProductRail`** (`apps/web/src/lib/api/public-catalog.ts`) gana un parámetro
+  `scope: "both" | "bike" | "accessory"` (default `"both"`) — cuando el scope excluye un catálogo, ese
+  catálogo ni se pide.
+- **`getPublicNewProducts()`** pasa a `scope: "bike"` — deja de traer accesorios.
+- **`getPublicBestSellingAccessories()`** (nueva): `scope: "accessory"`, mismo flag `isNewArrival`.
+  No existe ningún dato de ventas reales expuesto al público (solo analítica admin-only sobre
+  `Order.lines`); en vez de agregar un campo `isBestSeller` nuevo, se reusa `isNewArrival` de
+  `Accessory` — mismo razonamiento que el propio renombre "bestseller" → "Novedades" de la entrega
+  5/10: el encabezado del home es una decisión de merchandising, desacoplada del nombre del campo.
+- **`HomeBestSellingAccessories`** (`components/storefront/products/`): mismo contrato de
+  degradación que sus hermanas (`HomeNewProducts`/`HomeFavoriteProducts`) — sin imagen no aparece,
+  sin productos la sección entera se omite. Reusa `ProductCarousel` sin modificarlo.
+- `page.tsx`: `<HomeBestSellingAccessories />` insertado después de `<HomeComparatorBanner />`.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm --filter api typecheck            → limpio
+pnpm --filter web typecheck            → limpio
+pnpm --filter api lint                 → limpio
+pnpm --filter web lint                 → 1 error preexistente en CouponFormModal.tsx
+                                          (react-hooks/set-state-in-effect), de trabajo de cupones en
+                                          curso en otra sesión concurrente sobre este mismo checkout —
+                                          no relacionado a este cambio
+pnpm --filter web build                → bloqueado por un archivo también en curso,
+                                          admin/(panel)/clientes/page.tsx importa un ClientesView.tsx
+                                          que todavía no existe — mismo trabajo concurrente, no
+                                          relacionado a este cambio
+```
+Verificación visual contra el dev server ya corriendo en este checkout (`localhost:3000`/`:4000`,
+sin tocarlo): `/` sirve 200 y sigue mostrando "Novedades"/"Favoritas de los ciclistas"; confirmado
+contra la API directamente que hoy no hay ningún accesorio con `isNewArrival=true`
+(`GET /catalog/accessories?isNewArrival=true` → `[]`), así que "Accesorios más vendidos" se omite
+correctamente (el mismo contrato de "sin productos, sin sección" que ya tienen sus hermanas) — no se
+pudo ver la sección con contenido real sin marcar un accesorio como novedad en la base compartida con
+otras sesiones concurrentes, así que queda pendiente ese vistazo puntual cuando haya un accesorio
+marcado.
+
+---
+
+## M18 — Cupones: backend núcleo
+
+**Arranca la fase 5 (marketing y CRM).** Cierra parcialmente la decisión abierta #3: los cupones
+dejan de estar diferidos; MSI y timbrado CFDI siguen fuera.
+
+**Entregado:**
+- **`Coupon` + `CouponRedemption`** (`apps/api/src/models/coupon.model.ts`,
+  `coupon-redemption.model.ts`): campaña de descuento con código compartido en mayúsculas
+  (`^[A-Z0-9-]+$`, único), `percent_off` en puntos base **o** `amount_off` en centavos —
+  exclusivos entre sí, invariante sostenida a la vez por el validador Joi y por un
+  `pre("validate")` del esquema, para que también la respeten los escritores que nunca pasan por
+  HTTP. Reglas: vigencia (`startsAt`/`expiresAt`), compra mínima (`minSubtotalCents`), tope de
+  descuento (`maxDiscountCents`, solo para porcentajes) y alcance (`scope`: todo, bicis,
+  accesorios o categorías concretas).
+- **Dos límites de canje, que son lo que hace seguro un código compartido**:
+  `maxRedemptionsTotal` acota el costo de la campaña, `maxRedemptionsPerCustomer` impide que una
+  sola persona la agote. Ambos se resuelven contra el libro mayor `CouponRedemption`, no contra un
+  contador — un contador no sabe responder "¿este cliente ya lo usó?".
+- **Idempotencia del canje** mediante el índice único `{couponId, orderId}` del libro mayor. Es lo
+  que convierte un `replayCheckout` o un reintento de red de una carrera que el servicio tendría
+  que ganar en un error de clave duplicada que simplemente se traga.
+- **`calculateTotals` gana un cuarto parámetro `discountCents`** (`services/order-pricing.ts`), que
+  llega ya resuelto: la función sabe restar un descuento, no si el cliente tenía derecho a él —
+  exactamente como ya sabía plegar el envío sin decidir la tarifa. **La resta ocurre antes de
+  derivar el IVA**, y ese orden es estructural: como el impuesto se *extrae* del total en vez de
+  sumarse, descontar después reportaría IVA sobre pesos que el cliente nunca pagó. El descuento se
+  topa al subtotal, así que un cupón generoso deja la mercancía en cero pero nunca empieza a
+  devolver el envío.
+- **`coupon.service.ts`**: CRUD admin auditado, `evaluate` (ocho validaciones en orden, cada
+  rechazo con su mensaje accionable en español), `evaluateSafely` (el mismo veredicto como dato en
+  vez de excepción — la forma que ya usa `resolveCartLines`), `redeem` (incremento atómico
+  condicionado + libro mayor) y `releaseForOrder`.
+- **Carrito**: `Cart.couponCode` guarda **solo el código, nunca el monto** — mismo principio que ya
+  impide cachear precios de línea. `POST /cart/coupon` y `DELETE /cart/coupon`. Un cupón que dejó
+  de ser válido no rompe el carrito: se descarta y el carrito se renderiza a precio lleno.
+- **Checkout**: `createFromCart` re-evalúa el cupón (la vista previa del carrito no es autoridad),
+  lo congela en `Order.coupon` + `Order.discountCents`, y canjea **después** de que la orden existe
+  — el libro mayor se llavea por `orderId`. `replayCheckout` quedó intacto: ya reusaba
+  `order.totalCents` congelado.
+- **Liberación en un solo punto de estrangulamiento**: `applyTransition` devuelve el canje al pool
+  cuando la orden llega a `cancelled` o `authorization_expired`, así que ningún call site tiene que
+  acordarse. `refunded` está deliberadamente ausente: esa venta ocurrió, y devolver el cupón ahí
+  dejaría al cliente cosechar descuento infinito comprando y devolviendo.
+- **Seguridad**: `couponRateLimiter` (20/15min) sobre `POST /cart/coupon` — un código es un secreto
+  corto y adivinable detrás de un endpoint que responde "válido/no válido", o sea un oráculo de
+  fuerza bruta si no se acota. Sin listado público de cupones. El router admin va sin limiter,
+  siguiendo la regla del repo (auth + rol + TOTP en cada request). Cinco `AuditAction` nuevas en la
+  unión y en el espejo runtime `AUDIT_ACTIONS`.
+- **Piso del gateway**: `MIN_CHARGEABLE_CENTS` (1.000). Stripe rechaza un cargo MXN bajo $10, así
+  que un descuento que aterrice debajo se rechaza aquí, en español, mientras quitar el cupón sigue
+  siendo un arreglo obvio — en vez de fallar en la pasarela con un mensaje sobre el que nadie puede
+  actuar.
+
+**Verificado:**
+```bash
+pnpm --filter @bw-bikes/shared build     # tipos compartidos compilan
+pnpm --filter @bw-bikes/api exec tsc --noEmit -p tsconfig.json
+pnpm --filter @bw-bikes/api test         # 53 archivos, 597 tests
+```
+Cobertura nueva (49 tests en 5 archivos): `coupon-pricing.test.ts` (aritmética pura, incluida la
+regresión que este feature podía haber traído más fácil: que el IVA salga del total ya descontado),
+`coupon.test.ts` (CRUD, 409 por código duplicado, 409 al borrar una campaña ya canjeada, 401/403),
+`coupon-redemption.test.ts` (los ocho rechazos, alcance por categoría real, y que cinco checkouts
+simultáneos peleando por el último canje dejen exactamente uno),
+`cart-coupon.test.ts` (aplicar/quitar, y que el carrito siga renderizando cuando el cupón expira
+debajo del cliente), `checkout-coupon.test.ts` (monto que recibe Stripe, congelado en la orden,
+reintento con `Idempotency-Key` que no gasta un segundo canje, y liberación al cancelar).
+
+**Decisiones tomadas durante la implementación (no estaban explícitas en el plan):**
+- **Un solo punto de liberación en vez de llamadas esparcidas.** El plan preveía llamar
+  `releaseForOrder` desde `failOrder`, `cancelStalePendingOrders` y las rutas de cancelación. Al
+  implementar quedó claro que las tres desembocan en `applyTransition`; el gancho vive ahí y los
+  call sites no saben del cupón.
+- **`evaluateSafely` con veredicto, no `evaluateQuietly` con `null`.** La primera versión evaluaba
+  el código contra todas las líneas resolubles al aplicarlo, pero solo contra las *comprables* al
+  renderizar — un cliente podía aplicar un cupón que después no mostraba descuento. Un test lo
+  cazó. Ahora ambos caminos salen de una sola evaluación: `applyCoupon` guarda, renderiza y
+  revierte si el render lo rechazó, así que la respuesta que recibe el cliente *es* literalmente el
+  carrito que va a ver.
+- **El mínimo de compra se mide contra el subtotal completo, no contra el tramo con alcance.** "En
+  compras mayores a $5,000" es lo que el cliente leyó, y el total de su carrito es el número que
+  puede ver.
+- **`floor` y no `round` al calcular un porcentaje**: cuando el descuento cae entre dos centavos, el
+  medio centavo es de la tienda, y redondear hacia arriba dejaría a un cupón de porcentaje excederse
+  de su propio tope por uno.
+- **La categoría no se congela en `OrderLineSnapshot`.** Se resuelve con dos queries en el momento,
+  y solo para cupones con `scope.kind === "categories"`. Congelarla haría que una campaña dirigida a
+  "Montaña" se saltara en silencio las bicis que la tienda movió ahí la semana pasada.
+
+**Fuera de este milestone:** la UI del cupón en el carrito y el checkout (M13 — el storefront
+público de compra todavía no existe, así que el cliente final no puede teclear un código); el panel
+de administración de cupones (M19); envío de cupones por correo (M21); envío gratis como tipo de
+cupón (descartado: el envío ya es gratis arriba de un umbral, así que sería no-op en la mayoría de
+los carritos); cupones nominativos por cliente; MSI y timbrado CFDI (decisión abierta #3 sigue
+parcialmente abierta).
+
+---
+
+## M19 — Cupones: panel admin
+
+**Entregado:**
+- `/admin/cupones` (`apps/web/src/app/admin/(panel)/cupones/`): `page.tsx` RSC delgado →
+  `CouponsView` cliente con la máquina de estados canónica del panel (`requestKey`/`lastRequestKey`
+  para que un refetch no parpadee el skeleton), `DataTable` con fila móvil, `Pagination`,
+  `EmptyState` y `ErrorBoundary`. `CouponFormModal` va por `dynamic(..., {ssr:false})`.
+- `apps/web/src/lib/api/admin-coupons.ts`: mismo molde que `adminBrandsApi` — interfaz de params
+  explícita, constructor de query por whitelist que refleja el schema Joi, y un objeto exportado al
+  final.
+- **El badge de estado responde "¿esto sirve ahorita?", no `isActive`.** Un cupón marcado activo
+  puede estar expirado, programado o agotado; mostrar solo la bandera dejaría al admin preguntándose
+  por qué los clientes reportan que un código "vigente" se rechaza.
+- **El formulario habla en unidades humanas.** La API guarda centavos y puntos base de punta a
+  punta; nadie debería teclear `250000` para decir $2,500. La conversión ocurre al salir, y el campo
+  de valor cambia con el tipo — se envía exactamente el que corresponde, porque el `xor` de la API
+  rechaza mandar ambos.
+- Selector de categorías real: carga el árbol correcto según `itemType` y limpia los ids al cambiar
+  de catálogo, porque pertenecen al árbol que estaba en pantalla hace un momento.
+- Item "Cupones" en `nav.ts` → sidebar + command palette + breadcrumbs.
+
+**Verificado:** `pnpm --filter @bw-bikes/web test` — 10 tests nuevos en `CouponsView.test.tsx`,
+incluidos los cuatro estados del badge y que el diálogo de borrado avise de desactivar en su lugar.
+
+---
+
+## M20 — Clientes: backend CRM
+
+**Entregado:**
+- `customer.service.ts`: listado paginado y detalle, **agregando `Order` en tiempo de lectura**.
+  Nada se denormaliza sobre `User`: un `orderCount` guardado sería un segundo lugar que puede
+  contradecir a las órdenes, y las dos se desincronizarían el primer reembolso.
+- **`$lookup` manejado desde `User`, no desde `Order`** — así el cliente registrado que nunca compró
+  sigue apareciendo. Agrupar órdenes borraría justo a esa gente, que es una pregunta real del
+  negocio. El sub-pipeline filtra dentro del lookup para que Mongo use `{userId, createdAt}` en vez
+  de traerse todas las órdenes a memoria.
+- **`$facet` para página y conteo en una sola pasada** sobre el mismo pipeline, en vez de correr el
+  lookup dos veces.
+- **"Compró" y "gastó" son preguntas distintas.** Un reembolso sí cuenta como compra (esa persona
+  compró) pero no como dinero cobrado. Colapsarlas escondería clientes reales o inflaría su valor de
+  vida. `REVENUE_STATUSES` se **importa** de `orders.stats.ts`, nunca se reescribe.
+- `services/stats/customers.stats.ts`: `getTopBuyers` rankea **por dinero cobrado, no por número de
+  compras** — rankear por conteo pondría diez cascos de $400 arriba de una bici de $200,000.
+  `getSegments` resuelve compradores, recurrentes y ticket promedio en un doble `$group`.
+  `totalCustomers` va deliberadamente sin ventana: "cuántos clientes tengo" no deja de ser cierto
+  porque el admin eligió "últimos 30 días".
+- `GET /admin/customers`, `GET /admin/customers/:id`, `GET /admin/stats/customers`. **Solo lectura**:
+  editar un cliente no es una operación de CRM que este negocio pidió, y un admin capaz de reescribir
+  el correo de alguien es una ruta de robo de cuenta que ninguna pantalla necesita.
+- Primer índice compuesto de `User`: `{role: 1, createdAt: -1}`. Hasta ahora toda lectura era punto
+  por email o por hash de token; una pantalla de CRM pregunta otra forma.
+
+**Verificado:** 15 tests en `apps/api/tests/customers.test.ts` — que un reembolso cuente como compra
+pero no como dinero, que `pending_payment` no cuente para nada, el filtro de recurrentes, que las
+cuentas de staff nunca se listen, y que el ranking ordene por dinero y no por conteo.
+
+---
+
+## M22 — Clientes: panel admin
+
+**Entregado:**
+- `/admin/clientes`: tarjetas `StatCard` **clicables que filtran la tabla** (patrón de
+  `OrdersSummaryCards`) — "Compradores recurrentes" es el segmento que el negocio pidió por nombre,
+  así que llegar ahí es un clic, no un dropdown que nadie encontraría.
+- `ChartCard` + `RankedBarChart` con los mejores compradores; se oculta entero si todavía nadie
+  compró, en vez de renderizar un gráfico vacío.
+- `DataTable` con nombre, correo, compras, total gastado y última compra. `SlideOver` de detalle que
+  **carga al abrir**, no desde la fila: el listado solo trae agregados, y las órdenes y cupones
+  canjeados serían bytes desperdiciados en las filas que nadie abre.
+- Item "Clientes" en `nav.ts`.
+
+**Verificado:** 8 tests en `ClientesView.test.tsx`, incluido que el tile de recurrentes efectivamente
+manda `repeatBuyersOnly=true`.
+
+Selección múltiple con barra de acciones y `SendCouponModal` (M21): enviar un cupón existente a los
+clientes seleccionados, o generar uno al vuelo para un cliente individual. La selección se limpia al
+cambiar de filtro — conservarla dejaría al admin actuando sobre filas que ya no puede ver.
+
+---
+
+## M21 — Envío de cupones por correo
+
+**Cierra la fase 5.**
+
+**Entregado:**
+- `Mailer.sendCouponEmail` + su implementación en Resend y en el stub, sobre el mismo
+  `renderTransactionalEmail` que el resto: el código va destacado, con la etiqueta de la oferta
+  ("10% de descuento" / "$500.00 MXN de descuento") y su vigencia.
+- `coupon-campaign.service.ts` con los dos flujos:
+  - `sendExisting` — un cupón, muchos clientes. **Loop serial con `catch` por destinatario**, misma
+    forma que `bulkUpdateStatus`: un correo malo no puede costarle el suyo a los otros treinta y
+    nueve, y quien llama necesita saber exactamente cuáles no llegaron. Devuelve
+    `{results, summary: {sent, failed, skipped}}`. Tope de 200 destinatarios.
+  - `generateAndSend` — acuña un código de un solo uso para un cliente y se lo manda. El alfabeto
+    excluye `I`, `O`, `0` y `1` porque alguien lo va a leer de una pantalla y teclearlo.
+    **Que sea personal se expresa como `maxRedemptionsTotal: 1`**, no como un campo de dueño: el
+    modelo de código compartido no tiene noción de propietario, así que "solo para Ana" significa
+    "solo se canjea una vez". Si Ana lo reenvía, gana el primero — el mismo trato que hace cualquier
+    código impreso de un solo uso.
+- **Enviar no es canjear.** Una campaña mandada a cien personas que nunca compran no le costó nada a
+  la tienda y no debe reportar cien canjes. El canje sigue ocurriendo solo en el checkout.
+- Se niega a enviar una campaña desactivada o expirada, con mensaje accionable — ofrecerlas sería un
+  callejón que el admin solo descubre después de apretar el botón.
+- `POST /admin/coupons/:id/send` y `POST /admin/customers/:id/coupons`. Acción `coupon.emailed` en la
+  unión y en el espejo runtime.
+- UI: `SendCouponModal` en `/admin/clientes`, con selección múltiple y barra de acciones. El resumen
+  parcial se reporta como `warning`, no como éxito ni como error — un lote donde treinta y ocho
+  llegaron y dos no es un resultado que el admin necesita leer, no una excepción.
+
+**Verificado:** 17 tests en `apps/api/tests/coupon-campaign.test.ts` + 4 nuevos en
+`ClientesView.test.tsx`.
+
+**Decisión de seguridad (y el bug que un test encontró):**
+Este es el **primer correo del sistema redactado por una persona**, y `renderTransactionalEmail`
+documenta que sus párrafos son HTML escrito por este código. El mensaje del admin se escapa
+explícitamente en el servicio, sin delegar en `sanitizeInput` — ese middleware está dos capas más
+lejos y no corre cuando el servicio se llama desde un script o un test (hay un test que cubre
+justamente ese camino).
+
+El primer intento escapaba también el `&`, y un test destapó que el resultado salía **doblemente
+escapado**: `sanitizeInput` ya había convertido `<script>` en `&lt;script&gt;`, y volver a escapar
+el ampersand producía `&amp;lt;script&amp;gt;` — seguro, pero el cliente habría leído códigos de
+entidad en su correo. La versión final **no escapa `&`**, lo que hace la pasada idempotente: el
+texto que el middleware ya escapó sobrevive intacto, y el texto crudo que llegue por cualquier otro
+camino igual pierde sus corchetes angulares. Escapar `<` es lo que carga la garantía de seguridad;
+sin él no se puede reconstruir ninguna etiqueta.
+
+**Fuera de este milestone:** la API de lotes de Resend (el envío sigue siendo un loop serial en el
+request); programar envíos a futuro; plantillas de correo editables desde el panel.
 
 ---

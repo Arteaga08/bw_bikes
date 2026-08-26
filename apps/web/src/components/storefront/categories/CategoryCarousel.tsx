@@ -20,6 +20,7 @@ export function CategoryCarousel({ categories }: CategoryCarouselProps) {
       ariaLabel="Categorías de bicicletas"
       previousLabel="Categorías anteriores"
       nextLabel="Siguientes categorías"
+      gutter="tight"
     >
       {categories.map((category) => (
         <CategoryCard key={category.id} category={category} />

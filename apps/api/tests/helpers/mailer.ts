@@ -100,3 +100,23 @@ export function extractToken(url: string): string {
   if (!token) throw new Error(`No token query param found in captured link: ${url}`);
   return token;
 }
+
+/**
+ * Captures **every** coupon email of a batch, not just the next one — a
+ * campaign send is a loop, and the thing worth asserting is usually who got
+ * one and who didn't.
+ */
+export function captureCouponEmails(): {
+  getAll: () => Parameters<typeof stubMailer.sendCouponEmail>[0][];
+  failFor: (email: string) => void;
+} {
+  const sent: Parameters<typeof stubMailer.sendCouponEmail>[0][] = [];
+  const failing = new Set<string>();
+
+  vi.spyOn(stubMailer, "sendCouponEmail").mockImplementation(async (input) => {
+    if (failing.has(input.to)) throw new Error("provider rejected the recipient");
+    sent.push(input);
+  });
+
+  return { getAll: () => sent, failFor: (email: string) => failing.add(email) };
+}

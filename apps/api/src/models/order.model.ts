@@ -1,4 +1,5 @@
 import type {
+  AppliedCoupon,
   BillingInfo,
   CaptureMethod,
   CURRENCY,
@@ -11,10 +12,11 @@ import type {
   ShippingAddress,
 } from "@bw-bikes/shared";
 import { type Document, model, Schema, type Types } from "mongoose";
+import { appliedCouponSchema } from "./schemas/applied-coupon.schema.js";
 import { billingInfoSchema } from "./schemas/billing-info.schema.js";
 import { type IOrderInternalNote, internalNoteSchema, MAX_INTERNAL_NOTES } from "./schemas/internal-note.schema.js";
-import { MAX_PRICE_CENTS } from "./schemas/product-variant.schema.js";
 import { MAX_ORDER_LINES, orderLineSchema } from "./schemas/order-line.schema.js";
+import { MAX_PRICE_CENTS } from "./schemas/product-variant.schema.js";
 import { type IOrderShipment, shipmentSchema } from "./schemas/shipment.schema.js";
 import { shippingAddressSchema } from "./schemas/shipping-address.schema.js";
 
@@ -59,6 +61,8 @@ export interface IOrder extends Document {
   priority: OrderPriority;
   lines: OrderLineSnapshot[];
   subtotalCents: number;
+  /** Coupon discount frozen at checkout (M18). `0` on every order placed without one. */
+  discountCents: number;
   taxCents: number;
   shippingCents: number;
   totalCents: number;
@@ -69,6 +73,8 @@ export interface IOrder extends Document {
   shipment?: IOrderShipment;
   /** Optional CFDI data (M7), copied from the cart at checkout — never required, unlike `shippingAddress`. */
   billingInfo?: BillingInfo;
+  /** The coupon that produced `discountCents`, frozen at checkout (M18). */
+  coupon?: AppliedCoupon;
   idempotencyKey?: string;
   statusHistory: IOrderStatusHistoryEntry[];
   /** Staff-only, append-only. Never served on a customer route. */
@@ -186,6 +192,10 @@ const orderSchema = new Schema<IOrder>(
     // Integer cents throughout. `taxCents` is a breakdown of `totalCents`, not
     // an addition to it — catalog prices already include IVA.
     subtotalCents: { type: Number, required: true, min: 0 },
+    // Field-level `default`, not just `required`: every order written before
+    // M18 has no such key, and reading one back as `undefined` would poison
+    // any arithmetic that touches it. `required` alone only guards new writes.
+    discountCents: { type: Number, required: true, min: 0, default: 0 },
     taxCents: { type: Number, required: true, min: 0 },
     shippingCents: { type: Number, required: true, min: 0, default: 0 },
     totalCents: { type: Number, required: true, min: 0 },
@@ -205,6 +215,12 @@ const orderSchema = new Schema<IOrder>(
     // `shippingAddress`, except it stays optional — an order is valid with
     // none of it.
     billingInfo: { type: billingInfoSchema },
+
+    // The coupon that was applied, frozen (M18) — a snapshot for the same
+    // reason `lines` is one. The campaign it points at can later expire, be
+    // renamed or have its percentage changed; what this customer paid may not
+    // move with it. `couponId` is kept only to link back for reporting.
+    coupon: { type: appliedCouponSchema },
 
     // Absent until the order ships; captured by `recordShipment` alongside the
     // `processing → shipped` transition, corrected afterward without touching

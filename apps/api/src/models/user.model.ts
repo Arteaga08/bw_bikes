@@ -125,4 +125,14 @@ userSchema.set("toJSON", {
   },
 });
 
+/**
+ * The admin customer list (M20): `{role: "customer"}` filtered, newest first.
+ *
+ * `User` carried no compound index until now — every earlier read was a point
+ * lookup by email or by token hash, both already served by their own field
+ * index. A CRM screen asks a different shape of question, and without this it
+ * would collection-scan every account on every page.
+ */
+userSchema.index({ role: 1, createdAt: -1 });
+
 export const User = model<IUser>("User", userSchema);

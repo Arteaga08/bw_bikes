@@ -15,7 +15,7 @@ export interface ProductCarouselProps {
 /** A product rail — the product-catalog counterpart to `CategoryCarousel`, same `ScrollRail` underneath. */
 export function ProductCarousel({ products, ariaLabel, previousLabel, nextLabel }: ProductCarouselProps) {
   return (
-    <ScrollRail ariaLabel={ariaLabel} previousLabel={previousLabel} nextLabel={nextLabel}>
+    <ScrollRail ariaLabel={ariaLabel} previousLabel={previousLabel} nextLabel={nextLabel} gutter="tight">
       {products.map((product) => (
         <ProductCard key={product.id} product={product} />
       ))}

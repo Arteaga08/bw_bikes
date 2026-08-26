@@ -53,6 +53,29 @@ export interface Mailer {
   /** Fires on `markPaymentFailed` — informs the customer the attempt didn't go through, never mentions a refund (nothing was charged). */
   sendPaymentFailedEmail(params: { to: string; firstName: string; orderNumber: string }): Promise<void>;
   /**
+   * A coupon an admin chose to send to a specific customer (M21).
+   *
+   * **`message` is plain text, not HTML — and that distinction is the whole
+   * security story of this method.** Every other email here is composed by
+   * this codebase; this is the first one a human writes. `renderTransactional
+   * Email` treats its `bodyParagraphs` as already-safe HTML, so handing it an
+   * admin's raw input would make the panel a stored-XSS vector aimed at the
+   * shop's own customers. `coupon-campaign.service.ts` escapes it explicitly
+   * before it ever reaches the template — it does not rely on
+   * `sanitizeInput`, because a middleware two layers away is not where a
+   * guarantee like this should live.
+   */
+  sendCouponEmail(params: {
+    to: string;
+    firstName: string;
+    code: string;
+    /** Optional note from the admin. Plain text — see above. */
+    message?: string;
+    expiresAt?: string;
+    /** Ready-to-render summary of the offer ("10% de descuento", "$500 MXN de descuento"). */
+    discountLabel: string;
+  }): Promise<void>;
+  /**
    * Second channel for an admin alert `Notifier`/Telegram already carries —
    * never the sole path to one. Generic on purpose: every admin alert reuses
    * this one method with its own subject/copy, the same way every customer

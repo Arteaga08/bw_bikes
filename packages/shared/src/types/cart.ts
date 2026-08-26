@@ -1,5 +1,6 @@
 import type { BillingInfo } from "./billing.js";
 import type { CURRENCY, FulfillmentMode, ItemType, PriceCents } from "./catalog.js";
+import type { AppliedCoupon } from "./coupon.js";
 import type { CaptureMethod } from "./order.js";
 import type { ShippingAddress } from "./shipping.js";
 
@@ -67,13 +68,23 @@ export interface PublicCartLine {
  * `billingInfo` (M7) follows the exact same pattern for the optional CFDI
  * data: captured on the cart, copied onto the order at checkout. Unlike the
  * shipping address, it is never required — an order is valid with none of it.
+ *
+ * `coupon` (M18) is the same pattern once more, with one difference: the cart
+ * stores only the **code**, and the discount is re-evaluated on every render.
+ * A coupon that expired, ran out, or stopped matching the cart's contents is
+ * dropped silently from this response rather than failing it — a customer must
+ * always be able to see their cart.
  */
 export interface PublicCart {
   id: string;
   lines: PublicCartLine[];
   shippingAddress?: ShippingAddress;
   billingInfo?: BillingInfo;
+  /** Present only while the stored code still resolves to a usable discount. */
+  coupon?: AppliedCoupon;
   subtotalCents: PriceCents;
+  /** `0` when no coupon applies. Subtracted from the subtotal before the IVA is derived. */
+  discountCents: PriceCents;
   taxCents: PriceCents;
   shippingCents: PriceCents;
   totalCents: PriceCents;

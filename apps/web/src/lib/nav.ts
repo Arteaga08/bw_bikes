@@ -16,6 +16,8 @@ import {
   Storefront,
   Swatches,
   Tag,
+  Ticket,
+  UsersThree,
 } from "@phosphor-icons/react";
 
 export interface NavItem {
@@ -46,14 +48,41 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   {
     title: "Operación",
     items: [
-      { label: "Inicio", href: "/admin", icon: House, keywords: ["inicio", "resumen", "dashboard"] },
-      { label: "Órdenes", href: "/admin/ordenes", icon: ClipboardText, keywords: ["ordenes", "pedidos", "ventas"] },
-      { label: "Inventario", href: "/admin/inventario", icon: Package, keywords: ["inventario", "stock", "existencias"] },
+      {
+        label: "Inicio",
+        href: "/admin",
+        icon: House,
+        keywords: ["inicio", "resumen", "dashboard"],
+      },
+      {
+        label: "Órdenes",
+        href: "/admin/ordenes",
+        icon: ClipboardText,
+        keywords: ["ordenes", "pedidos", "ventas"],
+      },
+      {
+        label: "Inventario",
+        href: "/admin/inventario",
+        icon: Package,
+        keywords: ["inventario", "stock", "existencias"],
+      },
       {
         label: "Solicitudes",
         href: "/admin/solicitudes",
         icon: Handshake,
         keywords: ["solicitudes", "embajadores", "patrocinios"],
+      },
+      {
+        label: "Clientes",
+        href: "/admin/clientes",
+        icon: UsersThree,
+        keywords: ["clientes", "compradores", "usuarios", "crm", "recurrentes"],
+      },
+      {
+        label: "Cupones",
+        href: "/admin/cupones",
+        icon: Ticket,
+        keywords: ["cupones", "descuentos", "promociones", "campanas", "codigos"],
       },
     ],
   },
@@ -63,8 +92,18 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     // section without implying it's scoped to just one of them.
     title: "Catálogo",
     items: [
-      { label: "Marcas", href: "/admin/catalogo/marcas", icon: Storefront, keywords: ["marcas", "brands"] },
-      { label: "Badges", href: "/admin/catalogo/badges", icon: Sparkle, keywords: ["badges", "etiquetas", "novedad", "bestseller"] },
+      {
+        label: "Marcas",
+        href: "/admin/catalogo/marcas",
+        icon: Storefront,
+        keywords: ["marcas", "brands"],
+      },
+      {
+        label: "Badges",
+        href: "/admin/catalogo/badges",
+        icon: Sparkle,
+        keywords: ["badges", "etiquetas", "novedad", "bestseller"],
+      },
       {
         label: "Colores",
         href: "/admin/catalogo/colores",
@@ -76,6 +115,20 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         href: "/admin/catalogo/fichas-tecnicas",
         icon: ListChecks,
         keywords: ["fichas", "tecnicas", "plantillas", "especificaciones"],
+      },
+    ],
+  },
+  {
+    // The storefront's editorial content — currently just the home hero,
+    // which is why this is its own section rather than folded into
+    // "Sistema": it isn't config, it's what a visitor sees.
+    title: "Contenido",
+    items: [
+      {
+        label: "Configuracion De Home",
+        href: "/admin/contenido/inicio",
+        icon: Image,
+        keywords: ["hero", "inicio", "carrusel", "home", "banner"],
       },
     ],
   },
@@ -125,20 +178,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
       },
     ],
   },
-  {
-    // The storefront's editorial content — currently just the home hero,
-    // which is why this is its own section rather than folded into
-    // "Sistema": it isn't config, it's what a visitor sees.
-    title: "Contenido",
-    items: [
-      {
-        label: "Hero de inicio",
-        href: "/admin/contenido/inicio",
-        icon: Image,
-        keywords: ["hero", "inicio", "carrusel", "home", "banner"],
-      },
-    ],
-  },
+
   {
     title: "Sistema",
     items: [
@@ -148,7 +188,12 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         icon: ChartBar,
         keywords: ["analitica", "estadisticas", "reportes", "preferencias"],
       },
-      { label: "Configuración", href: "/admin/configuracion", icon: Gear, keywords: ["configuracion", "ajustes", "settings"] },
+      {
+        label: "Configuración",
+        href: "/admin/configuracion",
+        icon: Gear,
+        keywords: ["configuracion", "ajustes", "settings"],
+      },
       {
         label: "Auditoría",
         href: "/admin/auditoria",
@@ -161,7 +206,9 @@ export const NAV_SECTIONS: readonly NavSection[] = [
 ];
 
 /** Flat view for consumers that don't care about grouping — `CommandPalette`'s search list. */
-export const NAV_ITEMS_FLAT: readonly NavItem[] = NAV_SECTIONS.flatMap((section) => section.items);
+export const NAV_ITEMS_FLAT: readonly NavItem[] = NAV_SECTIONS.flatMap(
+  (section) => section.items,
+);
 
 /**
  * Feeds `Breadcrumbs` — {slug: label} for every path segment under `/admin`.
@@ -177,7 +224,12 @@ export const NAV_ITEMS_FLAT: readonly NavItem[] = NAV_SECTIONS.flatMap((section)
  * slug instead of the intended section name.
  */
 export const SEGMENT_LABELS: Readonly<Record<string, string>> = {
-  ...Object.fromEntries(NAV_ITEMS_FLAT.map((item) => [item.href.split("/").pop() ?? item.href, item.label])),
+  ...Object.fromEntries(
+    NAV_ITEMS_FLAT.map((item) => [
+      item.href.split("/").pop() ?? item.href,
+      item.label,
+    ]),
+  ),
   catalogo: "Catálogo",
   categorias: "Categorías",
   tallas: "Tallas",

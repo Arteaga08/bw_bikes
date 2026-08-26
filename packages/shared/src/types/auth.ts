@@ -113,6 +113,12 @@ export type AuditAction =
   | "application.submitted"
   | "application.approved"
   | "application.rejected"
+  | "coupon.created"
+  | "coupon.updated"
+  | "coupon.deleted"
+  | "coupon.redeemed"
+  | "coupon.redemption_released"
+  | "coupon.emailed"
   | "settings.inventory_updated"
   | "settings.orders_updated"
   | "settings.pricing_updated"
@@ -194,6 +200,12 @@ export const AUDIT_ACTIONS = [
   "application.submitted",
   "application.approved",
   "application.rejected",
+  "coupon.created",
+  "coupon.updated",
+  "coupon.deleted",
+  "coupon.redeemed",
+  "coupon.redemption_released",
+  "coupon.emailed",
   "settings.inventory_updated",
   "settings.orders_updated",
   "settings.pricing_updated",

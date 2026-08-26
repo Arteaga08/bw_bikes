@@ -13,24 +13,26 @@ describe("NAV_SECTIONS", () => {
     expect(new Set(hrefs).size).toBe(hrefs.length);
   });
 
-  it("flattens to the eighteen real phase-2 destinations", () => {
-    expect(NAV_ITEMS_FLAT).toHaveLength(18);
+  it("flattens to the 20 real destinations", () => {
+    expect(NAV_ITEMS_FLAT).toHaveLength(20);
     expect(NAV_ITEMS_FLAT.map((item) => item.href)).toEqual([
       "/admin",
       "/admin/ordenes",
       "/admin/inventario",
       "/admin/solicitudes",
+      "/admin/clientes",
+      "/admin/cupones",
       "/admin/catalogo/marcas",
       "/admin/catalogo/badges",
       "/admin/catalogo/colores",
       "/admin/catalogo/fichas-tecnicas",
+      "/admin/contenido/inicio",
       "/admin/catalogo/categorias/bicicletas",
       "/admin/catalogo/tallas/bicicletas",
       "/admin/catalogo/bicicletas",
       "/admin/catalogo/categorias/accesorios",
       "/admin/catalogo/tallas/accesorios",
       "/admin/catalogo/accesorios",
-      "/admin/contenido/inicio",
       "/admin/analitica",
       "/admin/configuracion",
       "/admin/auditoria",

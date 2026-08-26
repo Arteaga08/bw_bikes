@@ -4,6 +4,7 @@ import { Types } from "mongoose";
 import type { ICart, ICartLine } from "../models/index.js";
 import { Cart, MAX_CART_LINES } from "../models/index.js";
 import { AppError } from "../utils/index.js";
+import { couponService } from "./coupon.service.js";
 import { inventoryService } from "./inventory.service.js";
 import { calculateTotals, resolveCaptureMethod, resolveCartLines } from "./order-pricing.js";
 import { settingsService } from "./settings.service.js";
@@ -58,8 +59,15 @@ async function findOrCreate(userId: string): Promise<ICart> {
  * The cart is capped at 20 lines, so this is at most 20 indexed point lookups
  * issued in parallel — cheap enough that a bespoke batch API on the inventory
  * service would be complexity bought with nothing.
+ *
+ * Returns the coupon verdict alongside the cart so `applyCoupon` can answer
+ * "why not?" from the **same** evaluation that produced this render. Deriving
+ * both from one pass is what stops the two from disagreeing — the earlier
+ * version evaluated the code against every resolvable line while the render
+ * used only the purchasable ones, so a coupon could be accepted and then show
+ * no discount.
  */
-async function toPublicCart(cart: ICart): Promise<PublicCart> {
+async function renderCart(cart: ICart): Promise<{ publicCart: PublicCart; couponError?: AppError }> {
   const inputs = toCartLineInputs(cart);
   const resolutions = await resolveCartLines(inputs);
 
@@ -141,14 +149,39 @@ async function toPublicCart(cart: ICart): Promise<PublicCart> {
   // or a monto before the customer ever commits to paying.
   const { shipping, pricing } = await settingsService.get();
   const shippingQuote = shippingService.quote(purchasableSnapshots, shipping);
-  const totals = calculateTotals(purchasableSnapshots, shippingQuote.shippingCents, pricing.taxRateBps);
 
-  return {
+  // The stored code is re-evaluated on every render, exactly like the prices
+  // above — and `evaluateQuietly` rather than `evaluate` because a coupon that
+  // expired overnight or stopped matching the basket must not take the cart
+  // down with it. The customer sees their cart at full price and can act; a
+  // 409 here would leave them staring at an error with no way back.
+  const bareTotals = calculateTotals(purchasableSnapshots, shippingQuote.shippingCents, pricing.taxRateBps);
+  const verdict = cart.couponCode
+    ? await couponService.evaluateSafely({
+        code: cart.couponCode,
+        userId: String(cart.userId),
+        lines: purchasableSnapshots,
+        subtotalCents: bareTotals.subtotalCents,
+        shippingCents: shippingQuote.shippingCents,
+      })
+    : null;
+  const evaluation = verdict?.ok ? verdict.result : null;
+
+  const totals = calculateTotals(
+    purchasableSnapshots,
+    shippingQuote.shippingCents,
+    pricing.taxRateBps,
+    evaluation?.discountCents ?? 0,
+  );
+
+  const publicCart: PublicCart = {
     id: String(cart._id),
     lines,
     ...(cart.shippingAddress ? { shippingAddress: cart.shippingAddress } : {}),
     ...(cart.billingInfo ? { billingInfo: cart.billingInfo } : {}),
+    ...(evaluation ? { coupon: evaluation.applied } : {}),
     subtotalCents: totals.subtotalCents,
+    discountCents: totals.discountCents,
     taxCents: totals.taxCents,
     shippingCents: totals.shippingCents,
     totalCents: totals.totalCents,
@@ -157,6 +190,16 @@ async function toPublicCart(cart: ICart): Promise<PublicCart> {
     hasBlockingLines: lines.some((line) => !line.isPurchasable),
     updatedAt: cart.updatedAt.toISOString(),
   };
+
+  return { publicCart, ...(verdict && !verdict.ok ? { couponError: verdict.error } : {}) };
+}
+
+/**
+ * The cart as the storefront sees it. Every caller but `applyCoupon` wants
+ * this — the render, without the coupon post-mortem.
+ */
+async function toPublicCart(cart: ICart): Promise<PublicCart> {
+  return (await renderCart(cart)).publicCart;
 }
 
 async function getCart(userId: string): Promise<PublicCart> {
@@ -286,6 +329,50 @@ async function getBillingInfo(userId: string): Promise<BillingInfo | undefined> 
 }
 
 /**
+ * Stores a coupon code on the cart (M18).
+ *
+ * Written first, then rendered, then rolled back if the render refused it.
+ * That ordering is deliberate: the answer the customer gets is literally the
+ * cart they are about to see, evaluated against the lines checkout would
+ * actually accept — not a second, optimistic evaluation that could disagree
+ * with the screen a moment later.
+ *
+ * Refusals surface as the `AppError` the evaluation raised, so the customer is
+ * told *why* — expired, already used, minimum not reached — rather than being
+ * left with a code that silently does nothing.
+ */
+async function applyCoupon(userId: string, code: string): Promise<PublicCart> {
+  const cart = await findOrCreate(userId);
+  const previousCode = cart.couponCode;
+
+  cart.couponCode = code.trim().toUpperCase();
+  await cart.save();
+
+  const { publicCart, couponError } = await renderCart(cart);
+
+  if (couponError) {
+    cart.couponCode = previousCode;
+    await cart.save();
+    throw couponError;
+  }
+
+  return publicCart;
+}
+
+async function removeCoupon(userId: string): Promise<PublicCart> {
+  const cart = await findOrCreate(userId);
+  cart.couponCode = undefined;
+  await cart.save();
+  return toPublicCart(cart);
+}
+
+/** The raw code for the checkout to re-evaluate and freeze. `undefined` if never set. */
+async function getCheckoutCoupon(userId: string): Promise<string | undefined> {
+  const cart = await Cart.findOne({ userId }).exec();
+  return cart?.couponCode;
+}
+
+/**
  * The raw lines, for the checkout to price and freeze. Returns the stored
  * shape rather than the rendered one on purpose: the order must re-resolve
  * everything itself at the moment of purchase, not inherit a view that was
@@ -311,6 +398,9 @@ export const cartService = {
   getShippingAddress,
   setBillingInfo,
   getBillingInfo,
+  applyCoupon,
+  removeCoupon,
+  getCheckoutCoupon,
   getCheckoutLines,
   emptyAfterCheckout,
 };

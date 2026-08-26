@@ -3,6 +3,7 @@ import type {
   AdminOrder,
   AdminOrdersSummary,
   AdminOrderStatusHistoryEntry,
+  AppliedCoupon,
   BillingInfo,
   Carrier,
   CheckoutResult,
@@ -22,6 +23,7 @@ import { Order, User } from "../models/index.js";
 import { AppError, buildMeta, parseListQuery } from "../utils/index.js";
 import { listForTarget, recordAuditLog } from "./audit-log.service.js";
 import { cartService } from "./cart.service.js";
+import { couponService } from "./coupon.service.js";
 import { createMailer } from "./mailer/index.js";
 import type { ReservationLine } from "./inventory.service.js";
 import { inventoryService } from "./inventory.service.js";
@@ -102,11 +104,15 @@ function toPublicOrder(order: IOrder): PublicOrder {
     lines: order.lines,
     totals: {
       subtotalCents: order.subtotalCents,
+      // Same defensive fallback as `priority`: orders placed before M18 have
+      // no such path, and `undefined` in a totals block reads as a bug on screen.
+      discountCents: order.discountCents ?? 0,
       taxCents: order.taxCents,
       shippingCents: order.shippingCents,
       totalCents: order.totalCents,
       currency: order.currency,
     },
+    ...(order.coupon ? { coupon: order.coupon } : {}),
     payment: {
       provider: order.payment.provider,
       state: order.payment.state,
@@ -203,6 +209,9 @@ function toAdminOrder(order: IOrder, customer?: Pick<IUser, "_id" | "email" | "f
  *    the loser gets `null`, which is reported as "already handled" rather than
  *    as an error.
  */
+/** Terminal statuses an order reaches without the customer ever having paid. */
+const COUPON_RELEASING_STATUSES = new Set<OrderStatus>(["cancelled", "authorization_expired"]);
+
 async function applyTransition(
   order: IOrder,
   to: OrderStatus,
@@ -235,6 +244,18 @@ async function applyTransition(
     // Someone else moved it between our read and our write. Not an error: both
     // callers wanted the order to progress, and one of them did.
     logger.info({ orderId: String(order._id), to }, "Order transition lost a race; skipping");
+  }
+
+  // Every way an order can die before it was ever paid funnels through here —
+  // the checkout's own failure path, the admin rejecting a supplier order, the
+  // authorization-expiry sweep. Releasing the coupon at this single choke
+  // point is why none of those call sites has to remember to.
+  //
+  // `refunded` is deliberately absent: that sale happened and the campaign was
+  // genuinely spent. Handing the redemption back there would let a customer
+  // farm an unlimited discount by buying and returning.
+  if (updated && COUPON_RELEASING_STATUSES.has(to)) {
+    await couponService.releaseForOrder(String(order._id));
   }
 
   return updated;
@@ -293,7 +314,29 @@ async function createFromCart(userId: string, input: CreateOrderInput, actor: Ac
   const snapshots = await buildLineSnapshots(lines);
   const settings = await settingsService.get();
   const shippingQuote = shippingService.quote(snapshots, settings.shipping);
-  const totals = calculateTotals(snapshots, shippingQuote.shippingCents, settings.pricing.taxRateBps);
+
+  // Re-evaluated here rather than trusted from the cart preview, for the same
+  // reason prices are re-read: the preview was built for a screen some minutes
+  // ago, and a campaign can run out in between. This is the evaluation that
+  // decides money, so it throws — unlike the cart's, which stays quiet.
+  const bareTotals = calculateTotals(snapshots, shippingQuote.shippingCents, settings.pricing.taxRateBps);
+  const couponCode = await cartService.getCheckoutCoupon(userId);
+  const evaluation = couponCode
+    ? await couponService.evaluate({
+        code: couponCode,
+        userId,
+        lines: snapshots,
+        subtotalCents: bareTotals.subtotalCents,
+        shippingCents: shippingQuote.shippingCents,
+      })
+    : null;
+
+  const totals = calculateTotals(
+    snapshots,
+    shippingQuote.shippingCents,
+    settings.pricing.taxRateBps,
+    evaluation?.discountCents ?? 0,
+  );
   const captureMethod = resolveCaptureMethod(snapshots);
 
   // One live checkout per customer. A second attempt supersedes the first
@@ -308,8 +351,22 @@ async function createFromCart(userId: string, input: CreateOrderInput, actor: Ac
     captureMethod,
     shippingAddress,
     ...(billingInfo !== undefined ? { billingInfo } : {}),
+    ...(evaluation ? { coupon: evaluation.applied } : {}),
     ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
   });
+
+  // Redeemed only once the order exists — the ledger keys on `orderId`, which
+  // is what makes a replay or a retried request a no-op instead of a second
+  // spend. A campaign that ran out in the window since `evaluate` throws here,
+  // before any stock is held or the gateway is called.
+  if (evaluation) {
+    await couponService.redeem({
+      coupon: evaluation.coupon,
+      userId,
+      orderId: String(order._id),
+      discountCents: evaluation.discountCents,
+    });
+  }
 
   try {
     await inventoryService.reserve(toReservationLines(snapshots), {
@@ -409,6 +466,7 @@ async function createOrderDocument(params: {
   captureMethod: "automatic" | "manual";
   shippingAddress: ShippingAddress;
   billingInfo?: BillingInfo;
+  coupon?: AppliedCoupon;
   idempotencyKey?: string;
 }): Promise<IOrder> {
   for (let attempt = 0; attempt < ORDER_NUMBER_ATTEMPTS; attempt++) {
@@ -419,6 +477,7 @@ async function createOrderDocument(params: {
         status: "pending_payment",
         lines: params.snapshots,
         subtotalCents: params.totals.subtotalCents,
+        discountCents: params.totals.discountCents,
         taxCents: params.totals.taxCents,
         shippingCents: params.totals.shippingCents,
         totalCents: params.totals.totalCents,
@@ -426,6 +485,7 @@ async function createOrderDocument(params: {
         payment: { provider: "stripe", state: "pending", captureMethod: params.captureMethod },
         shippingAddress: params.shippingAddress,
         ...(params.billingInfo !== undefined ? { billingInfo: params.billingInfo } : {}),
+        ...(params.coupon !== undefined ? { coupon: params.coupon } : {}),
         ...(params.idempotencyKey !== undefined ? { idempotencyKey: params.idempotencyKey } : {}),
         statusHistory: [{ status: "pending_payment", at: new Date(), actorType: "user" }],
       });
@@ -451,6 +511,8 @@ async function createOrderDocument(params: {
 
 /** Closes an order that never got off the ground. Best-effort: never masks the original failure. */
 async function failOrder(order: IOrder, reason: string): Promise<void> {
+  // No explicit coupon release here: the `cancelled` transition below already
+  // funnels through `applyTransition`, which does it.
   try {
     await applyTransition(order, "cancelled", { actorType: "system", reason }, {
       cancelReason: reason,

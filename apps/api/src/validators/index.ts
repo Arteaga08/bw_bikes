@@ -9,6 +9,8 @@ export * from "./category.validator.js";
 export * from "./color-template.validator.js";
 export * from "./common.validator.js";
 export * from "./content.validator.js";
+export * from "./coupon.validator.js";
+export * from "./customer.validator.js";
 export * from "./gallery.validator.js";
 export * from "./inventory.validator.js";
 export * from "./list-query.validator.js";

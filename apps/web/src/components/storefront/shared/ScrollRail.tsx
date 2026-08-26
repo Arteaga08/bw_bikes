@@ -15,7 +15,20 @@ export interface ScrollRailProps {
   previousLabel: string;
   /** Screen-reader label for the "forward" arrow, e.g. "Siguientes categorías". */
   nextLabel: string;
+  /**
+   * Horizontal inset of the track. `"page"` (default) aligns the tiles with
+   * the hero's copy column; `"tight"` pulls them out to a narrow gutter, for
+   * sections whose tiles are meant to read as near-full-bleed photo blocks.
+   */
+  gutter?: "page" | "tight";
 }
+
+// Track padding per `gutter`. Both variants keep `scroll-pl-*` in sync with
+// `pl-*` so a snapped tile lands exactly on the section's left edge.
+const GUTTER_CLASSNAMES: Record<"page" | "tight", string> = {
+  page: "pl-lg pr-lg scroll-pl-lg sm:pl-[clamp(2rem,8vw,8rem)] sm:pr-xl sm:scroll-pl-[clamp(2rem,8vw,8rem)]",
+  tight: "pl-lg pr-lg scroll-pl-lg",
+};
 
 // A one-pixel slack keeps `canScrollRight` from flapping true/false on
 // browsers that report fractional `scrollWidth` values.
@@ -40,7 +53,7 @@ const SCROLL_EDGE_SLACK_PX = 1;
  * `ProductCarousel` are the thin components that supply the tiles and the
  * Spanish labels.
  */
-export function ScrollRail({ children, ariaLabel, previousLabel, nextLabel }: ScrollRailProps) {
+export function ScrollRail({ children, ariaLabel, previousLabel, nextLabel, gutter = "page" }: ScrollRailProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -102,10 +115,11 @@ export function ScrollRail({ children, ariaLabel, previousLabel, nextLabel }: Sc
         role="group"
         aria-label={ariaLabel}
         // `snap-mandatory` + `scroll-pl-*` aligns every snapped tile to the
-        // same left inset the hero's copy column uses
-        // (`sm:pl-[clamp(2rem,8vw,8rem)]` in `HeroCarousel`), so the two
-        // sections read as one page rather than two independently-padded
-        // blocks. Scrollbar hidden because the snap dots/arrows already
+        // section's left inset — by default the same one the hero's copy
+        // column uses (`sm:pl-[clamp(2rem,8vw,8rem)]` in `HeroCarousel`), so
+        // the two sections read as one page rather than two
+        // independently-padded blocks. See `GUTTER_CLASSNAMES`.
+        // Scrollbar hidden because the snap dots/arrows already
         // communicate "more content" — a native scrollbar under a photo rail
         // is visual noise the reference doesn't have either.
         // No `scroll-smooth` class here — `scrollByTile` below already passes
@@ -118,7 +132,7 @@ export function ScrollRail({ children, ariaLabel, previousLabel, nextLabel }: Sc
         // computed up to `auto` too — silently turning this rail into a
         // vertical scroll container as well, which traps the desktop mouse
         // wheel instead of letting it bubble up to scroll the page.
-        className="flex gap-lg overflow-x-auto overflow-y-hidden pl-lg pr-lg snap-x snap-mandatory scroll-pl-lg [scrollbar-width:none] sm:pl-[clamp(2rem,8vw,8rem)] sm:pr-xl sm:scroll-pl-[clamp(2rem,8vw,8rem)] [&::-webkit-scrollbar]:hidden"
+        className={`flex gap-lg overflow-x-auto overflow-y-hidden snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${GUTTER_CLASSNAMES[gutter]}`}
       >
         {children}
       </div>

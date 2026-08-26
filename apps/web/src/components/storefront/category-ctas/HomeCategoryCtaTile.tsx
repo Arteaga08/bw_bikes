@@ -19,13 +19,13 @@ export function HomeCategoryCtaTile({ tile, label, href, corner }: HomeCategoryC
   return (
     <Link
       href={href}
-      className="group/tile relative block aspect-[5/4] shrink-0 basis-[92%] snap-start overflow-hidden rounded-card bg-inset sm:aspect-[3/2] sm:basis-[48%]"
+      className="group/tile relative block aspect-[5/4] shrink-0 basis-[92%] snap-start overflow-hidden rounded-card bg-inset sm:aspect-[3/2] sm:basis-[calc(50%-12px)]"
     >
       <Image
         src={tile.image.url}
         alt={tile.image.alt ?? label}
         fill
-        sizes="(max-width: 640px) 92vw, 48vw"
+        sizes="(max-width: 640px) 92vw, 50vw"
         loading="lazy"
         className="object-cover transition-transform duration-500 ease-out-strong motion-safe:group-hover/tile:scale-[1.03]"
       />

@@ -36,6 +36,9 @@ export const stubMailer: Mailer = {
   async sendRefundConfirmedEmail({ to, orderNumber }) {
     logger.debug({ to, orderNumber }, "[stub-mailer] refund-confirmed email not sent — no provider configured");
   },
+  async sendCouponEmail({ to, code }) {
+    logger.debug({ to, code }, "[stub-mailer] coupon email not sent — no provider configured");
+  },
   async sendPaymentFailedEmail({ to, orderNumber }) {
     logger.debug({ to, orderNumber }, "[stub-mailer] payment-failed email not sent — no provider configured");
   },

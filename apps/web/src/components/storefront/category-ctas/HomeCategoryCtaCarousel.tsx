@@ -21,7 +21,12 @@ export interface HomeCategoryCtaCarouselProps {
  */
 export function HomeCategoryCtaCarousel({ tiles }: HomeCategoryCtaCarouselProps) {
   return (
-    <ScrollRail ariaLabel="Comprar por categoría" previousLabel="Categoría anterior" nextLabel="Siguiente categoría">
+    <ScrollRail
+      ariaLabel="Comprar por categoría"
+      previousLabel="Categoría anterior"
+      nextLabel="Siguiente categoría"
+      gutter="tight"
+    >
       {tiles.map((tile, index) => (
         <HomeCategoryCtaTile key={tile.slot} tile={tile} corner={index === 0 ? "left" : "right"} {...TILE_COPY[tile.slot]} />
       ))}

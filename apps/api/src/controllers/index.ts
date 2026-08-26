@@ -3,6 +3,8 @@ export * from "./auth.controller.js";
 export * from "./bike.controller.js";
 export * from "./cart.controller.js";
 export * from "./category.controller.js";
+export * from "./coupon.controller.js";
+export * from "./customer.controller.js";
 export * from "./inventory.controller.js";
 export * from "./order.controller.js";
 export * from "./product-view.controller.js";

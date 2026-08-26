@@ -1,6 +1,7 @@
 import type { AuditAction } from "./auth.js";
 import type { BillingInfo } from "./billing.js";
 import type { CURRENCY, FulfillmentMode, ItemType, PriceCents } from "./catalog.js";
+import type { AppliedCoupon } from "./coupon.js";
 import type { ShipmentSummary, ShippingAddress } from "./shipping.js";
 
 /**
@@ -116,12 +117,23 @@ export interface OrderLineSnapshot {
  * **Catalog prices already include IVA** (standard Mexican B2C practice), so
  * `taxCents` is a *breakdown of* `totalCents`, not an addition to it:
  * `taxCents = round(total × 16 / 116)`. The identity that always holds is
- * `totalCents === subtotalCents + shippingCents` — and `totalCents` is exactly
- * what the payment provider is asked to charge. Storing the split now means
- * invoicing (open decision #3) does not have to recompute history later.
+ * `totalCents === subtotalCents - discountCents + shippingCents` — and
+ * `totalCents` is exactly what the payment provider is asked to charge.
+ * Storing the split now means invoicing (open decision #3) does not have to
+ * recompute history later.
  */
 export interface OrderTotals {
   subtotalCents: PriceCents;
+  /**
+   * Coupon discount, subtracted from the subtotal (M18). Always `0` on an
+   * order placed without one.
+   *
+   * It is applied **before** `taxCents` is derived, and that ordering is not
+   * cosmetic: because the tax is extracted from the total rather than added to
+   * it, discounting afterwards would report IVA on money the customer never
+   * paid.
+   */
+  discountCents: PriceCents;
   /** Informational: the IVA already contained in the amounts above. */
   taxCents: PriceCents;
   /**
@@ -187,6 +199,12 @@ export interface PublicOrder {
   shipment?: ShipmentSummary;
   /** Optional CFDI data, captured on the cart and frozen here (M7) — not billed against, just kept for a future invoicing milestone. */
   billingInfo?: BillingInfo;
+  /**
+   * The coupon that was applied at checkout, frozen (M18). Absent on orders
+   * placed without one, and never re-evaluated afterwards: a campaign that
+   * later expires must not change what a customer already paid.
+   */
+  coupon?: AppliedCoupon;
   statusHistory: OrderStatusHistoryEntry[];
   createdAt: string;
   updatedAt: string;

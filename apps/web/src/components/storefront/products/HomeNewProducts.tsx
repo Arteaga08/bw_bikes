@@ -25,7 +25,7 @@ export async function HomeNewProducts() {
 
   return (
     <section className="bg-base py-3xl">
-      <h2 className="mb-xl px-lg font-display text-h2 font-extrabold uppercase text-negro sm:px-[clamp(2rem,8vw,8rem)] sm:text-h1">
+      <h2 className="mb-xl px-lg font-display text-h2 font-extrabold uppercase text-negro sm:text-h1">
         Novedades
       </h2>
 

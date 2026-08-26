@@ -1,16 +1,19 @@
 import { Router } from "express";
 import {
   addCartLine,
+  applyCartCoupon,
   clearCart,
   getCart,
+  removeCartCoupon,
   removeCartLine,
   setCartBillingInfo,
   setCartShippingAddress,
   updateCartLine,
 } from "../controllers/cart.controller.js";
-import { protect, validate } from "../middlewares/index.js";
+import { couponRateLimiter, protect, validate } from "../middlewares/index.js";
 import {
   addCartLineSchema,
+  applyCouponSchema,
   billingInfoSchema,
   cartLineParamSchema,
   shippingAddressSchema,
@@ -23,10 +26,15 @@ import {
  * `protect` on the whole router and **no id in any path**: the cart resolved is
  * always `req.user`'s. There is nothing here to enumerate.
  *
- * No rate limiter. These are cheap authenticated writes on a document capped at
- * 20 lines, already behind the global backstop, and unlike checkout they touch
- * neither stock nor money. The dedicated limiter belongs where the cost is —
- * `POST /orders`.
+ * No blanket rate limiter. These are cheap authenticated writes on a document
+ * capped at 20 lines, already behind the global backstop, and unlike checkout
+ * they touch neither stock nor money. The dedicated limiter belongs where the
+ * cost is — `POST /orders`.
+ *
+ * The one exception is `POST /coupon`: it answers a yes/no question about a
+ * short, guessable secret, which makes it a brute-force oracle unless bounded.
+ * `DELETE /coupon` is exempt — removing something you already applied reveals
+ * nothing.
  */
 const router = Router();
 
@@ -37,6 +45,9 @@ router.delete("/", clearCart);
 
 router.put("/shipping-address", validate(shippingAddressSchema), setCartShippingAddress);
 router.put("/billing-info", validate(billingInfoSchema), setCartBillingInfo);
+
+router.post("/coupon", couponRateLimiter, validate(applyCouponSchema), applyCartCoupon);
+router.delete("/coupon", removeCartCoupon);
 
 router.post("/lines", validate(addCartLineSchema), addCartLine);
 

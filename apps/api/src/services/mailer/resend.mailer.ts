@@ -114,6 +114,31 @@ export const resendMailer: Mailer = {
     });
   },
 
+  async sendCouponEmail({ to, firstName, code, message, expiresAt, discountLabel }) {
+    const validity = expiresAt
+      ? `Vigente hasta el ${new Date(expiresAt).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}.`
+      : "Sin fecha de vencimiento.";
+
+    await send({
+      to,
+      subject: `Un cupón para ti: ${discountLabel} — Black & White Bikes`,
+      html: renderTransactionalEmail({
+        preheader: `Usa el código ${code} en tu próxima compra.`,
+        greetingName: firstName,
+        bodyParagraphs: [
+          // `message` arrives already escaped from `coupon-campaign.service.ts`
+          // — the only paragraph in this file not written by this codebase.
+          ...(message ? [message] : ["Queremos agradecerte tu preferencia con un descuento en tu próxima compra."]),
+          `Tu código es <strong style="font-size:20px;letter-spacing:2px;">${code}</strong> — ${discountLabel}.`,
+          `${validity} Aplícalo en tu carrito antes de pagar.`,
+        ],
+        ctaLabel: "Ir a la tienda",
+        ctaUrl: env.clientUrl,
+        disclaimer: "Si tienes dudas sobre este cupón, responde este correo o contáctanos.",
+      }),
+    });
+  },
+
   async sendOrderProcessingEmail({ to, firstName, orderNumber }) {
     await send({
       to,

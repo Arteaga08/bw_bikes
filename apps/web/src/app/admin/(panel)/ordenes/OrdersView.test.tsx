@@ -45,7 +45,7 @@ function makeOrder(overrides: Partial<AdminOrder> = {}): AdminOrder {
     status: "awaiting_supplier_confirmation",
     priority: "normal",
     lines: [],
-    totals: { subtotalCents: 25_000_00, taxCents: 3_448_28, shippingCents: 0, totalCents: 25_000_00, currency: "MXN" },
+    totals: { subtotalCents: 25_000_00, discountCents: 0, taxCents: 3_448_28, shippingCents: 0, totalCents: 25_000_00, currency: "MXN" },
     payment: {
       provider: "stripe",
       state: "authorized",

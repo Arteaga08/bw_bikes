@@ -213,6 +213,45 @@ function resolveCaptureMethod(lines: { fulfillmentMode: FulfillmentMode }[]): Ca
 }
 
 /**
+ * Maps each line to the category its product belongs to, keyed
+ * `"itemType:itemId"` — the same key `loadProducts` builds.
+ *
+ * Only called for a coupon scoped to specific categories, which is why it is a
+ * separate lookup instead of a field on `OrderLineSnapshot`: a snapshot is
+ * frozen at purchase, and a product's category is a *today* fact that the
+ * shop reorganises freely. Freezing it would mean a campaign aimed at
+ * "Montaña" silently missing bikes that were moved into it last week.
+ *
+ * Two queries at most, same as `loadProducts`, and `.select("category")`
+ * because nothing else is needed.
+ */
+async function resolveLineCategoryIds(lines: Pick<OrderLineSnapshot, "itemType" | "itemId">[]): Promise<
+  Map<string, string>
+> {
+  const bikeIds: Types.ObjectId[] = [];
+  const accessoryIds: Types.ObjectId[] = [];
+
+  for (const line of lines) {
+    const id = toObjectId(line.itemId);
+    if (!id) continue;
+    if (line.itemType === "bike") bikeIds.push(id);
+    else accessoryIds.push(id);
+  }
+
+  const [bikes, accessories] = await Promise.all([
+    bikeIds.length > 0 ? Bike.find({ _id: { $in: bikeIds } }).select("category").lean().exec() : Promise.resolve([]),
+    accessoryIds.length > 0
+      ? Accessory.find({ _id: { $in: accessoryIds } }).select("category").lean().exec()
+      : Promise.resolve([]),
+  ]);
+
+  const byKey = new Map<string, string>();
+  for (const bike of bikes) byKey.set(`bike:${String(bike._id)}`, String(bike.category));
+  for (const accessory of accessories) byKey.set(`accessory:${String(accessory._id)}`, String(accessory.category));
+  return byKey;
+}
+
+/**
  * Totals in integer cents.
  *
  * `taxCents` is a **breakdown, not an addition**: Mexican B2C prices are quoted
@@ -231,11 +270,24 @@ function resolveCaptureMethod(lines: { fulfillmentMode: FulfillmentMode }[]): Ca
  * takes `thresholds` as one: this stays pure and testable without wiring
  * `Settings`, and the real callers (`cart.service.ts`, `order.service.ts`)
  * fetch it once per request and pass the live value down.
+ *
+ * `discountCents` (M18) arrives already resolved by `coupon.service.ts` —
+ * this function knows how to subtract a discount, not whether the customer
+ * was entitled to one, exactly as it knows how to fold in shipping without
+ * deciding the shipping rate.
+ *
+ * **The subtraction happens before the tax is derived, and that ordering is
+ * load-bearing.** Because the IVA is *extracted* from the total rather than
+ * added to it, discounting after the extraction would report tax on pesos the
+ * customer never paid — a wrong number on a document the shop is legally
+ * accountable for. It is also capped at `subtotalCents`, so a generous coupon
+ * reduces the goods to zero but never starts refunding the shipping.
  */
 function calculateTotals(
   lines: OrderLineSnapshot[],
   shippingCents = 0,
   taxRateBps: number = DEFAULT_TAX_RATE_BPS,
+  discountCents = 0,
 ): OrderTotals {
   let subtotalCents = 0;
 
@@ -249,11 +301,24 @@ function calculateTotals(
     subtotalCents += line.lineTotalCents;
   }
 
-  const totalCents = subtotalCents + shippingCents;
+  // Clamped here rather than trusted: the coupon service already bounds the
+  // discount, but this function is the last place the charged amount can be
+  // wrong, and a negative total or a discount that eats the shipping fee are
+  // both worth making structurally impossible.
+  const cappedDiscountCents = Math.min(Math.max(discountCents, 0), subtotalCents);
+
+  const totalCents = subtotalCents - cappedDiscountCents + shippingCents;
   const taxCents = Math.round((totalCents * taxRateBps) / (10_000 + taxRateBps));
 
-  return { subtotalCents, taxCents, shippingCents, totalCents, currency: CURRENCY };
+  return {
+    subtotalCents,
+    discountCents: cappedDiscountCents,
+    taxCents,
+    shippingCents,
+    totalCents,
+    currency: CURRENCY,
+  };
 }
 
 export type { LineResolution, ResolvedLine };
-export { buildLineSnapshots, calculateTotals, resolveCaptureMethod, resolveCartLines };
+export { buildLineSnapshots, calculateTotals, resolveCaptureMethod, resolveCartLines, resolveLineCategoryIds };

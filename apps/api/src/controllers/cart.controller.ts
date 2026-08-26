@@ -26,6 +26,20 @@ export const addCartLine = asyncHandler(async (req: Request, res: Response) => {
   sendResponse(res, 201, "Producto agregado al carrito.", { cart });
 });
 
+/**
+ * The customer types a code; the server decides what it is worth. The body
+ * carries no amount, for the same reason no cart route carries a price.
+ */
+export const applyCartCoupon = asyncHandler(async (req: Request, res: Response) => {
+  const cart = await cartService.applyCoupon(requireUserId(req), (req.body as { code: string }).code);
+  sendResponse(res, 200, "Cupón aplicado.", { cart });
+});
+
+export const removeCartCoupon = asyncHandler(async (req: Request, res: Response) => {
+  const cart = await cartService.removeCoupon(requireUserId(req));
+  sendResponse(res, 200, "Cupón eliminado del carrito.", { cart });
+});
+
 export const updateCartLine = asyncHandler(async (req: Request, res: Response) => {
   const cart = await cartService.updateLine(
     requireUserId(req),
