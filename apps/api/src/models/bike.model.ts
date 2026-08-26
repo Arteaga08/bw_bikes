@@ -33,6 +33,7 @@ export interface IBike extends Document {
   relatedAccessories: Types.ObjectId[];
   badges: Types.ObjectId[];
   isNewArrival: boolean;
+  isCustomerFavorite: boolean;
   isActive: boolean;
   archivedAt?: Date | null;
   createdAt: Date;
@@ -129,6 +130,12 @@ const bikeSchema = new Schema<IBike>(
     // rejected by the schema definition outright.
     isNewArrival: { type: Boolean, default: false },
 
+    // Sibling curation flag for the home's "Favoritas de los ciclistas" rail
+    // (M12). Separate from `isNewArrival` on purpose: the two rails sit on the
+    // same page and a product can legitimately be in one, both, or neither —
+    // a single "featured" flag couldn't express that.
+    isCustomerFavorite: { type: Boolean, default: false },
+
     // Archiving is a logical delete: a bike that was ever purchasable keeps
     // existing so inventory (M4) and order history (M5) never point at a hole.
     isActive: { type: Boolean, default: true },
@@ -144,5 +151,7 @@ bikeSchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
 bikeSchema.index({ category: 1, isActive: 1, price: 1 });
 // The home's "Novedades" rail: the newest flagged bikes still on sale.
 bikeSchema.index({ isNewArrival: 1, isActive: 1, createdAt: -1 });
+// The home's "Favoritas de los ciclistas" rail: same access pattern, own flag.
+bikeSchema.index({ isCustomerFavorite: 1, isActive: 1, createdAt: -1 });
 
 export const Bike = model<IBike>("Bike", bikeSchema);

@@ -1,6 +1,10 @@
 import {
   HERO_CTA_TARGET_TYPES,
   HERO_FOCAL_POINTS,
+  HOME_TILE_SLOTS,
+  MAX_BIKE_OF_MONTH_EYEBROW_LENGTH,
+  MAX_BIKE_OF_MONTH_SUBTITLE_LENGTH,
+  MAX_BIKE_OF_MONTH_TITLE_LENGTH,
   MAX_HERO_CTA_LABEL_LENGTH,
   MAX_HERO_CTA_URL_LENGTH,
   MAX_HERO_CTAS_PER_SLIDE,
@@ -110,6 +114,52 @@ export const reorderHeroSlidesSchema = Joi.object({
 
 /** Text field riding alongside the multipart image upload — mirrors `uploadGalleryImagesSchema`'s reasoning for why this is a separate, tiny schema. */
 export const heroSlideImageSchema = Joi.object({
+  alt: Joi.string().trim().max(160).allow("").optional().messages({
+    "string.max": "El texto alternativo no puede exceder 160 caracteres.",
+  }),
+});
+
+/** `:slot` path param for the home CTA tiles — restricted to the two fixed slots, unlike `idParamSchema`'s free-form ObjectId. */
+export const homeTileSlotParamSchema = Joi.object({
+  slot: Joi.string()
+    .valid(...HOME_TILE_SLOTS)
+    .required()
+    .messages({
+      "any.only": "Tarjeta inválida.",
+      "any.required": "La tarjeta es obligatoria.",
+    }),
+});
+
+/** Same shape as `heroSlideImageSchema` — kept separate so the two content types can diverge independently later. */
+export const homeTileImageSchema = Joi.object({
+  alt: Joi.string().trim().max(160).allow("").optional().messages({
+    "string.max": "El texto alternativo no puede exceder 160 caracteres.",
+  }),
+});
+
+/**
+ * Full replace of the banner's text fields, same contract as `heroSlideSchema`
+ * — the image travels through its own multipart endpoint. `bikeId` is
+ * optional: the banner can be drafted with text before a bike is chosen, but
+ * `bike-of-month.service.ts`'s `getPublic` won't publish it without one.
+ */
+export const bikeOfMonthSchema = Joi.object({
+  eyebrow: Joi.string().trim().max(MAX_BIKE_OF_MONTH_EYEBROW_LENGTH).allow("").optional().messages({
+    "string.max": `El eyebrow no puede exceder ${MAX_BIKE_OF_MONTH_EYEBROW_LENGTH} caracteres.`,
+  }),
+  title: Joi.string().trim().max(MAX_BIKE_OF_MONTH_TITLE_LENGTH).required().messages({
+    "string.empty": "El título es obligatorio.",
+    "string.max": `El título no puede exceder ${MAX_BIKE_OF_MONTH_TITLE_LENGTH} caracteres.`,
+    "any.required": "El título es obligatorio.",
+  }),
+  subtitle: Joi.string().trim().max(MAX_BIKE_OF_MONTH_SUBTITLE_LENGTH).allow("").optional().messages({
+    "string.max": `El subtítulo no puede exceder ${MAX_BIKE_OF_MONTH_SUBTITLE_LENGTH} caracteres.`,
+  }),
+  bikeId: objectId.optional(),
+});
+
+/** Same shape as `heroSlideImageSchema` — kept separate so the two content types can diverge independently later. */
+export const bikeOfMonthImageSchema = Joi.object({
   alt: Joi.string().trim().max(160).allow("").optional().messages({
     "string.max": "El texto alternativo no puede exceder 160 caracteres.",
   }),

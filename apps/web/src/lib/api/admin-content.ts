@@ -1,4 +1,11 @@
-import type { AdminHeroSlide, HeroSlideInput } from "@bw-bikes/shared";
+import type {
+  AdminBikeOfMonth,
+  AdminHeroSlide,
+  AdminHomeTile,
+  BikeOfMonthInput,
+  HeroSlideInput,
+  HomeTileSlot,
+} from "@bw-bikes/shared";
 import { apiFetch } from "./client";
 
 /**
@@ -74,4 +81,86 @@ export async function reorderHeroSlides(ids: string[]): Promise<AdminHeroSlide[]
   });
   triggerPublicRevalidate();
   return res.data.slides;
+}
+
+/**
+ * Admin client for the home's two CTA tile photos (M12, entrega 6). Only
+ * `list`/`uploadImage`/`removeImage` — no create/update/delete/reorder, the
+ * two slots are fixed and always exist server-side (`home-tile.service.ts`
+ * upserts them on first read).
+ */
+const HOME_TILES_BASE_PATH = "/admin/content/home-tiles";
+
+function triggerHomeTilesRevalidate(): void {
+  void fetch("/api/revalidate/home-tiles", { method: "POST" }).catch(() => {});
+}
+
+export async function listAdminHomeTiles(): Promise<AdminHomeTile[]> {
+  const res = await apiFetch<{ tiles: AdminHomeTile[] }>(HOME_TILES_BASE_PATH);
+  return res.data.tiles;
+}
+
+export async function uploadHomeTileImage(slot: HomeTileSlot, file: File): Promise<AdminHomeTile> {
+  const formData = new FormData();
+  formData.append("images", file);
+
+  const res = await apiFetch<{ tile: AdminHomeTile }>(`${HOME_TILES_BASE_PATH}/${slot}/image`, {
+    method: "POST",
+    body: formData,
+  });
+  triggerHomeTilesRevalidate();
+  return res.data.tile;
+}
+
+export async function removeHomeTileImage(slot: HomeTileSlot): Promise<AdminHomeTile> {
+  const res = await apiFetch<{ tile: AdminHomeTile }>(`${HOME_TILES_BASE_PATH}/${slot}/image`, { method: "DELETE" });
+  triggerHomeTilesRevalidate();
+  return res.data.tile;
+}
+
+/**
+ * Admin client for the home's single "bici del mes" banner (M12). Like the
+ * home tiles above there's no create/delete — one document always exists
+ * server-side — but unlike them there's text to save alongside the photo,
+ * so this exposes an `update` for the text fields plus the same
+ * upload/remove pair for the image.
+ */
+const BIKE_OF_MONTH_BASE_PATH = "/admin/content/bike-of-month";
+
+function triggerBikeOfMonthRevalidate(): void {
+  void fetch("/api/revalidate/bike-of-month", { method: "POST" }).catch(() => {});
+}
+
+export async function getAdminBikeOfMonth(): Promise<AdminBikeOfMonth> {
+  const res = await apiFetch<{ bikeOfMonth: AdminBikeOfMonth }>(BIKE_OF_MONTH_BASE_PATH);
+  return res.data.bikeOfMonth;
+}
+
+export async function updateBikeOfMonth(input: BikeOfMonthInput): Promise<AdminBikeOfMonth> {
+  const res = await apiFetch<{ bikeOfMonth: AdminBikeOfMonth }>(BIKE_OF_MONTH_BASE_PATH, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+  triggerBikeOfMonthRevalidate();
+  return res.data.bikeOfMonth;
+}
+
+export async function uploadBikeOfMonthImage(file: File): Promise<AdminBikeOfMonth> {
+  const formData = new FormData();
+  formData.append("images", file);
+
+  const res = await apiFetch<{ bikeOfMonth: AdminBikeOfMonth }>(`${BIKE_OF_MONTH_BASE_PATH}/image`, {
+    method: "POST",
+    body: formData,
+  });
+  triggerBikeOfMonthRevalidate();
+  return res.data.bikeOfMonth;
+}
+
+export async function removeBikeOfMonthImage(): Promise<AdminBikeOfMonth> {
+  const res = await apiFetch<{ bikeOfMonth: AdminBikeOfMonth }>(`${BIKE_OF_MONTH_BASE_PATH}/image`, {
+    method: "DELETE",
+  });
+  triggerBikeOfMonthRevalidate();
+  return res.data.bikeOfMonth;
 }

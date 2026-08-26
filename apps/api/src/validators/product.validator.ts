@@ -153,7 +153,8 @@ const compareAtPrice = priceCents.greater(Joi.ref("price")).messages({
  * accepted from a payload — those are server-owned lifecycle state, mutated
  * only through the archive/restore routes. `isNewArrival` is the opposite case and
  * belongs here: it's merchandising curation the admin sets by hand, no
- * different from `badges`.
+ * different from `badges` — and so is `isCustomerFavorite`, the flag behind
+ * the home's "Favoritas de los ciclistas" rail.
  */
 const productBase = {
   name,
@@ -167,6 +168,7 @@ const productBase = {
   specGroups: specGroups.optional(),
   badges: badges.optional(),
   isNewArrival: Joi.boolean().optional(),
+  isCustomerFavorite: Joi.boolean().optional(),
 };
 
 const relatedAccessories = Joi.array()

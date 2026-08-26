@@ -17,6 +17,8 @@ export interface CatalogFiltersValue {
   isActive: "" | "true" | "false";
   /** The home's "Novedades" curation flag (`Bike.isNewArrival`), not a badge. */
   isNewArrival: "" | "true" | "false";
+  /** The home's "Favoritas de los ciclistas" flag (`Bike.isCustomerFavorite`), not a badge either. */
+  isCustomerFavorite: "" | "true" | "false";
   sort: string;
 }
 
@@ -33,11 +35,12 @@ export const DEFAULT_FILTERS: CatalogFiltersValue = {
   brand: "",
   isActive: "",
   isNewArrival: "",
+  isCustomerFavorite: "",
   sort: "-createdAt",
 };
 
 /** Fields the mobile "Filtros" sheet owns — `search` stays out because it's always visible on its own. */
-const SHEET_FIELDS = ["category", "brand", "isActive", "isNewArrival", "sort"] as const satisfies ReadonlyArray<
+const SHEET_FIELDS = ["category", "brand", "isActive", "isNewArrival", "isCustomerFavorite", "sort"] as const satisfies ReadonlyArray<
   keyof CatalogFiltersValue
 >;
 
@@ -130,6 +133,23 @@ function NewArrivalSelect({ value, onChange, wrapperClassName }: SharedFieldProp
   );
 }
 
+function CustomerFavoriteSelect({ value, onChange, wrapperClassName }: SharedFieldProps) {
+  return (
+    <Select
+      label="Favorita"
+      wrapperClassName={wrapperClassName}
+      value={value.isCustomerFavorite}
+      onChange={(event) =>
+        onChange({ ...value, isCustomerFavorite: event.target.value as CatalogFiltersValue["isCustomerFavorite"] })
+      }
+    >
+      <option value="">Todos</option>
+      <option value="true">Marcados</option>
+      <option value="false">Sin marcar</option>
+    </Select>
+  );
+}
+
 function SortSelect({ value, onChange, wrapperClassName }: SharedFieldProps) {
   return (
     <Select label="Ordenar por" wrapperClassName={wrapperClassName} value={value.sort} onChange={(event) => onChange({ ...value, sort: event.target.value })}>
@@ -178,6 +198,7 @@ export function CatalogFilters({ value, onChange, categoryTree, brands }: Catalo
         <BrandSelect value={value} onChange={onChange} brands={brands} />
         <StatusSelect value={value} onChange={onChange} />
         <NewArrivalSelect value={value} onChange={onChange} />
+        <CustomerFavoriteSelect value={value} onChange={onChange} />
         <SortSelect value={value} onChange={onChange} />
       </div>
 
@@ -201,6 +222,7 @@ export function CatalogFilters({ value, onChange, categoryTree, brands }: Catalo
           <BrandSelect value={value} onChange={onChange} brands={brands} wrapperClassName="w-full" />
           <StatusSelect value={value} onChange={onChange} wrapperClassName="w-full" />
           <NewArrivalSelect value={value} onChange={onChange} wrapperClassName="w-full" />
+          <CustomerFavoriteSelect value={value} onChange={onChange} wrapperClassName="w-full" />
           <SortSelect value={value} onChange={onChange} wrapperClassName="w-full" />
         </div>
       </SlideOver>

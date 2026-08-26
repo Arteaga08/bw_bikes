@@ -39,6 +39,7 @@ export interface BikeInput {
   relatedAccessories?: string[];
   badges?: string[];
   isNewArrival?: boolean;
+  isCustomerFavorite?: boolean;
 }
 
 /**
@@ -124,8 +125,9 @@ export function toPublicBike(bike: IBike): PublicBike {
     relatedAccessories: bike.populated("relatedAccessories")
       ? (bike.relatedAccessories as unknown as Parameters<typeof toPublicAccessory>[0][]).map(toPublicAccessory)
       : [],
-    // `isNewArrival` stays out on purpose — the storefront filters *by* it
-    // (`?isNewArrival=true`) but never paints it, so shipping it would be a leak.
+    // `isNewArrival`/`isCustomerFavorite` stay out on purpose — the storefront
+    // filters *by* them (`?isNewArrival=true`, `?isCustomerFavorite=true`) but
+    // never paints them, so shipping them would be a leak.
     // `createdAt` does ship: the home's "Novedades" rail merges bikes and
     // accessories into one list and needs a date to order them by.
     createdAt: bike.createdAt.toISOString(),
@@ -172,6 +174,7 @@ export function toAdminBike(bike: IBike): AdminBike {
       ? (bike.relatedAccessories as unknown as Parameters<typeof toPublicAccessory>[0][]).map(toPublicAccessory)
       : [],
     isNewArrival: bike.isNewArrival,
+    isCustomerFavorite: bike.isCustomerFavorite,
     isActive: bike.isActive,
     archivedAt: bike.archivedAt ? bike.archivedAt.toISOString() : null,
     createdAt: bike.createdAt.toISOString(),
@@ -228,6 +231,7 @@ async function create(input: BikeInput, actor: ActorContext): Promise<IBike> {
           relatedAccessories: relatedAccessories.map((id) => new Types.ObjectId(id)),
           badges: badges.map((id) => new Types.ObjectId(id)),
           isNewArrival: input.isNewArrival ?? false,
+          isCustomerFavorite: input.isCustomerFavorite ?? false,
         },
       ],
       { session },
@@ -310,6 +314,7 @@ async function update(id: string, input: BikeInput, actor: ActorContext): Promis
   if (input.summary !== undefined) bike.summary = input.summary;
   if (input.specGroups !== undefined) bike.specGroups = input.specGroups;
   if (input.isNewArrival !== undefined) bike.isNewArrival = input.isNewArrival;
+  if (input.isCustomerFavorite !== undefined) bike.isCustomerFavorite = input.isCustomerFavorite;
 
   // Same atomicity discipline as `create()`: once a PATCH can also write
   // `InventoryItem` rows (for a brand-new `in_stock` variant), the product

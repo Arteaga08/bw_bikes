@@ -28,7 +28,7 @@ export async function HomeBrands() {
   if (brandsWithLogo.length === 0) return null;
 
   return (
-    <section className="bg-overlay py-3xl">
+    <section className="bg-overlay py-lg">
       <BrandMarquee brands={brandsWithLogo} />
     </section>
   );

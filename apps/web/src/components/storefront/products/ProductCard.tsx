@@ -9,11 +9,13 @@ export interface ProductCardProps {
 }
 
 /**
- * One tile in the "Novedades" rail. Deliberately the same grammar as
- * `CategoryCard`: photo, then copy below it in flow, same `aspect-[4/5]`
- * frame, same center-growing dorado underline on the name — Manuel's call
- * was "el mismo diseño que la de categorías", not a new visual language for
- * a product tile.
+ * One tile in the "Novedades" rail. Same frame and layout grammar as
+ * `CategoryCard` — `aspect-[4/5]`, copy below in flow, same center-growing
+ * dorado underline on the name — but a different fit inside that frame:
+ * category photography is shot portrait to fill a 4:5 crop, while product
+ * studio shots (a bike's side profile, an accessory on white) are landscape
+ * and get cropped at the wheels/handlebars under `object-cover`. `contain`
+ * keeps the whole product visible, letterboxed inside the frame instead.
  *
  * Two lines this card adds that `CategoryCard` doesn't: it's a product, not
  * a category, so a shopper needs the brand and the price before deciding to
@@ -33,16 +35,22 @@ export function ProductCard({ product }: ProductCardProps) {
       href={productHref(product)}
       className="group/card shrink-0 basis-[78%] snap-start sm:basis-[46%] lg:basis-[31%] xl:basis-[22%]"
     >
-      {/* `bg-inset`, not `bg-surface` — same reserved decode placeholder as
-          `CategoryCard` (`DESIGN.md` §4). */}
-      <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-inset">
+      {/* `bg-base`, matching the section (`HomeNewProducts`) the card sits
+          in — not `bg-surface`'s pure white. `contain` letterboxes the photo,
+          so whatever color fills the frame around it is the color a visitor
+          actually sees; a white frame on top of the page's ash `bg-base`
+          read as a visible box (caught visually, not by any test — see
+          M12 entrega 6 follow-up). Matching the page background is what
+          makes the frame disappear regardless of what the photo itself is
+          shot on. */}
+      <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-base">
         <Image
           src={image.url}
           alt={image.alt ?? product.name}
           fill
           sizes="(max-width: 640px) 78vw, (max-width: 1024px) 46vw, 23vw"
           loading="lazy"
-          className="object-cover transition-transform duration-500 ease-out-strong motion-safe:group-hover/card:scale-[1.03]"
+          className="object-contain transition-transform duration-500 ease-out-strong motion-safe:group-hover/card:scale-[1.03]"
         />
       </div>
 

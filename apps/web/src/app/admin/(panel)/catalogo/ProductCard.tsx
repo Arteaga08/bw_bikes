@@ -58,7 +58,7 @@ function ProductCardInner({ row, editBasePath, onArchive, onRestore, onDelete }:
             {row.brand.name} · {row.category.name}
           </p>
         </div>
-        {row.badges.length > 0 || row.isNewArrival ? (
+        {row.badges.length > 0 || row.isNewArrival || row.isCustomerFavorite ? (
           <div className="flex flex-wrap gap-xs">
             {row.badges.map((badge) => (
               <Badge key={badge.id} variant={badge.variant}>
@@ -69,6 +69,9 @@ function ProductCardInner({ row, editBasePath, onArchive, onRestore, onDelete }:
                 (`isNewArrival`), shown here so the admin can see what it
                 flagged without opening each product. */}
             {row.isNewArrival ? <Badge variant="accent">Novedad</Badge> : null}
+            {/* Same idea as `isNewArrival` above: the "Favoritas de los
+                ciclistas" rail's curation flag, not a badge the shopper sees. */}
+            {row.isCustomerFavorite ? <Badge variant="accent">Favorita</Badge> : null}
           </div>
         ) : null}
         <p className="mt-auto font-body text-body-l text-negro">{formatCurrencyCentsWithCurrency(row.price)}</p>

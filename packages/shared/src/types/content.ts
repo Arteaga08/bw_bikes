@@ -114,3 +114,80 @@ export interface HeroSlideInput {
   ctas: { label: string; target: HeroCtaTarget }[];
   isActive: boolean;
 }
+
+/**
+ * The home's "comprar bicis/accesorios" CTA tiles (M12, entrega 6). Two
+ * fixed slots, not a list — unlike `HeroSlide` there is no title, subtitle,
+ * or CTA to edit here: the label and destination are hardcoded in the
+ * storefront, only the photo is admin-managed. That asymmetry is why this
+ * isn't just a `HeroSlide` with one forced CTA — a slide's whole point is
+ * that its text and target vary, and here neither does.
+ */
+export const HOME_TILE_SLOTS = ["bikes", "accessories"] as const;
+
+export type HomeTileSlot = (typeof HOME_TILE_SLOTS)[number];
+
+/** Always exactly one doc per `HOME_TILE_SLOTS` entry — the admin list never has more or fewer than two. */
+export interface AdminHomeTile {
+  slot: HomeTileSlot;
+  /** Unset until the first upload, same text-first-then-image flow as `AdminHeroSlide.image`. */
+  image?: CategoryImage;
+  updatedAt: string;
+}
+
+/** A slot the storefront can render: `listPublic` drops any slot with no image, so this is always set. */
+export interface PublicHomeTile {
+  slot: HomeTileSlot;
+  image: CategoryImage;
+}
+
+export const MAX_BIKE_OF_MONTH_EYEBROW_LENGTH = 60;
+export const MAX_BIKE_OF_MONTH_TITLE_LENGTH = 80;
+export const MAX_BIKE_OF_MONTH_SUBTITLE_LENGTH = 160;
+
+/**
+ * The home's single "bici del mes" banner (M12) — a hybrid of `HomeTile` and
+ * `HeroSlide`: one fixed position like a tile (no list, no reorder), but with
+ * editable text and a catalog reference like a slide's CTA. Unlike a hero
+ * CTA, the two buttons' labels ("Conocer más"/"Comprar") are hardcoded in the
+ * storefront — only their shared destination, the referenced bike, is
+ * admin-managed. `bikeId` is resolved to `href` at read time the same way
+ * `HeroCtaTarget` is, so renaming or discontinuing the bike never leaves the
+ * banner pointing at a 404.
+ */
+export interface AdminBikeOfMonth {
+  /** Unset until the first upload — same text-first-then-image flow as `AdminHeroSlide.image`. */
+  image?: CategoryImage;
+  eyebrow?: string;
+  /** Unset until the admin saves the form the first time — the singleton doc is upserted empty, same as `HomeTile`'s slots. */
+  title?: string;
+  subtitle?: string;
+  /** The referenced bike's id, or unset if none has been chosen yet. */
+  bikeId?: string;
+  /** Resolved destination, or `null` when no bike is set or the referenced one is gone/archived. */
+  href: string | null;
+  /** `true` when `href` is `null` — surfaced in the panel so a dead banner is visible before it ships. */
+  isBroken: boolean;
+  updatedAt: string;
+}
+
+/**
+ * What the storefront renders: never published unless it has an image, a
+ * title, and a working `href` — a banner with no image or a dead button is
+ * worse than no banner at all.
+ */
+export interface PublicBikeOfMonth {
+  image: CategoryImage;
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  href: string;
+}
+
+/** Write payload for the text fields — the image travels through its own multipart endpoint, same split as `HeroSlideInput`. */
+export interface BikeOfMonthInput {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  bikeId?: string;
+}

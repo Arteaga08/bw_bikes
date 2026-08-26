@@ -1,7 +1,9 @@
-import type { AdminAccessory, AdminBike, AdminCategory, AdminHeroSlide } from "@bw-bikes/shared";
+import type { AdminAccessory, AdminBike, AdminBikeOfMonth, AdminCategory, AdminHeroSlide, AdminHomeTile } from "@bw-bikes/shared";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { serverApiFetch } from "@/lib/api/server";
+import { BikeOfMonthView } from "./BikeOfMonthView";
 import { HeroSlidesView } from "./HeroSlidesView";
+import { HomeTilesView } from "./HomeTilesView";
 
 /**
  * The four catalog lists a CTA's target picker searches — fetched once,
@@ -11,13 +13,16 @@ import { HeroSlidesView } from "./HeroSlidesView";
  * endpoint rather than a bigger limit.
  */
 export default async function HeroInicioPage() {
-  const [slidesRes, bikesRes, accessoriesRes, bikeCategoriesRes, accessoryCategoriesRes] = await Promise.all([
-    serverApiFetch<{ slides: AdminHeroSlide[] }>("/admin/content/hero-slides"),
-    serverApiFetch<{ bikes: AdminBike[] }>("/admin/bikes?limit=100"),
-    serverApiFetch<{ accessories: AdminAccessory[] }>("/admin/accessories?limit=100"),
-    serverApiFetch<{ categories: AdminCategory[] }>("/admin/bike-categories?limit=100"),
-    serverApiFetch<{ categories: AdminCategory[] }>("/admin/accessory-categories?limit=100"),
-  ]);
+  const [slidesRes, bikesRes, accessoriesRes, bikeCategoriesRes, accessoryCategoriesRes, homeTilesRes, bikeOfMonthRes] =
+    await Promise.all([
+      serverApiFetch<{ slides: AdminHeroSlide[] }>("/admin/content/hero-slides"),
+      serverApiFetch<{ bikes: AdminBike[] }>("/admin/bikes?limit=100"),
+      serverApiFetch<{ accessories: AdminAccessory[] }>("/admin/accessories?limit=100"),
+      serverApiFetch<{ categories: AdminCategory[] }>("/admin/bike-categories?limit=100"),
+      serverApiFetch<{ categories: AdminCategory[] }>("/admin/accessory-categories?limit=100"),
+      serverApiFetch<{ tiles: AdminHomeTile[] }>("/admin/content/home-tiles"),
+      serverApiFetch<{ bikeOfMonth: AdminBikeOfMonth }>("/admin/content/bike-of-month"),
+    ]);
 
   return (
     <>
@@ -32,6 +37,8 @@ export default async function HeroInicioPage() {
         bikeCategories={bikeCategoriesRes.data.categories}
         accessoryCategories={accessoryCategoriesRes.data.categories}
       />
+      <HomeTilesView initialTiles={homeTilesRes.data.tiles} />
+      <BikeOfMonthView initialBikeOfMonth={bikeOfMonthRes.data.bikeOfMonth} bikes={bikesRes.data.bikes} />
     </>
   );
 }

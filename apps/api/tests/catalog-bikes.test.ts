@@ -454,3 +454,163 @@ describe("summary card (M10.6)", () => {
     expect(response.body.data.accessory).not.toHaveProperty("summary");
   });
 });
+
+describe("isNewArrival curation flag (M12 entrega 5, Novedades)", () => {
+  let app: ReturnType<typeof buildApp>;
+  let adminCookie: string;
+  let categoryId: string;
+  let brandId: string;
+
+  beforeEach(async () => {
+    app = buildApp();
+    adminCookie = await createAdminSession(app);
+    categoryId = String((await createBikeCategoryDoc({ slug: "ruta" }))._id);
+    brandId = String((await createBrandDoc())._id);
+  });
+
+  it("defaults to false, can be set on create, and is filterable on the public list", async () => {
+    const untagged = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(
+        bikePayload(categoryId, brandId, {
+          name: "Sin marcar",
+          variants: [{ sku: "BK-UNTAGGED", size: "M", color: "Negro", fulfillmentMode: "in_stock" }],
+        }),
+      );
+    expect(untagged.status).toBe(201);
+    expect(untagged.body.data.bike.isNewArrival).toBe(false);
+
+    const tagged = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(
+        bikePayload(categoryId, brandId, {
+          name: "Novedad",
+          isNewArrival: true,
+          variants: [{ sku: "BK-TAGGED", size: "M", color: "Negro", fulfillmentMode: "in_stock" }],
+        }),
+      );
+    expect(tagged.status).toBe(201);
+    expect(tagged.body.data.bike.isNewArrival).toBe(true);
+
+    const publicList = await request(app).get(`${PUBLIC}/bikes?isNewArrival=true`);
+    expect(publicList.status).toBe(200);
+    expect(publicList.body.data.bikes).toHaveLength(1);
+    expect(publicList.body.data.bikes[0].slug).toBe("novedad");
+  });
+
+  it("can be toggled through an update", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId));
+    const id = created.body.data.bike.id as string;
+
+    const updated = await request(app)
+      .patch(`${ADMIN}/bikes/${id}`)
+      .set("Cookie", adminCookie)
+      .send({ isNewArrival: true });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.data.bike.isNewArrival).toBe(true);
+  });
+
+  it("never ships on the public DTO, even though it drives the public filter", async () => {
+    await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId, { isNewArrival: true }));
+
+    const pdp = await request(app).get(`${PUBLIC}/bikes/tarmac-sl8-pro`);
+    expect(pdp.status).toBe(200);
+    expect(pdp.body.data.bike).not.toHaveProperty("isNewArrival");
+    // `createdAt` does ship — the home's "Novedades" rail merges bikes and
+    // accessories into one list and needs it to order them by recency.
+    expect(pdp.body.data.bike.createdAt).toEqual(expect.any(String));
+  });
+});
+
+describe("isCustomerFavorite curation flag (M12 entrega 8, Favoritas de los ciclistas)", () => {
+  let app: ReturnType<typeof buildApp>;
+  let adminCookie: string;
+  let categoryId: string;
+  let brandId: string;
+
+  beforeEach(async () => {
+    app = buildApp();
+    adminCookie = await createAdminSession(app);
+    categoryId = String((await createBikeCategoryDoc({ slug: "ruta" }))._id);
+    brandId = String((await createBrandDoc())._id);
+  });
+
+  it("defaults to false, can be set on create, and is filterable on the public list", async () => {
+    const untagged = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(
+        bikePayload(categoryId, brandId, {
+          name: "Sin marcar",
+          variants: [{ sku: "BK-NOFAV", size: "M", color: "Negro", fulfillmentMode: "in_stock" }],
+        }),
+      );
+    expect(untagged.status).toBe(201);
+    expect(untagged.body.data.bike.isCustomerFavorite).toBe(false);
+
+    const tagged = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(
+        bikePayload(categoryId, brandId, {
+          name: "Favorita",
+          isCustomerFavorite: true,
+          variants: [{ sku: "BK-FAV", size: "M", color: "Negro", fulfillmentMode: "in_stock" }],
+        }),
+      );
+    expect(tagged.status).toBe(201);
+    expect(tagged.body.data.bike.isCustomerFavorite).toBe(true);
+
+    const publicList = await request(app).get(`${PUBLIC}/bikes?isCustomerFavorite=true`);
+    expect(publicList.status).toBe(200);
+    expect(publicList.body.data.bikes).toHaveLength(1);
+    expect(publicList.body.data.bikes[0].slug).toBe("favorita");
+  });
+
+  it("is independent from isNewArrival — a product can be in one rail and not the other", async () => {
+    await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId, { name: "Solo novedad", isNewArrival: true }));
+
+    const favorites = await request(app).get(`${PUBLIC}/bikes?isCustomerFavorite=true`);
+    expect(favorites.status).toBe(200);
+    expect(favorites.body.data.bikes).toHaveLength(0);
+  });
+
+  it("can be toggled through an update", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId));
+    const id = created.body.data.bike.id as string;
+
+    const updated = await request(app)
+      .patch(`${ADMIN}/bikes/${id}`)
+      .set("Cookie", adminCookie)
+      .send({ isCustomerFavorite: true });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.data.bike.isCustomerFavorite).toBe(true);
+  });
+
+  it("never ships on the public DTO, even though it drives the public filter", async () => {
+    await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId, { isCustomerFavorite: true }));
+
+    const pdp = await request(app).get(`${PUBLIC}/bikes/tarmac-sl8-pro`);
+    expect(pdp.status).toBe(200);
+    expect(pdp.body.data.bike).not.toHaveProperty("isCustomerFavorite");
+  });
+});

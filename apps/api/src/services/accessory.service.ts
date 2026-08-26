@@ -34,6 +34,7 @@ export interface AccessoryInput {
   specGroups?: SpecGroup[];
   badges?: string[];
   isNewArrival?: boolean;
+  isCustomerFavorite?: boolean;
 }
 
 /** Storefront DTO — same contract as `toPublicBike`, minus the bike-only fields. */
@@ -61,7 +62,7 @@ export function toPublicAccessory(accessory: IAccessory): PublicAccessory {
     variants: accessory.variants.filter((variant) => variant.isActive),
     specGroups: [...accessory.specGroups].sort((a, b) => a.order - b.order),
     gallery: [...accessory.gallery].sort((a, b) => a.order - b.order),
-    // `isNewArrival` omitted, `createdAt` shipped — see `toPublicBike` for why.
+    // `isNewArrival`/`isCustomerFavorite` omitted, `createdAt` shipped — see `toPublicBike` for why.
     createdAt: accessory.createdAt.toISOString(),
   };
 }
@@ -92,6 +93,7 @@ export function toAdminAccessory(accessory: IAccessory): AdminAccessory {
     specGroups: [...accessory.specGroups].sort((a, b) => a.order - b.order),
     gallery: [...accessory.gallery].sort((a, b) => a.order - b.order),
     isNewArrival: accessory.isNewArrival,
+    isCustomerFavorite: accessory.isCustomerFavorite,
     isActive: accessory.isActive,
     archivedAt: accessory.archivedAt ? accessory.archivedAt.toISOString() : null,
     createdAt: accessory.createdAt.toISOString(),
@@ -133,6 +135,7 @@ async function create(input: AccessoryInput, actor: ActorContext): Promise<IAcce
           gallery: [],
           badges: badges.map((id) => new Types.ObjectId(id)),
           isNewArrival: input.isNewArrival ?? false,
+          isCustomerFavorite: input.isCustomerFavorite ?? false,
         },
       ],
       { session },
@@ -205,6 +208,7 @@ async function update(id: string, input: AccessoryInput, actor: ActorContext): P
   if (input.compareAtPrice !== undefined) accessory.compareAtPrice = input.compareAtPrice;
   if (input.specGroups !== undefined) accessory.specGroups = input.specGroups;
   if (input.isNewArrival !== undefined) accessory.isNewArrival = input.isNewArrival;
+  if (input.isCustomerFavorite !== undefined) accessory.isCustomerFavorite = input.isCustomerFavorite;
 
   let seededInventory: Awaited<ReturnType<typeof inventoryService.seedInitialStock>> = [];
 

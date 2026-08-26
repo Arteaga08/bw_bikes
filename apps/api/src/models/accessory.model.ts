@@ -18,6 +18,7 @@ export interface IAccessory extends Document {
   gallery: ProductImage[];
   badges: Types.ObjectId[];
   isNewArrival: boolean;
+  isCustomerFavorite: boolean;
   isActive: boolean;
   archivedAt?: Date | null;
   createdAt: Date;
@@ -83,6 +84,10 @@ const accessorySchema = new Schema<IAccessory>(
     // both catalogs, so both carry it.
     isNewArrival: { type: Boolean, default: false },
 
+    // Same curation flag as `Bike.isCustomerFavorite` — the home's "Favoritas
+    // de los ciclistas" rail mixes both catalogs, so both carry it.
+    isCustomerFavorite: { type: Boolean, default: false },
+
     isActive: { type: Boolean, default: true },
     archivedAt: { type: Date, default: null },
   },
@@ -92,5 +97,6 @@ const accessorySchema = new Schema<IAccessory>(
 accessorySchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
 accessorySchema.index({ category: 1, isActive: 1, price: 1 });
 accessorySchema.index({ isNewArrival: 1, isActive: 1, createdAt: -1 });
+accessorySchema.index({ isCustomerFavorite: 1, isActive: 1, createdAt: -1 });
 
 export const Accessory = model<IAccessory>("Accessory", accessorySchema);

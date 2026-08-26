@@ -29,7 +29,12 @@ export async function HomeNewProducts() {
         Novedades
       </h2>
 
-      <ProductCarousel products={productsWithImage} />
+      <ProductCarousel
+        products={productsWithImage}
+        ariaLabel="Novedades"
+        previousLabel="Novedades anteriores"
+        nextLabel="Siguientes novedades"
+      />
     </section>
   );
 }

@@ -329,6 +329,13 @@ interface AdminProductBase extends PublicProductBase {
    * (`?isNewArrival=true`), never as a field on the response.
    */
   isNewArrival: boolean;
+  /**
+   * Curation flag for the home's "Favoritas de los ciclistas" rail (M12),
+   * set by hand from the product editor. Admin-only for the same reason
+   * `isNewArrival` is: the storefront reads it as `?isCustomerFavorite=true`,
+   * never as a field on the response.
+   */
+  isCustomerFavorite: boolean;
   isActive: boolean;
   archivedAt: string | null;
   updatedAt: string;

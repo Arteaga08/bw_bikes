@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { getPublicBikeOfMonth } from "../controllers/bike-of-month.controller.js";
+import { listPublicHomeTiles } from "../controllers/home-tile.controller.js";
 import { listPublicHeroSlides } from "../controllers/hero-slide.controller.js";
 import { publicReadRateLimiter } from "../middlewares/index.js";
 
@@ -17,5 +19,7 @@ const router = Router();
 router.use(publicReadRateLimiter);
 
 router.get("/hero-slides", listPublicHeroSlides);
+router.get("/home-tiles", listPublicHomeTiles);
+router.get("/bike-of-month", getPublicBikeOfMonth);
 
 export { router as contentRouter };

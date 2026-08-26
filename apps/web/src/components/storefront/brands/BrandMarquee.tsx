@@ -107,7 +107,7 @@ export function BrandMarquee({ brands }: BrandMarqueeProps) {
               return (
                 <li
                   key={brand.id}
-                  className="flex shrink-0 items-center border-l border-blanco/10 px-xl py-lg sm:px-3xl"
+                  className="flex shrink-0 items-center border-l border-blanco/10 px-xl py-md sm:px-3xl"
                 >
                   <BrandLogo
                     url={logo.url}

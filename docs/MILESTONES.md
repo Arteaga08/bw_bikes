@@ -1689,3 +1689,87 @@ cubiertos por sus hijos + verificación visual).
 grande; las cinco secciones restantes de la home.
 
 ---
+
+### Entrega 5/10 — Novedades (renombra "bestseller" del plan original)
+
+La quinta sección del home se llamaba "bestseller" en el plan original de M12. Manuel la redefinió
+como **"Novedades"**: un carrusel de hasta 10 productos — bicicletas y accesorios mezclados — con el
+mismo diseño (rail, tarjeta, gestos) que "Explorar Bicicletas" (entrega 3).
+
+**Decisión de diseño — campo nuevo, no el badge "Novedad" existente:** el catálogo ya tenía un
+mecanismo de badges de merchandising (`badge.model.ts`), con "Novedad" como ejemplo literal en sus
+comentarios desde M3. Pero `MAX_PRODUCT_BADGES = 1` obliga a gastar el único badge del producto para
+usarlo como selector, y acopla qué aparece en el home a una etiqueta visual que el shopper ve en la
+tarjeta admin. Manuel eligió un campo booleano independiente, puramente de curaduría.
+
+**Entregado:**
+- **Campo `isNewArrival` en `Bike` y `Accessory`** (`apps/api/src/models/bike.model.ts`,
+  `accessory.model.ts`), admin-only — no viaja en el DTO público, solo se usa como filtro de query
+  (`?isNewArrival=true`). Nombrado `isNewArrival`, no `isNew`: Mongoose reserva `Document.isNew`
+  ("este documento no se ha guardado todavía"), así que un campo de schema con ese nombre choca en
+  tiempo de compilación (`TS2353`) — se descubrió al correr `pnpm --filter api typecheck` tras el
+  primer intento.
+- Validators (`product.validator.ts`, `list-query.validator.ts`): `isNewArrival` aceptado en
+  create/update de ambos catálogos, y filtrable en `publicProductListQuerySchema` **y**
+  `adminProductListQuerySchema` (a diferencia de `isActive`, este filtro es público — el rail del
+  home lo lee sin sesión).
+- `product.service.ts#buildFilter`: clave explícita `isNewArrival`, mismo patrón que `isActive` —
+  nunca spread del query.
+- `toPublicBike`/`toPublicAccessory` ganan `createdAt` (antes solo vivía en el DTO admin): el rail
+  mezcla dos colecciones ordenadas independientemente por el backend, y necesita una fecha propia
+  para reordenar el merge del lado del cliente. `isNewArrival` en sí queda fuera del DTO público —
+  se filtra por él, nunca se pinta.
+- **Admin CRUD** (`ProductEditor.tsx`): toggle "Marcar como novedad" (`Toggle`, el mismo componente
+  que ya usan `BrandFormModal`/`SizeFormModal`/`SpecSheetEditor`) en una `EditorSection` propia junto
+  a "Badges". `ProductCard.tsx` (grid del admin) muestra un badge "Novedad" cuando el flag está
+  activo, y `CatalogFilters.tsx` gana un `<Select>` tri-estado ("Todos"/"Marcados"/"Sin marcar"),
+  mismo patrón que el filtro de Estatus.
+- **`getPublicNewProducts()`** en `public-catalog.ts`: dos `publicApiFetch` en paralelo
+  (`/catalog/bikes?isNewArrival=true&sort=-createdAt&limit=10` y el equivalente de accesorios), cada
+  uno ya limitado y ordenado por el backend; el resultado se mezcla y se re-ordena por `createdAt`
+  del lado del cliente (necesario porque son dos listas independientes) y se corta a 10.
+- **`components/storefront/products/`**: `HomeNewProducts` (Server Component, mismo contrato de
+  degradación que `HomeCategories`/`HomeBrands` — sin imagen no aparece, sin productos la sección
+  entera se omite), `ProductCard` (calca `CategoryCard`: mismo `aspect-[4/5]`, mismo subrayado dorado
+  que crece desde el centro; agrega marca y precio con `formatCurrencyCents`, ya existente en
+  `lib/format.ts`) y `ProductCarousel`.
+- **`product-href.ts`**: un único punto que sabe la URL de un producto —
+  `/bicicletas/producto/[slug]` o `/accesorios/producto/[slug]` (segmento `producto` fijo para no
+  chocar con `/bicicletas/[categorySlug]`, que ya usa `CategoryCard`). La ficha de producto no existe
+  todavía, así que hoy da 404 — mismo estado que los CTA del hero y los links de categoría; cuando la
+  PDP se construya, solo este archivo cambia.
+- **Refactor: mecánica del rail extraída a `components/storefront/shared/`** (`ScrollRail`,
+  `ScrollRailArrows`, `ScrollRailProgress`) — antes vivía solo en `categories/CategoryCarousel.tsx`.
+  `CategoryCarousel` queda como envoltorio delgado sobre `ScrollRail`; `ProductCarousel` es su
+  equivalente para productos. Las labels de aria (`"Categorías anteriores"` vs. `"Novedades
+  anteriores"`) pasan por props — antes estaban hardcodeadas para categorías únicamente.
+  `CategoryCarousel.test.tsx` se corrió sin tocar sus aserciones para confirmar que el refactor no
+  cambió comportamiento.
+- `apps/web/src/app/(storefront)/page.tsx`: `<HomeNewProducts />` insertado entre `<HomeBrands />` y
+  el placeholder de las secciones restantes.
+
+**Verificado:**
+```
+pnpm --filter @bw-bikes/shared build   → limpio
+pnpm --filter api typecheck            → limpio
+pnpm --filter api lint                 → limpio
+pnpm --filter web typecheck            → limpio
+pnpm --filter web lint                 → limpio (1 warning preexistente en OrdersByDayChart.test.tsx,
+                                          no relacionado)
+pnpm --filter web test -- CategoryCarousel → 4/4, confirma que el refactor del rail no cambió
+                                          comportamiento
+pnpm --filter api test                 → 527/528 (incluye 3 nuevos de `isNewArrival` en
+                                          catalog-bikes.test.ts); el 1 roto varía de corrida a corrida
+                                          (una vez hero-slides.test.ts, otra un test de resumen de
+                                          inventario) — flaky preexistente de la suite completa, no
+                                          relacionado a esta entrega; corrido aislado, cada archivo
+                                          pasa en verde.
+pnpm --filter web test                 → 455/456 (mismo roto preexistente que en la entrega 4,
+                                          CategoryFormModal.test.tsx, confirmado sin cambios de esta
+                                          entrega)
+```
+
+**Fuera de esta entrega:** la ficha de producto (`/bicicletas/producto/[slug]`), a la que apuntan las
+tarjetas y que hoy da 404; las cuatro secciones restantes de la home.
+
+---

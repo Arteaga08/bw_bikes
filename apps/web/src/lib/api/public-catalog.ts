@@ -47,8 +47,8 @@ export async function getPublicBrands(): Promise<PublicBrand[]> {
   return res.data.brands;
 }
 
-/** How many tiles the home's "Novedades" rail shows — Manuel's call. */
-const HOME_NEW_PRODUCTS_LIMIT = 10;
+/** How many tiles each of the home's product rails shows — Manuel's call. */
+const HOME_PRODUCT_RAIL_LIMIT = 10;
 
 /**
  * The shape `ProductCard` (storefront) actually consumes — a slimmed-down
@@ -83,21 +83,21 @@ function toSummary(product: PublicBike | PublicAccessory, kind: "bike" | "access
 }
 
 /**
- * Server-side only, anonymous storefront read for the home's "Novedades"
- * rail (M12, entrega 5/10): the `HOME_NEW_PRODUCTS_LIMIT` most recently
- * flagged products across *both* catalogs, bikes and accessories mixed.
+ * Shared engine behind the home's two curated product rails. `flag` is the
+ * admin curation field to filter by (`isNewArrival` for "Novedades",
+ * `isCustomerFavorite` for "Favoritas de los ciclistas") — a public list
+ * already filters to `isActive: true` server-side (`PUBLIC_VISIBILITY` in
+ * `product.service.ts`), so neither rail can surface an archived product.
  *
- * `isNewArrival` is the admin's curation flag (`Bike.isNewArrival` /
- * `Accessory.isNewArrival`) — a public list already filters to
- * `isActive: true` server-side (`PUBLIC_VISIBILITY` in `product.service.ts`),
- * so this never surfaces an archived product. The two catalogs are fetched
- * in parallel, each already sorted `-createdAt` and capped to the same
- * limit (no single catalog can need more than the whole rail), then merged
- * and re-sorted client-side — two independently-paginated lists can't be
- * merged any other way.
+ * The two catalogs are fetched in parallel, each already sorted `-createdAt`
+ * and capped to the same limit (no single catalog can need more than the
+ * whole rail), then merged and re-sorted here — two independently-paginated
+ * lists can't be merged any other way.
  */
-export async function getPublicNewProducts(): Promise<PublicProductSummary[]> {
-  const query = `?isNewArrival=true&sort=-createdAt&limit=${HOME_NEW_PRODUCTS_LIMIT}`;
+async function fetchCuratedProductRail(
+  flag: "isNewArrival" | "isCustomerFavorite",
+): Promise<PublicProductSummary[]> {
+  const query = `?${flag}=true&sort=-createdAt&limit=${HOME_PRODUCT_RAIL_LIMIT}`;
   const [bikesRes, accessoriesRes] = await Promise.all([
     publicApiFetch<{ bikes: PublicBike[] }>(`/catalog/bikes${query}`, { revalidateSeconds: 300 }),
     publicApiFetch<{ accessories: PublicAccessory[] }>(`/catalog/accessories${query}`, { revalidateSeconds: 300 }),
@@ -110,5 +110,24 @@ export async function getPublicNewProducts(): Promise<PublicProductSummary[]> {
 
   return merged
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, HOME_NEW_PRODUCTS_LIMIT);
+    .slice(0, HOME_PRODUCT_RAIL_LIMIT);
+}
+
+/**
+ * Server-side only, anonymous storefront read for the home's "Novedades"
+ * rail (M12, entrega 5/10): the most recently flagged products across *both*
+ * catalogs, bikes and accessories mixed.
+ */
+export async function getPublicNewProducts(): Promise<PublicProductSummary[]> {
+  return fetchCuratedProductRail("isNewArrival");
+}
+
+/**
+ * Same read for the home's "Favoritas de los ciclistas" rail (M12, entrega
+ * 8/10), against `isCustomerFavorite`. A separate function rather than an
+ * exported `flag` parameter so each section names what it wants and the
+ * query string stays out of the component layer.
+ */
+export async function getPublicFavoriteProducts(): Promise<PublicProductSummary[]> {
+  return fetchCuratedProductRail("isCustomerFavorite");
 }

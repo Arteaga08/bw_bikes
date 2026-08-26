@@ -81,6 +81,7 @@ export function CatalogView({ kind, categoryTree, brands }: CatalogViewProps) {
       ...(filters.brand.trim() ? { brand: filters.brand.trim() } : {}),
       ...(filters.isActive ? { isActive: filters.isActive === "true" } : {}),
       ...(filters.isNewArrival ? { isNewArrival: filters.isNewArrival === "true" } : {}),
+      ...(filters.isCustomerFavorite ? { isCustomerFavorite: filters.isCustomerFavorite === "true" } : {}),
     }),
     [page, filters],
   );

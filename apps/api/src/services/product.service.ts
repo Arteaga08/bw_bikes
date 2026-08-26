@@ -29,6 +29,7 @@ export interface ProductDocument extends Document {
   gallery: ProductImage[];
   badges: Types.ObjectId[];
   isNewArrival: boolean;
+  isCustomerFavorite: boolean;
   isActive: boolean;
   archivedAt?: Date | null;
   createdAt: Date;
@@ -161,6 +162,11 @@ export function createProductService<TDoc extends ProductDocument>(
     // "Novedades" rail reads it publicly, the admin catalog filters by it too.
     if (typeof query["isNewArrival"] === "boolean") {
       filter["isNewArrival"] = query["isNewArrival"];
+    }
+
+    // Same reasoning as `isNewArrival`: public rail + admin catalog filter.
+    if (typeof query["isCustomerFavorite"] === "boolean") {
+      filter["isCustomerFavorite"] = query["isCustomerFavorite"];
     }
 
     const category = query["category"];

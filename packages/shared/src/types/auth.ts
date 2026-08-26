@@ -123,7 +123,9 @@ export type AuditAction =
   | "content.hero_slide_updated"
   | "content.hero_slide_image_updated"
   | "content.hero_slide_deleted"
-  | "content.hero_slides_reordered";
+  | "content.hero_slides_reordered"
+  | "content.home_tile_updated"
+  | "content.bike_of_month_updated";
 
 /**
  * Runtime mirror of `AuditAction`, for the one place that needs the values as
@@ -203,4 +205,6 @@ export const AUDIT_ACTIONS = [
   "content.hero_slide_image_updated",
   "content.hero_slide_deleted",
   "content.hero_slides_reordered",
+  "content.home_tile_updated",
+  "content.bike_of_month_updated",
 ] as const satisfies readonly AuditAction[];

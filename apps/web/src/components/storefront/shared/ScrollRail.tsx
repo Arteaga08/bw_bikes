@@ -112,7 +112,13 @@ export function ScrollRail({ children, ariaLabel, previousLabel, nextLabel }: Sc
         // an explicit `behavior` per call (smooth normally, `"auto"` under
         // `prefers-reduced-motion`), and a static class would only duplicate
         // that decision instead of driving it.
-        className="flex gap-lg overflow-x-auto pl-lg pr-lg snap-x snap-mandatory scroll-pl-lg [scrollbar-width:none] sm:pl-[clamp(2rem,8vw,8rem)] sm:pr-xl sm:scroll-pl-[clamp(2rem,8vw,8rem)] [&::-webkit-scrollbar]:hidden"
+        // `overflow-y-hidden` is load-bearing, not decorative: per the CSS
+        // Overflow spec, an `overflow-x` other than `visible` paired with a
+        // `overflow-y` left at its `visible` default gets that `visible`
+        // computed up to `auto` too — silently turning this rail into a
+        // vertical scroll container as well, which traps the desktop mouse
+        // wheel instead of letting it bubble up to scroll the page.
+        className="flex gap-lg overflow-x-auto overflow-y-hidden pl-lg pr-lg snap-x snap-mandatory scroll-pl-lg [scrollbar-width:none] sm:pl-[clamp(2rem,8vw,8rem)] sm:pr-xl sm:scroll-pl-[clamp(2rem,8vw,8rem)] [&::-webkit-scrollbar]:hidden"
       >
         {children}
       </div>

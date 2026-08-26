@@ -250,6 +250,9 @@ function ProductEditorContent({
   })();
   const [badgeIds, setBadgeIds] = useState<string[]>(() => initialProduct?.badges.map((badge) => badge.id) ?? []);
   const [isNewArrival, setIsNewArrival] = useState<boolean>(() => initialProduct?.isNewArrival ?? false);
+  const [isCustomerFavorite, setIsCustomerFavorite] = useState<boolean>(
+    () => initialProduct?.isCustomerFavorite ?? false,
+  );
 
   const [currentStepId, setCurrentStepId] = useState<EditorStepId>(() => initialStepIdFrom(searchParams));
   // Which steps the admin can jump straight to from the stepper. `edit`
@@ -480,6 +483,7 @@ function ProductEditorContent({
       variants: resolvedVariants,
       badges: badgeIds,
       isNewArrival,
+      isCustomerFavorite,
       // The sheet only rides along on create — on edit it's its own PUT,
       // fired below once the product itself has saved.
       ...(mode === "create" ? { specGroups } : {}),
@@ -627,6 +631,21 @@ function ProductEditorContent({
               description="Aparece en la sección Novedades del inicio, que muestra los 10 productos marcados más recientes."
             >
               <Toggle label="Marcar como novedad" checked={isNewArrival} onChange={setIsNewArrival} />
+            </EditorSection>
+
+            {/* Its own section, next to "Novedad" and for the same reason: a
+                second, independent home rail the admin curates by hand. A
+                product can be novedad, favorita, both, or neither. */}
+            <EditorSection
+              id="section-favorita"
+              title="Favorita"
+              description="Aparece en la sección Favoritas de los ciclistas del inicio, que muestra los 10 productos marcados más recientes."
+            >
+              <Toggle
+                label="Marcar como favorita"
+                checked={isCustomerFavorite}
+                onChange={setIsCustomerFavorite}
+              />
             </EditorSection>
           </>
         );
