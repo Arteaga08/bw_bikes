@@ -2,38 +2,75 @@ import type { PublicCategoryTreeNode } from "@bw-bikes/shared";
 import Image from "next/image";
 import Link from "next/link";
 
+/**
+ * `default` is the home rail's tile. `compact` is the catalog header's: same
+ * card, narrower and shorter, because there it sits under a cover band as
+ * navigation rather than being the section's own content.
+ */
+export type CategoryCardSize = "default" | "compact";
+
 export interface CategoryCardProps {
   category: PublicCategoryTreeNode;
+  /** Catalog this category belongs to. Defaults to the bike catalog. */
+  basePath?: string;
+  size?: CategoryCardSize;
+  /** Marks the category whose page is currently open. */
+  isActive?: boolean;
 }
 
+const SIZE_CLASSNAMES: Record<CategoryCardSize, { tile: string; frame: string; name: string; sizes: string }> = {
+  default: {
+    tile: "basis-[78%] sm:basis-[46%] lg:basis-[31%] xl:basis-[22%]",
+    frame: "aspect-[4/5]",
+    name: "text-h3",
+    sizes: "(max-width: 640px) 78vw, (max-width: 1024px) 46vw, 23vw",
+  },
+  compact: {
+    tile: "basis-[62%] sm:basis-[38%] lg:basis-[26%] xl:basis-[19%]",
+    frame: "aspect-[3/4]",
+    name: "text-body-l",
+    sizes: "(max-width: 640px) 62vw, (max-width: 1024px) 38vw, 19vw",
+  },
+};
+
 /**
- * One tile in the category rail: photo, then the name below it in flow (not
- * overlaid on the image — that's the hero's grammar, this section reads as a
- * catalog, not a second hero). Server-safe: it only ever renders inside
- * `CategoryCarousel`'s client boundary, never opens one of its own.
+ * One tile in a category rail: photo, then the name below it in flow (not
+ * overlaid on the image — that's the hero's grammar, a rail reads as a
+ * catalog, not a second hero). Server-safe: it only ever renders inside a
+ * caller's client boundary, never opens one of its own.
  *
- * `HomeCategories` already filters out any category without an `image`, so
- * this component can assume `category.image` exists rather than branching on
- * it here.
+ * Callers filter out categories without an `image` before rendering, so this
+ * component can assume `category.image` exists rather than branching on it.
+ *
+ * No rhino here, at either size. A row of four tiles would blow the two-per-
+ * view budget in `DESIGN_SYSTEM.md` §5.1 on its own.
  */
-export function CategoryCard({ category }: CategoryCardProps) {
+export function CategoryCard({
+  category,
+  basePath = "/bicicletas",
+  size = "default",
+  isActive = false,
+}: CategoryCardProps) {
   const image = category.image;
   if (!image) return null;
 
+  const style = SIZE_CLASSNAMES[size];
+
   return (
     <Link
-      href={`/bicicletas/${category.slug}`}
-      className="group/card shrink-0 basis-[78%] snap-start sm:basis-[46%] lg:basis-[31%] xl:basis-[22%]"
+      href={`${basePath}/${category.slug}`}
+      aria-current={isActive ? "page" : undefined}
+      className={`group/card shrink-0 snap-start ${style.tile}`}
     >
       {/* `bg-inset`, not `bg-surface` — this frame only shows while the image
           decodes, and the system reserves `inset` for exactly that kind of
           recessed placeholder (`DESIGN.md` §4). */}
-      <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-inset">
+      <div className={`relative overflow-hidden rounded-card bg-inset ${style.frame}`}>
         <Image
           src={image.url}
           alt={image.alt ?? category.name}
           fill
-          sizes="(max-width: 640px) 78vw, (max-width: 1024px) 46vw, 23vw"
+          sizes={style.sizes}
           loading="lazy"
           // Transform only, never a layout property — the shared motion rule.
           // `duration-500 ease-out-strong` matches the hero's own photo pacing
@@ -48,12 +85,15 @@ export function CategoryCard({ category }: CategoryCardProps) {
           here because a category name isn't a button. Manuel's call: the
           dorado lives only in the underline; the name itself stays `negro` on
           hover so the accent doesn't spend itself on five tiles of text at
-          once. */}
-      <p className="relative mt-md inline-block font-display text-h3 text-negro">
+          once. The open category holds that underline instead of waiting for
+          hover, which is the whole marker: no second colour, no extra chrome. */}
+      <p className={`relative mt-md inline-block font-display text-negro ${style.name}`}>
         {category.name}
         <span
           aria-hidden="true"
-          className="absolute inset-x-0 -bottom-1 h-px origin-center scale-x-0 bg-dorado transition-transform duration-150 group-hover/card:scale-x-100"
+          className={`absolute inset-x-0 -bottom-1 h-px origin-center bg-dorado transition-transform duration-150 group-hover/card:scale-x-100 ${
+            isActive ? "scale-x-100" : "scale-x-0"
+          }`}
         />
       </p>
     </Link>

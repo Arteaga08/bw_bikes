@@ -35,13 +35,17 @@ import { FooterLinkColumn } from "./FooterLinkColumn";
 export function Footer() {
   return (
     <footer className="bg-overlay">
-      <div className="px-md pt-3xl text-center">
+      <div className="px-md pt-xl text-center">
         <h2 className="whitespace-nowrap font-display text-[clamp(1.5rem,7.5vw,10rem)] font-extrabold uppercase leading-[1.05] text-blanco">
           Black and White Bikes
         </h2>
       </div>
 
-      <div className="grid grid-cols-1 gap-2xl px-lg py-3xl sm:grid-cols-2 lg:grid-cols-4">
+      {/* `pb-[6rem]`, not the `pt-3xl` this shares its top with: Manuel wants
+          more black specifically between the link columns and the
+          rhino/copyright line below — the scale's `3xl` (64px) read as too
+          tight there, same arbitrary-value exception as `pt-[6rem]` above. */}
+      <div className="grid grid-cols-1 gap-2xl px-lg pt-3xl pb-[6rem] sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-md">
           <Wordmark tone="inverse" />
           {/* `max-w-[20rem]`, never `max-w-xs`: Tailwind v4 resolves `max-w-{key}`
@@ -66,7 +70,7 @@ export function Footer() {
         ))}
       </div>
 
-      <div className="border-t border-blanco/10 px-lg py-lg">
+      <div className="border-t border-blanco/10 px-lg py-xl">
         {/* Firma de footer (global) — DESIGN_SYSTEM.md §5.2: rhino-dorado.svg a
             12px de alto (28×12, la relación real 308:132 del asset), inline e
             inmediatamente antes del copyright, mismo baseline, alineado a la
