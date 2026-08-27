@@ -29,9 +29,13 @@ describe("MobileMenu", () => {
     expect(dialog).toHaveClass("left-0");
     expect(dialog).toHaveClass("translate-x-0");
     expect(dialog).not.toHaveClass("-translate-x-full");
-    for (const label of ["Bicicletas", "Accesorios", "Ofertas"]) {
+    // Bicicletas/Accesorios stay plain links with no category data (the
+    // default here); Ofertas is always an accordion — its content is static,
+    // never depends on a fetch.
+    for (const label of ["Bicicletas", "Accesorios"]) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
+    expect(screen.getByRole("button", { name: "Ofertas" })).toBeInTheDocument();
   });
 
   it("closes on Escape", () => {
@@ -104,5 +108,37 @@ describe("MobileMenu", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("link", { name: "Ruta" })).toHaveAttribute("href", "/bicicletas/ruta");
     expect(screen.getByRole("link", { name: "Montaña" })).toHaveAttribute("href", "/bicicletas/montana");
+  });
+
+  it("with brands but no bike categories, still shows the accordion with only the marca sub-list", () => {
+    render(<MobileMenu tone="neutral" brands={[{ id: "b1", name: "Orbea", slug: "orbea", order: 0 }]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Abrir menú" }));
+
+    const toggle = screen.getByRole("button", { name: "Bicicletas" });
+    fireEvent.click(toggle);
+    expect(screen.getByRole("link", { name: "Orbea" })).toHaveAttribute("href", "/bicicletas?brand=orbea");
+    // "Comprar por categoría" never renders with an empty items list.
+    expect(screen.queryByText("Comprar por categoría")).not.toBeInTheDocument();
+  });
+
+  it("with accessory category data, turns Accesorios into an accordion", () => {
+    const accessoryCategories: PublicCategoryTreeNode[] = [
+      { id: "3", name: "Cascos", slug: "cascos", parent: null, order: 0, usesSizes: false, children: [] },
+    ];
+    render(<MobileMenu tone="neutral" accessoryCategories={accessoryCategories} />);
+    fireEvent.click(screen.getByRole("button", { name: "Abrir menú" }));
+
+    const toggle = screen.getByRole("button", { name: "Accesorios" });
+    fireEvent.click(toggle);
+    expect(screen.getByRole("link", { name: "Cascos" })).toHaveAttribute("href", "/accesorios/cascos");
+  });
+
+  it("Ofertas is always an accordion, with a CTA row and no sub-list", () => {
+    render(<MobileMenu tone="neutral" />);
+    fireEvent.click(screen.getByRole("button", { name: "Abrir menú" }));
+
+    const toggle = screen.getByRole("button", { name: "Ofertas" });
+    fireEvent.click(toggle);
+    expect(screen.getByRole("link", { name: "Rebajas de bicicletas" })).toHaveAttribute("href", "/ofertas");
   });
 });

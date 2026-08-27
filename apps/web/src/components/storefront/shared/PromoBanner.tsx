@@ -1,6 +1,6 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
-import { ButtonLink } from "@/components/ui/ButtonLink";
+import { PromoBannerCopy } from "@/components/storefront/shared/PromoBannerCopy";
 import { cn } from "@/lib/cn";
 
 /** Which edge the copy block anchors to from `sm` up. Below `sm` it always stacks under the photo. */
@@ -111,59 +111,14 @@ export function PromoBanner({
         {/* `max-w-[34rem]` arbitrario, nunca `max-w-lg`: Tailwind v4 resuelve
             `max-w-{key}` contra `--spacing-{key}` antes que contra
             `--container-{key}` (ver la advertencia en `globals.css`). */}
-        <div
-          className={cn(
-            "flex w-full flex-col gap-sm text-blanco sm:max-w-[34rem]",
-            isRight && "sm:ml-auto sm:text-right",
-            // Con dos actions el ancho fijo de 24rem manda: cada botón se
-            // encoge a esa columna, no a su propio texto — de ahí que este
-            // par siga encogiéndose por hijo (`items-end`) en vez de estirarse.
-            actions.length > 1 && isRight && "sm:items-end",
-            // Con un solo action no hay pareja con la que repartir un ancho
-            // fijo, así que el bloque se encoge al hijo más ancho (el título)
-            // y el resto — subtítulo, botón — se estira a ese mismo ancho:
-            // el botón termina midiendo lo mismo que el texto de arriba.
-            actions.length === 1 && "sm:w-fit",
-          )}
-        >
-          {eyebrow ? (
-            <p
-              className={cn(
-                "flex items-center gap-xs font-ui text-eyebrow uppercase text-blanco/80",
-                isRight && "sm:justify-end",
-              )}
-            >
-              {eyebrowIcon}
-              {eyebrow}
-            </p>
-          ) : null}
-
-          <h2 className="text-balance font-display text-h2 font-extrabold uppercase leading-[1.05] text-blanco sm:text-h1">
-            {title}
-          </h2>
-
-          {subtitle ? <p className="mt-sm font-body text-body-l text-blanco/70">{subtitle}</p> : null}
-
-          {actions.length > 0 ? (
-            <div
-              className={cn(
-                "mt-sm grid gap-sm",
-                actions.length > 1 && "auto-cols-fr grid-flow-col sm:w-[24rem]",
-              )}
-            >
-              {actions.map((action) => (
-                <ButtonLink
-                  key={`${action.href}-${action.label}`}
-                  href={action.href}
-                  variant={action.variant}
-                  {...(action.variant === "ghost" ? { tone: "inverse" as const } : {})}
-                >
-                  {action.label}
-                </ButtonLink>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        <PromoBannerCopy
+          title={title}
+          {...(eyebrow ? { eyebrow } : {})}
+          eyebrowIcon={eyebrowIcon}
+          {...(subtitle ? { subtitle } : {})}
+          actions={actions}
+          isRight={isRight}
+        />
       </div>
     </div>
   );

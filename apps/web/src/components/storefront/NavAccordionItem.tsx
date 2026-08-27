@@ -1,26 +1,38 @@
 "use client";
 
-import type { PublicCategory, PublicCategoryTreeNode } from "@bw-bikes/shared";
 import { CaretDown } from "@phosphor-icons/react";
 import { useState } from "react";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { cn } from "@/lib/cn";
+import type { MegaMenuSection } from "@/lib/storefront-mega-menu";
 
 export interface NavAccordionItemProps {
   label: string;
   href: string;
   isActive: boolean;
-  categories: PublicCategoryTreeNode[];
+  /** `[]` renders the CTA row alone, no sub-list — the "Ofertas" case. */
+  sections: MegaMenuSection[];
+  /** Defaults to "Ver todas" — Ofertas passes its own ("Rebajas de bicicletas"). */
+  ctaLabel?: string;
   currentPathname: string;
 }
 
 /**
  * A nav row that expands in place instead of navigating — the mobile
- * drawer's version of `Cube`'s "Bicicletas ⌄" row. Built for one caller
- * today (`MobileMenu`'s "Bicicletas" item, gated on real category data), but
- * shaped generically because "Accesorios" gets the identical treatment the
- * moment a second entrega asks for it — same public `/tree` endpoint shape,
- * same component.
+ * drawer's version of `Cube`'s "Bicicletas ⌄" row. Now shared by all three
+ * nav items (Bicicletas, Accesorios, Ofertas), each passing its own
+ * `sections`/`ctaLabel` from `lib/storefront-mega-menu.ts` — the same
+ * builders the desktop mega-menu (`NavMegaMenuPanel`) consumes, so neither
+ * surface can drift from the other on what it shows or where a link goes.
+ *
+ * `sections.length`:
+ * - `2` (Bicicletas: categorías + marcas) — each section renders its own
+ *   `title` as a non-interactive label before its list.
+ * - `1` (Accesorios) — no title rendered, identical to the original
+ *   single-list layout.
+ * - `0` (Ofertas) — no sub-list at all, just the CTA row. The caret/expand
+ *   affordance stays for grammar consistency across the three, even though
+ *   opening it only reveals one row.
  *
  * **`grid-template-rows`, not `height`** (per the brand motion guidance:
  * animate `grid-template-rows` for collapsing sections, not `height`) — `0fr`
@@ -35,7 +47,7 @@ export interface NavAccordionItemProps {
  * walk through invisible category links between "Bicicletas" and
  * "Accesorios".
  */
-export function NavAccordionItem({ label, href, isActive, categories, currentPathname }: NavAccordionItemProps) {
+export function NavAccordionItem({ label, href, isActive, sections, ctaLabel = "Ver todas", currentPathname }: NavAccordionItemProps) {
   // Starts open when the visitor is already inside this section — arriving on
   // `/bicicletas/carretera` and finding "Bicicletas" collapsed would hide the
   // very breadcrumb that explains where they are.
@@ -66,44 +78,45 @@ export function NavAccordionItem({ label, href, isActive, categories, currentPat
         style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
       >
         <div className="overflow-hidden">
-          <ul className="flex flex-col gap-xs py-sm pl-md">
-            <li>
-              {/* La única fila del acordeón que navega al padre directamente —
-                  sin esto, "ver todas" desaparecería detrás del toggle. */}
-              <ButtonLink href={href} variant="text" tone="neutral" active={isActive && currentPathname === href}>
-                <span className="text-body-l">Ver todas</span>
-              </ButtonLink>
-            </li>
-            {categories.map((category) => (
-              <NavAccordionSubLink key={category.id} category={category} parentHref={href} currentPathname={currentPathname} />
+          <div className="flex flex-col gap-lg py-sm pl-md">
+            <ul>
+              <li>
+                {/* La única fila del acordeón que navega al padre directamente —
+                    sin esto, "ver todas" desaparecería detrás del toggle. */}
+                <ButtonLink href={href} variant="text" tone="neutral" active={isActive && currentPathname === href}>
+                  <span className="text-body-l">{ctaLabel}</span>
+                </ButtonLink>
+              </li>
+            </ul>
+
+            {sections
+              .filter((section) => section.items.length > 0)
+              .map((section, index) => (
+              <div key={section.title ?? index}>
+                {section.title ? <p className="mb-xs text-eyebrow uppercase text-grafito">{section.title}</p> : null}
+                <ul className="flex flex-col gap-xs">
+                  {section.items.map((item) => {
+                    const itemIsActive = currentPathname === item.href;
+                    return (
+                      <li key={item.id}>
+                        <ButtonLink
+                          href={item.href}
+                          variant="text"
+                          tone="neutral"
+                          active={itemIsActive}
+                          aria-current={itemIsActive ? "page" : undefined}
+                        >
+                          <span className="text-body-l">{item.name}</span>
+                        </ButtonLink>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       </div>
     </div>
-  );
-}
-
-function NavAccordionSubLink({
-  category,
-  parentHref,
-  currentPathname,
-}: {
-  category: PublicCategory;
-  parentHref: string;
-  currentPathname: string;
-}) {
-  // `/bicicletas/:slug`, mirroring the public `/bike-categories/:slug` route
-  // shape — the same "404 until the route ships" precedent `storefront-nav.ts`
-  // already documents for `/bicicletas` itself.
-  const categoryHref = `${parentHref}/${category.slug}`;
-  const isActive = currentPathname === categoryHref || currentPathname.startsWith(`${categoryHref}/`);
-
-  return (
-    <li>
-      <ButtonLink href={categoryHref} variant="text" tone="neutral" active={isActive} aria-current={isActive ? "page" : undefined}>
-        <span className="text-body-l">{category.name}</span>
-      </ButtonLink>
-    </li>
   );
 }

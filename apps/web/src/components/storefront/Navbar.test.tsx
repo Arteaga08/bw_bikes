@@ -33,14 +33,15 @@ describe("Navbar", () => {
     const desktopWordmark = wordmarkLinks.find((link) => !dialog.contains(link));
     expect(desktopWordmark).toHaveAttribute("href", "/");
 
-    // Scoped to the desktop `<nav>` — the same three links also exist, closed
+    // Scoped to the desktop `<nav>` — the same three items also exist, closed
     // and `inert`, inside `MobileMenu`'s drawer (CSS-only `md:`/`hidden`
     // toggling between the two, which jsdom doesn't compute), so an
-    // unscoped query would find two of each.
+    // unscoped query would find two of each. Each destination is now a
+    // mega-menu disclosure button, not a plain link — see StorefrontNavLinks.test.tsx.
     const desktopNav = within(screen.getByRole("navigation", { name: "Navegación principal" }));
-    expect(desktopNav.getByRole("link", { name: "Bicicletas" })).toBeInTheDocument();
-    expect(desktopNav.getByRole("link", { name: "Accesorios" })).toBeInTheDocument();
-    expect(desktopNav.getByRole("link", { name: "Ofertas" })).toBeInTheDocument();
+    expect(desktopNav.getByRole("button", { name: "Bicicletas" })).toBeInTheDocument();
+    expect(desktopNav.getByRole("button", { name: "Accesorios" })).toBeInTheDocument();
+    expect(desktopNav.getByRole("button", { name: "Ofertas" })).toBeInTheDocument();
   });
 
   it("renders Buscar/Cuenta/Carrito as disabled placeholders — M13 wires them up", () => {

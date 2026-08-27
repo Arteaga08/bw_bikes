@@ -1,4 +1,5 @@
 import { HomeBikeOfMonth } from "@/components/storefront/bike-of-month/HomeBikeOfMonth";
+import { HomeBranchCtas } from "@/components/storefront/branch/HomeBranchCtas";
 import { HomeBrands } from "@/components/storefront/brands/HomeBrands";
 import { HomeCategories } from "@/components/storefront/categories/HomeCategories";
 import { HomeCategoryCtas } from "@/components/storefront/category-ctas/HomeCategoryCtas";
@@ -21,7 +22,13 @@ import { HomeNewProducts } from "@/components/storefront/products/HomeNewProduct
  * accessories instead of continuing to mix them: "Novedades" is now
  * bikes-only, and "Accesorios más vendidos" (`HomeBestSellingAccessories`)
  * closes the page with the accessory side of that same `isNewArrival` flag.
- * Remaining sections (sucursal, footer), each its own entrega.
+ * This entrega adds "sucursal" (`HomeBranchCtas`), the same two-tile photo
+ * CTA grammar as `HomeCategoryCtas` but pointing off-site (Google Maps,
+ * WhatsApp) instead of into the catalog. Closing entrega (10/10): the footer
+ * — it lives in `(storefront)/layout.tsx`, not here, since it's global
+ * chrome shared by every route, not a home-only section. That was the last
+ * section on the list; the home is no longer "under construction" past this
+ * point.
  */
 export default function HomePage() {
   return (
@@ -35,12 +42,7 @@ export default function HomePage() {
       <HomeFavoriteProducts />
       <HomeComparatorBanner />
       <HomeBestSellingAccessories />
-
-      <div className="flex min-h-[50vh] items-center justify-center px-md py-3xl text-center">
-        <p className="font-ui text-ui text-grafito">
-          La página de inicio se construye sección por sección — vuelve pronto.
-        </p>
-      </div>
+      <HomeBranchCtas />
     </>
   );
 }

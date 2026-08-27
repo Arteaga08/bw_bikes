@@ -32,6 +32,19 @@ export async function getPublicBikeCategoryTree(): Promise<PublicCategoryTreeNod
 }
 
 /**
+ * Same read as `getPublicBikeCategoryTree`, against the accessory catalog's
+ * own tree (`apps/api/src/routes/catalog.route.ts`: `/accessory-categories/tree`,
+ * mounted since the bike-side twin shipped but never called from the web app
+ * until the storefront nav's "Accesorios" mega-menu needed it).
+ */
+export async function getPublicAccessoryCategoryTree(): Promise<PublicCategoryTreeNode[]> {
+  const res = await publicApiFetch<{ tree: PublicCategoryTreeNode[] }>("/catalog/accessory-categories/tree", {
+    revalidateSeconds: 300,
+  });
+  return res.data.tree;
+}
+
+/**
  * Server-side only, anonymous storefront read de las marcas activas — mismo
  * seam que `getPublicBikeCategoryTree`, contra `/catalog/brands`
  * (`listPublicBrands` en `apps/api/src/controllers/brand.controller.ts`, ya

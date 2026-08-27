@@ -1,6 +1,6 @@
 "use client";
 
-import type { PublicCategoryTreeNode } from "@bw-bikes/shared";
+import type { PublicBrand, PublicCategoryTreeNode } from "@bw-bikes/shared";
 import { WhatsappLogo } from "@phosphor-icons/react";
 import Image from "next/image";
 import Link from "next/link";
@@ -16,6 +16,12 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { BRAND_SOCIAL_LINKS, WHATSAPP_ADVISORY_URL } from "@/lib/brand-social";
 import { cn } from "@/lib/cn";
 import {
+  buildAccessoryMegaMenuContent,
+  buildBikeMegaMenuContent,
+  buildOffersMegaMenuContent,
+  type MegaMenuContent,
+} from "@/lib/storefront-mega-menu";
+import {
   isStorefrontNavItemActive,
   STOREFRONT_NAV_ITEMS,
 } from "@/lib/storefront-nav";
@@ -25,6 +31,10 @@ export interface MobileMenuProps {
   tone: ButtonTone;
   /** Root bike categories with their children resolved — drives the "Bicicletas" accordion. Empty (the default) degrades that item to a plain link, the same as any other nav item. */
   bikeCategories?: PublicCategoryTreeNode[];
+  /** Same shape, accessory catalog — drives the "Accesorios" accordion. */
+  accessoryCategories?: PublicCategoryTreeNode[];
+  /** Active brands — feeds Bicicletas' "Comprar por marca" sub-list. */
+  brands?: PublicBrand[];
 }
 
 /**
@@ -62,11 +72,17 @@ export interface MobileMenuProps {
  * botón en la barra y otro dentro del panel— serían dos nodos distintos entre
  * los que no hay animación posible, solo un corte.
  */
-export function MobileMenu({ tone, bikeCategories = [] }: MobileMenuProps) {
+export function MobileMenu({ tone, bikeCategories = [], accessoryCategories = [], brands = [] }: MobileMenuProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const panelRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+
+  const menuContentByHref: Record<string, MegaMenuContent> = {
+    "/bicicletas": buildBikeMegaMenuContent(bikeCategories, brands),
+    "/accesorios": buildAccessoryMegaMenuContent(accessoryCategories),
+    "/ofertas": buildOffersMegaMenuContent(),
+  };
   // Tailwind's `md` breakpoint is 768px — "below md" is its exact complement.
   const isBelowMd = useMediaQuery("(max-width: 767px)");
   const isOpen = open && isBelowMd;
@@ -177,12 +193,15 @@ export function MobileMenu({ tone, bikeCategories = [] }: MobileMenuProps) {
             const isActive = isStorefrontNavItemActive(pathname, item.href);
             const itemDelay = isOpen ? { transitionDelay: `${140 + index * 40}ms` } : undefined;
 
-            // Único ítem con hijos hoy: el resto se queda como enlace plano
-            // hasta que exista un árbol de categorías equivalente para ellos
-            // (Accesorios ya tiene el endpoint público, pero nadie lo pidió
-            // todavía) o hasta que Bicicletas se quede sin categorías activas,
-            // en cuyo caso también cae a enlace plano — nunca un acordeón vacío.
-            if (item.href === "/bicicletas" && bikeCategories.length > 0) {
+            // Los tres items llevan acordeón. Ofertas nunca depende de fetch
+            // (su contenido es estático), así que nunca degrada; Bicicletas y
+            // Accesorios sí caen a enlace plano si su árbol viene vacío o el
+            // fetch falló — nunca un acordeón vacío.
+            const menuContent = menuContentByHref[item.href];
+            const hasAccordionData =
+              item.href === "/ofertas" || (menuContent?.sections.some((section) => section.items.length > 0) ?? false);
+
+            if (menuContent && hasAccordionData) {
               return (
                 <li
                   key={item.href}
@@ -196,7 +215,8 @@ export function MobileMenu({ tone, bikeCategories = [] }: MobileMenuProps) {
                     label={item.label}
                     href={item.href}
                     isActive={isActive}
-                    categories={bikeCategories}
+                    sections={menuContent.sections}
+                    ctaLabel={menuContent.ctaLabel}
                     currentPathname={pathname}
                   />
                 </li>

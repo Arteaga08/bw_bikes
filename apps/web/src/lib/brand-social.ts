@@ -34,4 +34,13 @@ const WHATSAPP_ADVISORY_URL = `https://wa.me/${WHATSAPP_ADVISORY_NUMBER}?text=${
   "Hola, me gustaría recibir asesoría para elegir una bicicleta.",
 )}`;
 
-export { BRAND_SOCIAL_LINKS, WHATSAPP_ADVISORY_URL };
+/**
+ * Ubicación de la sucursal física en Google Maps. Enlace externo, igual
+ * criterio que `WHATSAPP_ADVISORY_URL`: pública, no cambia por ambiente, no
+ * pertenece a `NEXT_PUBLIC_*`.
+ *
+ * TODO(marca): reemplazar por la URL real de Google Maps de la sucursal.
+ */
+const BRANCH_MAPS_URL = "https://maps.google.com/?q=Black+and+White+Bikes";
+
+export { BRAND_SOCIAL_LINKS, BRANCH_MAPS_URL, WHATSAPP_ADVISORY_URL };

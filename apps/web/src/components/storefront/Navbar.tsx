@@ -1,6 +1,6 @@
 "use client";
 
-import type { PublicCategoryTreeNode } from "@bw-bikes/shared";
+import type { PublicBrand, PublicCategoryTreeNode } from "@bw-bikes/shared";
 import { usePathname } from "next/navigation";
 import { MobileMenu } from "@/components/storefront/MobileMenu";
 import { NavbarActions } from "@/components/storefront/NavbarActions";
@@ -32,11 +32,15 @@ import { NAVBAR_OVERLAY_ROUTES, useNavbarOverlay } from "@/hooks/use-navbar-over
  * that caused it, beats splitting it between the layout and every page.
  */
 export interface NavbarProps {
-  /** Fetched server-side by `(storefront)/layout.tsx` and threaded down to `MobileMenu`'s "Bicicletas" accordion — the only client that needs it. */
+  /** Fetched server-side by `(storefront)/layout.tsx` and threaded down to both `MobileMenu`'s and the desktop mega-menu's "Bicicletas" panel. */
   bikeCategories?: PublicCategoryTreeNode[];
+  /** Same shape, accessory catalog — drives the "Accesorios" panel on both surfaces. */
+  accessoryCategories?: PublicCategoryTreeNode[];
+  /** Active brands — feeds "Comprar por marca" inside the "Bicicletas" panel on both surfaces. */
+  brands?: PublicBrand[];
 }
 
-export function Navbar({ bikeCategories = [] }: NavbarProps) {
+export function Navbar({ bikeCategories = [], accessoryCategories = [], brands = [] }: NavbarProps) {
   const pathname = usePathname();
   const overlay = useNavbarOverlay();
   const tone = overlay ? "inverse" : "neutral";
@@ -55,9 +59,9 @@ export function Navbar({ bikeCategories = [] }: NavbarProps) {
             links even started, which read as "pushed to the middle," not left-aligned. */}
         <div className="grid h-16 grid-cols-3 items-center gap-md px-md lg:px-lg">
           <div className="flex items-center gap-lg justify-self-start">
-            <MobileMenu tone={tone} bikeCategories={bikeCategories} />
+            <MobileMenu tone={tone} bikeCategories={bikeCategories} accessoryCategories={accessoryCategories} brands={brands} />
             <nav aria-label="Navegación principal" className="hidden md:block">
-              <StorefrontNavLinks tone={tone} />
+              <StorefrontNavLinks tone={tone} bikeCategories={bikeCategories} accessoryCategories={accessoryCategories} brands={brands} />
             </nav>
           </div>
 
