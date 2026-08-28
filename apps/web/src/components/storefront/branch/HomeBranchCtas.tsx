@@ -41,7 +41,7 @@ const BRANCH_TILES: BranchCtaTileData[] = [
 
 export function HomeBranchCtas() {
   return (
-    <section className="bg-base py-3xl">
+    <section className="bg-blanco py-3xl">
       <HomeBranchCtaCarousel tiles={BRANCH_TILES} />
     </section>
   );

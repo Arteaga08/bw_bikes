@@ -2,10 +2,15 @@ import type {
   PriceCents,
   ProductImage,
   PublicAccessory,
+  PublicBadge,
   PublicBike,
   PublicBrand,
+  PublicCatalogFilterOptions,
+  PublicCategory,
   PublicCategoryTreeNode,
 } from "@bw-bikes/shared";
+import type { CatalogKind } from "@/lib/storefront-catalog";
+import { serializeFilterState, type CatalogFilterState } from "@/lib/storefront-catalog-filters";
 import { publicApiFetch } from "./public";
 
 /**
@@ -45,6 +50,25 @@ export async function getPublicAccessoryCategoryTree(): Promise<PublicCategoryTr
 }
 
 /**
+ * Finds a category by slug in an already-fetched tree, root or one level of
+ * `children` deep — a tree never nests further than that (enforced in
+ * `apps/api/src/services/category.service.ts`). Shared by `CatalogHeader`
+ * (renders the category) and each `/[slug]/page.tsx`'s `generateMetadata`
+ * (names the tab title), so the two never drift on what counts as a match.
+ */
+export function findCategoryInTree(
+  tree: PublicCategoryTreeNode[],
+  slug: string,
+): PublicCategoryTreeNode | PublicCategory | undefined {
+  for (const root of tree) {
+    if (root.slug === slug) return root;
+    const child = root.children.find((candidate) => candidate.slug === slug);
+    if (child) return child;
+  }
+  return undefined;
+}
+
+/**
  * Server-side only, anonymous storefront read de las marcas activas — mismo
  * seam que `getPublicBikeCategoryTree`, contra `/catalog/brands`
  * (`listPublicBrands` en `apps/api/src/controllers/brand.controller.ts`, ya
@@ -78,8 +102,29 @@ export interface PublicProductSummary {
   name: string;
   brand: PublicBrand;
   price: PriceCents;
+  compareAtPrice?: PriceCents;
+  badges: PublicBadge[];
+  /**
+   * Unique color names across the product's active variants (already
+   * filtered by `toPublicBike`/`toPublicAccessory`), in first-appearance
+   * order. Not the raw `variants` array — a card renders swatches, not SKUs,
+   * prices-per-variant or `fulfillmentMode`, so those never need to cross
+   * into this view shape.
+   */
+  colors: string[];
   gallery: ProductImage[];
   createdAt: string;
+}
+
+function extractColors(variants: (PublicBike | PublicAccessory)["variants"]): string[] {
+  const seen = new Set<string>();
+  const colors: string[] = [];
+  for (const variant of variants) {
+    if (!variant.color || seen.has(variant.color)) continue;
+    seen.add(variant.color);
+    colors.push(variant.color);
+  }
+  return colors;
 }
 
 function toSummary(product: PublicBike | PublicAccessory, kind: "bike" | "accessory"): PublicProductSummary {
@@ -90,6 +135,9 @@ function toSummary(product: PublicBike | PublicAccessory, kind: "bike" | "access
     name: product.name,
     brand: product.brand,
     price: product.price,
+    ...(product.compareAtPrice !== undefined ? { compareAtPrice: product.compareAtPrice } : {}),
+    badges: product.badges,
+    colors: extractColors(product.variants),
     gallery: product.gallery,
     createdAt: product.createdAt,
   };
@@ -166,6 +214,111 @@ export async function getPublicFavoriteProducts(): Promise<PublicProductSummary[
  */
 export async function getPublicBestSellingAccessories(): Promise<PublicProductSummary[]> {
   return fetchCuratedProductRail("isNewArrival", "accessory");
+}
+
+/** Tiles per catalog page (paso 3/3) — a multiple of both grid columns the storefront uses (`CatalogProductGrid`'s 2-column tablet step and 3-column desktop step), so the last row never lands one tile short at either breakpoint. */
+export const CATALOG_PAGE_SIZE = 24;
+
+export interface CatalogProductPage {
+  products: PublicProductSummary[];
+  page: number;
+  pages: number;
+  total: number;
+}
+
+const CATALOG_ENDPOINT: Record<CatalogKind, string> = {
+  bike: "bikes",
+  accessory: "accessories",
+};
+
+/**
+ * Server-side only, anonymous storefront read for a catalog index/category
+ * page (`/bicicletas`, `/accesorios` and their `/[slug]` category pages) —
+ * paginated, unlike the home's curated rails above. `categoryId` is a Mongo
+ * `ObjectId`, not a slug: the API's own `category` filter already expands a
+ * parent id to include every child (`product.service.ts`), which is what
+ * lets a root category's page list products from its subcategories too.
+ * The id comes from the same tree `CatalogHeader` reads via
+ * `findCategoryInTree` — Next's request memoization dedupes that identical
+ * `fetch` within one render pass, so this isn't a second round trip.
+ *
+ * `filters` is the filter sidebar's state (`useCatalogFilters` on the
+ * client, parsed from `searchParams` on the server) — serialized with the
+ * exact same `serializeFilterState` the sidebar uses to write the URL, so
+ * the query this function sends and the query a shopper sees in the address
+ * bar can never drift apart. `categoryId` (the route's own, from a `/[slug]`
+ * page) is applied *after*, overriding anything `filters.categories` might
+ * carry: the sidebar hides its own category groups on those pages
+ * (`CatalogFilterGroups`'s `hideCategoryFilter`), so this is a defensive
+ * override, not a merge of two real category selections.
+ */
+export async function getPublicCatalogProducts(options: {
+  catalog: CatalogKind;
+  categoryId?: string;
+  page?: number;
+  filters?: CatalogFilterState;
+}): Promise<CatalogProductPage> {
+  const { catalog, categoryId, page = 1, filters } = options;
+  const params = filters ? serializeFilterState(filters) : new URLSearchParams();
+  params.set("page", String(page));
+  params.set("limit", String(CATALOG_PAGE_SIZE));
+  if (categoryId) params.set("category", categoryId);
+
+  const endpoint = CATALOG_ENDPOINT[catalog];
+  const res = await publicApiFetch<{ bikes?: PublicBike[]; accessories?: PublicAccessory[] }>(
+    `/catalog/${endpoint}?${params.toString()}`,
+    { revalidateSeconds: 300 },
+  );
+
+  const rawProducts = catalog === "bike" ? (res.data.bikes ?? []) : (res.data.accessories ?? []);
+  const products = rawProducts.map((product) => toSummary(product, catalog));
+  const meta = res.meta;
+
+  return {
+    products,
+    page: meta?.page ?? page,
+    pages: meta?.pages ?? 1,
+    total: meta?.total ?? products.length,
+  };
+}
+
+/**
+ * The filter sidebar's vocabulary (brands/sizes/colors/price/ficha-técnica
+ * groups) for one catalog — `/catalog/{bikes,accessories}/filter-options`,
+ * derived from the products actually in the collection
+ * (`getFilterOptions` in `apps/api/src/services/product.service.ts`), never
+ * a fixed enum. 300s cache, same as every other catalog-shaped read here.
+ */
+export async function getPublicCatalogFilterOptions(catalog: CatalogKind): Promise<PublicCatalogFilterOptions> {
+  const endpoint = CATALOG_ENDPOINT[catalog];
+  const res = await publicApiFetch<PublicCatalogFilterOptions>(`/catalog/${endpoint}/filter-options`, {
+    revalidateSeconds: 300,
+  });
+  return res.data;
+}
+
+/**
+ * A color's name and hex, as `CatalogProductCard` needs it for a swatch —
+ * the same `getPublicCatalogFilterOptions` read the filter sidebar uses,
+ * projected down to just `.colors`. Next's request memoization dedupes the
+ * identical `fetch` when both run for the same catalog within one render
+ * pass, so a page using both isn't paying for it twice.
+ */
+export type PublicColorSwatch = PublicCatalogFilterOptions["colors"][number];
+
+export async function getPublicColorSwatches(catalog: CatalogKind): Promise<PublicColorSwatch[]> {
+  const options = await getPublicCatalogFilterOptions(catalog);
+  return options.colors;
+}
+
+/** Same normalization the API's own `getFilterOptions` matches templates by — a color template's `value` is looked up case-insensitively, trimmed. */
+function normalizeColorKey(value: string): string {
+  return value.trim().toLocaleLowerCase("es");
+}
+
+/** `product.colors` names → swatch, for `CatalogProductCard` to render. A name with no matching template (never saved through the admin CRUD) is simply absent from the map — the card falls back to `ColorSwatch`'s own `hex: null` placeholder ring. */
+export function buildColorSwatchIndex(swatches: PublicColorSwatch[]): Map<string, PublicColorSwatch> {
+  return new Map(swatches.map((swatch) => [normalizeColorKey(swatch.value), swatch]));
 }
 
 /**

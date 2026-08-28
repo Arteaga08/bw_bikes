@@ -25,7 +25,7 @@ export async function HomeCategoryCtas() {
   if (tiles.length === 0) return null;
 
   return (
-    <section className="bg-base py-3xl">
+    <section className="bg-blanco py-3xl">
       <HomeCategoryCtaCarousel tiles={tiles} />
     </section>
   );

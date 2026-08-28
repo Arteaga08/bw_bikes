@@ -24,7 +24,7 @@ export async function HomeBikeOfMonth() {
   if (!bikeOfMonth) return null;
 
   return (
-    <section className="bg-base">
+    <section className="bg-blanco">
       <HomeBikeOfMonthBanner bikeOfMonth={bikeOfMonth} />
     </section>
   );

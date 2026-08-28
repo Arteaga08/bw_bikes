@@ -211,6 +211,8 @@ export interface AdminBadge extends PublicBadge {
 export interface SpecTemplateField {
   label: string;
   order: number;
+  /** Whether this label is offered as a filter group on the public catalog. Off by default — an admin opts a label in explicitly. */
+  isFilterable: boolean;
 }
 
 /**
@@ -354,3 +356,22 @@ export interface AdminBike extends AdminProductBase {
 
 /** The exact shape the admin panel receives for an accessory. */
 export type AdminAccessory = AdminProductBase;
+
+/**
+ * The vocabulary for a catalog's filter sidebar — derived from the products
+ * actually in the collection, not a fixed enum (see `SizeTemplate`/
+ * `ColorTemplate`'s own "not an enum" doc comments). Categories aren't
+ * included here: they're already served by `/catalog/{kind}-categories/tree`,
+ * cached and shared with the nav, and duplicating them would be a second
+ * source of truth. Every list is pre-sorted by how many products carry that
+ * value, most first — no counts travel in the payload, only the order they
+ * imply.
+ */
+export interface PublicCatalogFilterOptions {
+  brands: PublicBrand[];
+  sizes: string[];
+  colors: Array<{ value: string; hex: string | null; secondaryHex: string | null }>;
+  price: { min: PriceCents; max: PriceCents } | null;
+  /** Only labels an admin explicitly turned on via `SpecTemplateField.isFilterable` — see that field's doc comment. */
+  specs: Array<{ label: string; values: string[] }>;
+}

@@ -9,7 +9,7 @@ const SORTABLE_FIELDS = ["order", "title", "createdAt"] as const;
 
 interface SpecTemplateInput {
   title?: string;
-  fields?: Array<{ label: string; order: number }>;
+  fields?: Array<{ label: string; order: number; isFilterable?: boolean }>;
   order?: number;
   isActive?: boolean;
 }
@@ -24,7 +24,11 @@ export function toSpecTemplateDto(template: ISpecTemplate): PublicSpecTemplate {
   return {
     id: String(template._id),
     title: template.title,
-    fields: template.fields.map((field) => ({ label: field.label, order: field.order })),
+    fields: template.fields.map((field) => ({
+      label: field.label,
+      order: field.order,
+      isFilterable: field.isFilterable,
+    })),
     source: template.source,
     order: template.order,
     isActive: template.isActive,
@@ -88,7 +92,11 @@ async function create(input: SpecTemplateInput, actor: ActorContext): Promise<IS
 
   const template = await SpecTemplate.create({
     title,
-    fields: (input.fields ?? []).map((field, index) => ({ label: field.label, order: field.order ?? index })),
+    fields: (input.fields ?? []).map((field, index) => ({
+      label: field.label,
+      order: field.order ?? index,
+      isFilterable: field.isFilterable ?? false,
+    })),
     source: "manual",
     order: input.order ?? 0,
     isActive: input.isActive ?? true,
@@ -116,7 +124,14 @@ async function update(id: string, input: SpecTemplateInput, actor: ActorContext)
     template.title = input.title;
   }
   if (input.fields !== undefined) {
-    template.fields = input.fields.map((field, index) => ({ label: field.label, order: field.order ?? index }));
+    // Replaces the whole array — the caller (the admin form) must resend
+    // `isFilterable` for every field it keeps, or a filter an admin already
+    // turned on would silently revert to its `false` default here.
+    template.fields = input.fields.map((field, index) => ({
+      label: field.label,
+      order: field.order ?? index,
+      isFilterable: field.isFilterable ?? false,
+    }));
   }
   if (input.order !== undefined) template.order = input.order;
   if (input.isActive !== undefined) template.isActive = input.isActive;
@@ -176,9 +191,16 @@ export async function learnSpecTemplates(groups: SpecGroup[]): Promise<void> {
       const existing = await findByTitle(title);
       if (existing) {
         const knownLabels = new Set(existing.fields.map((field) => field.label.toLowerCase()));
+        // Auto-learned labels start unfilterable, same as the schema's own
+        // default — an admin opts a label into the public catalog's filter
+        // sidebar explicitly, never as a side effect of saving a product.
         const newFields = group.fields
           .filter((field) => field.label.trim() && !knownLabels.has(field.label.trim().toLowerCase()))
-          .map((field, index) => ({ label: field.label.trim(), order: existing.fields.length + index }));
+          .map((field, index) => ({
+            label: field.label.trim(),
+            order: existing.fields.length + index,
+            isFilterable: false,
+          }));
 
         if (newFields.length > 0) {
           existing.fields = [...existing.fields, ...newFields].slice(0, 30);
@@ -194,7 +216,7 @@ export async function learnSpecTemplates(groups: SpecGroup[]): Promise<void> {
         title,
         fields: group.fields
           .filter((field) => field.label.trim())
-          .map((field, index) => ({ label: field.label.trim(), order: index })),
+          .map((field, index) => ({ label: field.label.trim(), order: index, isFilterable: false })),
         source: "auto",
         order: templateCount,
       });

@@ -86,12 +86,23 @@ export function CategoryCard({
           dorado lives only in the underline; the name itself stays `negro` on
           hover so the accent doesn't spend itself on five tiles of text at
           once. The open category holds that underline instead of waiting for
-          hover, which is the whole marker: no second colour, no extra chrome. */}
+          hover, which is the whole marker: no second colour, no extra chrome.
+          `bottom-0`, not `-bottom-1` — this rail sits inside `ScrollRail`'s
+          track, which needs `overflow-y-hidden` (see that component's own
+          doc comment) to keep the desktop mouse wheel from getting trapped.
+          A negative offset pushes the line past the flex item's own bottom
+          edge, and the track clips it there: confirmed on screen, the line
+          was rendering with the right color, width and position and was
+          still fully invisible. `bottom-0` keeps it inside the `<p>`'s own
+          box, same anchor `ButtonContent` already uses. `h-0.5` (2px), not
+          `h-px`: same 2px weight `MenuToggleIcon`'s bars and `HeroControls`'
+          progress dashes use for a hairline that has to actually read as a
+          line, not anti-alias away at a sub-pixel position. */}
       <p className={`relative mt-md inline-block font-display text-negro ${style.name}`}>
         {category.name}
         <span
           aria-hidden="true"
-          className={`absolute inset-x-0 -bottom-1 h-px origin-center bg-dorado transition-transform duration-150 group-hover/card:scale-x-100 ${
+          className={`absolute inset-x-0 bottom-0 h-0.5 origin-center bg-dorado transition-transform duration-150 group-hover/card:scale-x-100 ${
             isActive ? "scale-x-100" : "scale-x-0"
           }`}
         />

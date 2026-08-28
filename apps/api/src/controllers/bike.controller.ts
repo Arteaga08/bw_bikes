@@ -14,6 +14,11 @@ export const listPublicBikes = asyncHandler(async (req: Request, res: Response) 
   sendResponse(res, 200, "Bicicletas obtenidas.", { bikes: documents.map(toPublicBike) }, meta);
 });
 
+export const getBikeFilterOptions = asyncHandler(async (_req: Request, res: Response) => {
+  const options = await bikeService.getFilterOptions();
+  sendResponse(res, 200, "Opciones de filtro obtenidas.", options);
+});
+
 export const getPublicBikeBySlug = asyncHandler(async (req: Request, res: Response) => {
   const bike = await bikeService.getPublicBySlug(routeParam(req, "slug"));
   sendResponse(res, 200, "Bicicleta obtenida.", { bike: toPublicBike(bike) });

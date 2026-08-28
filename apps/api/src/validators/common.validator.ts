@@ -17,6 +17,20 @@ export const objectId = Joi.string()
     "any.required": "El identificador es obligatorio.",
   });
 
+/**
+ * A comma-separated list of ObjectIds — the multi-select shape for a filter
+ * like `?category=<id>,<id>`. Capped at 10: a shopper picking more root
+ * categories than that on one filter bar isn't a real case worth a larger
+ * `$in`.
+ */
+export const objectIdList = Joi.string()
+  .trim()
+  .pattern(/^[a-f0-9]{24}(,[a-f0-9]{24}){0,9}$/)
+  .messages({
+    "string.empty": "El identificador es obligatorio.",
+    "string.pattern.base": "Identificador inválido.",
+  });
+
 /** Lowercase, hyphen-separated, no leading/trailing/double hyphens. Matches `slugify()`'s output. */
 export const slug = Joi.string()
   .trim()

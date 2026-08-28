@@ -28,7 +28,7 @@ export default async function CompararPage() {
   }
 
   return (
-    <section className="bg-base py-3xl">
+    <section className="bg-blanco py-3xl">
       <div className="mx-auto w-full max-w-[72rem] px-lg">
         <h1 className="font-display text-h2 font-extrabold uppercase text-negro sm:text-h1">
           Compara antes de decidir

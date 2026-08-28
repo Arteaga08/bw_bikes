@@ -3,7 +3,7 @@
 import type { PublicCategoryTreeNode } from "@bw-bikes/shared";
 import { CategoryCard } from "@/components/storefront/categories/CategoryCard";
 import { ScrollRail } from "@/components/storefront/shared/ScrollRail";
-import type { CatalogKind } from "@/lib/storefront-catalog-covers";
+import type { CatalogKind } from "@/lib/storefront-catalog";
 
 export interface CatalogCategoryRailProps {
   catalog: CatalogKind;

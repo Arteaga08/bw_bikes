@@ -53,6 +53,66 @@ describe("spec template CRUD", () => {
 
     expect(duplicate.status).toBe(409);
   });
+
+  it("defaults isFilterable to false when a field doesn't specify it", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/spec-templates`)
+      .set("Cookie", adminCookie)
+      .send({ title: "Suspensión", fields: [{ label: "Recorrido", order: 0 }] });
+
+    expect(created.status).toBe(201);
+    expect(created.body.data.template.fields[0].isFilterable).toBe(false);
+  });
+
+  it("turns a field into a filter and keeps it on through a later update that touches other fields", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/spec-templates`)
+      .set("Cookie", adminCookie)
+      .send({
+        title: "Cuadro",
+        fields: [
+          { label: "Material", order: 0, isFilterable: true },
+          { label: "Peso", order: 1, isFilterable: false },
+        ],
+      });
+    const id = created.body.data.template.id as string;
+    expect(created.body.data.template.fields[0].isFilterable).toBe(true);
+
+    // `update` replaces the whole `fields` array server-side — the admin
+    // form must resend `isFilterable` for every row, including ones it
+    // isn't otherwise touching, or the flag silently reverts to `false`.
+    const updated = await request(app)
+      .patch(`${ADMIN}/spec-templates/${id}`)
+      .set("Cookie", adminCookie)
+      .send({
+        fields: [
+          { label: "Material", order: 0, isFilterable: true },
+          { label: "Peso", order: 1, isFilterable: false },
+          { label: "Rodada", order: 2, isFilterable: false },
+        ],
+      });
+
+    expect(updated.status).toBe(200);
+    const fields = updated.body.data.template.fields as Array<{ label: string; isFilterable: boolean }>;
+    expect(fields.find((f) => f.label === "Material")?.isFilterable).toBe(true);
+    expect(fields.find((f) => f.label === "Peso")?.isFilterable).toBe(false);
+    expect(fields.find((f) => f.label === "Rodada")?.isFilterable).toBe(false);
+  });
+
+  it("an update that omits isFilterable on a field turns it off — the caller must resend it", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/spec-templates`)
+      .set("Cookie", adminCookie)
+      .send({ title: "Frenos", fields: [{ label: "Tipo", order: 0, isFilterable: true }] });
+    const id = created.body.data.template.id as string;
+
+    const updated = await request(app)
+      .patch(`${ADMIN}/spec-templates/${id}`)
+      .set("Cookie", adminCookie)
+      .send({ fields: [{ label: "Tipo", order: 0 }] });
+
+    expect(updated.body.data.template.fields[0].isFilterable).toBe(false);
+  });
 });
 
 describe("learning templates from a product's spec sheet", () => {
@@ -109,6 +169,34 @@ describe("learning templates from a product's spec sheet", () => {
     const templates = await SpecTemplate.find({ title: "Geometría" }).exec();
     expect(templates).toHaveLength(1);
     expect(templates[0]?.fields.map((f) => f.label)).toEqual(["Talla", "Stack"]);
+  });
+
+  it("keeps a manually-turned-on filter flag when a product save learns a sibling label", async () => {
+    await request(app)
+      .post(`${ADMIN}/spec-templates`)
+      .set("Cookie", adminCookie)
+      .send({ title: "Ruedas", fields: [{ label: "Material", order: 0, isFilterable: true }] });
+
+    // Saving a bike whose "Ruedas" group includes a label the template
+    // hasn't seen before only appends that label — `learnSpecTemplates`
+    // never rewrites the fields it already knew about.
+    await putGroups([
+      {
+        title: "Ruedas",
+        order: 0,
+        fields: [
+          { label: "Material", value: "Carbono", order: 0 },
+          { label: "Rodada", value: "29\"", order: 1 },
+        ],
+      },
+    ]);
+
+    const templates = await SpecTemplate.find({ title: "Ruedas" }).exec();
+    const fields = templates[0]?.fields ?? [];
+    expect(fields.find((f) => f.label === "Material")?.isFilterable).toBe(true);
+    // The newly-learned label starts unfilterable, same as any admin-typed
+    // field that never had the box checked.
+    expect(fields.find((f) => f.label === "Rodada")?.isFilterable).toBe(false);
   });
 
   it("never downgrades a manual template to auto when a product reuses its title", async () => {

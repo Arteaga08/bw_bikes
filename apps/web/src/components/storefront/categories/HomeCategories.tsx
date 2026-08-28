@@ -32,7 +32,7 @@ export async function HomeCategories() {
   if (categoriesWithImage.length === 0) return null;
 
   return (
-    <section className="bg-base py-3xl">
+    <section className="bg-blanco py-3xl">
       <h2 className="mb-xl px-lg font-display text-h2 font-extrabold uppercase text-negro sm:text-h1">
         Explorar Bicicletas
       </h2>

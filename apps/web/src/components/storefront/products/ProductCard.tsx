@@ -35,15 +35,16 @@ export function ProductCard({ product }: ProductCardProps) {
       href={productHref(product)}
       className="group/card shrink-0 basis-[78%] snap-start sm:basis-[46%] lg:basis-[31%] xl:basis-[22%]"
     >
-      {/* `bg-base`, matching the section (`HomeNewProducts`) the card sits
-          in — not `bg-surface`'s pure white. `contain` letterboxes the photo,
-          so whatever color fills the frame around it is the color a visitor
-          actually sees; a white frame on top of the page's ash `bg-base`
-          read as a visible box (caught visually, not by any test — see
-          M12 entrega 6 follow-up). Matching the page background is what
-          makes the frame disappear regardless of what the photo itself is
-          shot on. */}
-      <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-base">
+      {/* `bg-blanco`, matching the section (`HomeNewProducts`) the card sits
+          in — not `bg-surface`'s pure white (reserved for cards/inputs/
+          modals). `contain` letterboxes the photo, so whatever color fills
+          the frame around it is the color a visitor actually sees; matching
+          the page background is what makes the frame disappear regardless
+          of what the photo itself is shot on (originally `bg-base`, the
+          admin dashboard's ash floor tone — swapped for the storefront's own
+          off-white after it read as a visible seam against studio-white
+          product photography, via `impeccable`). */}
+      <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-blanco">
         <Image
           src={image.url}
           alt={image.alt ?? product.name}

@@ -119,3 +119,161 @@ export async function prepareImage(
   const normalized = await normalizeImageBuffer(buffer, originalName);
   return { buffer: normalized, format };
 }
+
+// --- Studio background normalization ----------------------------------------
+//
+// Two folder-gated treatments, wired up in `storage.service.ts#uploadImages`
+// (never here — this module stays folder-agnostic): `whitenStudioBackground`
+// for product photography (`bikes`/`accessories`), `punchLogoTransparency`
+// for brand logos (`brands`). Neither applies to lifestyle photography (hero,
+// categories, home tiles, branch, bike-of-month) — a "cleaned" background
+// there would be wrong, not an improvement.
+//
+// Both share the same technique: average the four corner squares to estimate
+// the studio backdrop color, then treat every pixel within a color-distance
+// tolerance of that estimate as background. A color-distance threshold
+// (not a plain brightness/levels stretch) is what keeps a black product on a
+// light backdrop from getting crushed — a dark tire or a black-on-white
+// wordmark reads as *far* from the sampled background color regardless of
+// how bright the actual backdrop is. Validated against real uploaded assets
+// (a tire's gradient studio backdrop, a matte-black helmet, an opaque brand
+// logo) via `impeccable` before shipping: ~60ms for a 1280x1280 product
+// photo, ~6ms for a logo — both run once at upload time, never on a
+// storefront render, so neither touches shopper-facing performance.
+
+/** Corner square (px) sampled per corner to estimate the studio backdrop color. */
+const BACKGROUND_SAMPLE_EDGE = 24;
+
+/**
+ * sRGB Euclidean color distance (0–441) under which a product photo's pixel
+ * is treated as backdrop. Wide enough to catch a soft gradient/shadow
+ * backdrop; narrow enough that a light-colored product survives.
+ */
+const PRODUCT_BACKGROUND_TOLERANCE = 40;
+
+/**
+ * Tighter than the product tolerance: a logo's backdrop is flat, uploaded
+ * artwork rather than photographed, so a smaller tolerance already catches
+ * all of it without eating soft-edged ink.
+ */
+const LOGO_ALPHA_TOLERANCE = 30;
+
+/**
+ * The backdrop target: `--color-blanco` (`apps/web/src/app/globals.css`,
+ * `#fafafa`), not pure `#ffffff`. Every surface a product photo actually
+ * sits against on the storefront — the home rail's frame, the catalog
+ * page's floor — is that same "blanco" token. Targeting pure white left a
+ * ~2% brightness seam around every photo, visible against `bg-blanco` even
+ * though the frame and the page shared the same class — caught visually,
+ * via `impeccable`, after shipping the first version of this function.
+ */
+const STUDIO_BACKGROUND_TARGET: RgbColor = { r: 250, g: 250, b: 250 };
+
+interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+/** Average color of the four corner squares — the studio backdrop, assuming the subject doesn't touch a corner. */
+function sampleCornerBackground(data: Buffer, width: number, height: number, channels: number): RgbColor {
+  const edge = Math.max(1, Math.min(BACKGROUND_SAMPLE_EDGE, Math.floor(width / 4), Math.floor(height / 4)));
+  const corners: Array<[number, number]> = [
+    [0, 0],
+    [width - edge, 0],
+    [0, height - edge],
+    [width - edge, height - edge],
+  ];
+
+  let sumR = 0;
+  let sumG = 0;
+  let sumB = 0;
+  let count = 0;
+
+  for (const [cornerX, cornerY] of corners) {
+    for (let y = cornerY; y < cornerY + edge; y++) {
+      for (let x = cornerX; x < cornerX + edge; x++) {
+        const idx = (y * width + x) * channels;
+        sumR += data[idx]!;
+        sumG += data[idx + 1]!;
+        sumB += data[idx + 2]!;
+        count += 1;
+      }
+    }
+  }
+
+  return { r: sumR / count, g: sumG / count, b: sumB / count };
+}
+
+/**
+ * Blends every pixel within `PRODUCT_BACKGROUND_TOLERANCE` of the sampled
+ * backdrop color toward `STUDIO_BACKGROUND_TARGET` ("nuestro blanco"),
+ * proportional to how close it is — a smooth ramp near the tolerance edge,
+ * not a hard cutoff, so a soft photographed shadow fades out instead of
+ * leaving a visible ring.
+ *
+ * Re-encodes to `format` (the buffer's own format, from `prepareImage`) —
+ * this stays a photographic re-encode, never a format change.
+ */
+export async function whitenStudioBackground(buffer: Buffer, format: ImageFormat): Promise<Buffer> {
+  const { data, info } = await sharp(buffer).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = info;
+
+  const bg = sampleCornerBackground(data, width, height, channels);
+  const out = Buffer.from(data);
+
+  for (let i = 0; i < data.length; i += channels) {
+    const dr = data[i]! - bg.r;
+    const dg = data[i + 1]! - bg.g;
+    const db = data[i + 2]! - bg.b;
+    const distance = Math.sqrt(dr * dr + dg * dg + db * db);
+    const whiteness = Math.max(0, Math.min(1, (PRODUCT_BACKGROUND_TOLERANCE - distance) / PRODUCT_BACKGROUND_TOLERANCE));
+
+    if (whiteness > 0) {
+      out[i] = data[i]! + (STUDIO_BACKGROUND_TARGET.r - data[i]!) * whiteness;
+      out[i + 1] = data[i + 1]! + (STUDIO_BACKGROUND_TARGET.g - data[i + 1]!) * whiteness;
+      out[i + 2] = data[i + 2]! + (STUDIO_BACKGROUND_TARGET.b - data[i + 2]!) * whiteness;
+    }
+  }
+
+  return sharp(out, { raw: { width, height, channels } }).toFormat(format).toBuffer();
+}
+
+/**
+ * Replaces the sampled backdrop color with real alpha transparency instead of
+ * a solid fill — a brand logo is composited on more than one background
+ * across the site (the storefront's dark `HomeBrands` marquee, the admin
+ * panel's light surfaces), and a fill baked toward either one would be wrong
+ * on the other. Real transparency also unblocks `isLogoDarkOnTransparent`
+ * (`apps/web/src/lib/catalog/logo-luminance.ts`), which already inverts a
+ * dark-on-transparent logo for the marquee but requires genuine alpha to
+ * trigger — an opaque PNG with a solid backdrop never qualified.
+ *
+ * Always re-encodes to PNG regardless of the source format: alpha needs a
+ * format that supports it (JPEG never does), and PNG's lossless encoding
+ * keeps a wordmark's edges crisp in a way WebP's lossy default wouldn't.
+ */
+export async function punchLogoTransparency(buffer: Buffer): Promise<Buffer> {
+  const { data, info } = await sharp(buffer).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = info;
+
+  const bg = sampleCornerBackground(data, width, height, channels);
+  const out = Buffer.alloc(width * height * 4);
+
+  for (let i = 0, j = 0; i < data.length; i += channels, j += 4) {
+    const dr = data[i]! - bg.r;
+    const dg = data[i + 1]! - bg.g;
+    const db = data[i + 2]! - bg.b;
+    const distance = Math.sqrt(dr * dr + dg * dg + db * db);
+    const alpha = Math.max(0, Math.min(255, Math.round((distance / LOGO_ALPHA_TOLERANCE) * 255)));
+
+    out[j] = data[i]!;
+    out[j + 1] = data[i + 1]!;
+    out[j + 2] = data[i + 2]!;
+    out[j + 3] = alpha;
+  }
+
+  return sharp(out, { raw: { width, height, channels: 4 } })
+    .png()
+    .toBuffer();
+}

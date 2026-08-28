@@ -8,6 +8,8 @@ export type SpecTemplateSource = "manual" | "auto";
 export interface ISpecTemplateField {
   label: string;
   order: number;
+  /** Whether this label is offered as a filter group on the public catalog. Off by default — an admin opts a label in explicitly, never inferred from the data. */
+  isFilterable: boolean;
 }
 
 export interface ISpecTemplate extends Document {
@@ -26,6 +28,7 @@ const specTemplateFieldSchema = new Schema<ISpecTemplateField>(
   {
     label: { type: String, required: true, trim: true, maxlength: MAX_SPEC_LABEL_LENGTH },
     order: { type: Number, required: true, min: 0 },
+    isFilterable: { type: Boolean, default: false },
   },
   { _id: false },
 );

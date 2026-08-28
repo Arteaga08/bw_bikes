@@ -20,6 +20,7 @@ const field = Joi.object({
     "any.required": "La etiqueta es obligatoria.",
   }),
   order,
+  isFilterable: Joi.boolean().default(false),
 });
 
 const fields = Joi.array().items(field).max(MAX_SPEC_FIELDS_PER_GROUP).messages({

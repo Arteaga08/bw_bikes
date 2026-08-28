@@ -5,7 +5,7 @@ import { logger } from "../../config/logger.js";
 import type { AttachmentFormat } from "../../utils/index.js";
 import { AppError } from "../../utils/index.js";
 import { prepareAttachment } from "./attachment-pipeline.js";
-import { prepareImage } from "./image-pipeline.js";
+import { prepareImage, punchLogoTransparency, whitenStudioBackground } from "./image-pipeline.js";
 
 export interface UploadedImage {
   publicId: string;
@@ -74,6 +74,12 @@ function assertConfigured(): void {
   }
 }
 
+/** Product studio photography — gets its backdrop whitened. Matches the `CLOUDINARY_FOLDER` each controller passes to `uploadImages`. */
+const STUDIO_BACKGROUND_FOLDERS = new Set(["bikes", "accessories"]);
+
+/** Brand logos — get their backdrop punched to real alpha transparency instead. */
+const LOGO_TRANSPARENCY_FOLDER = "brands";
+
 export async function uploadImages(files: UploadableFile[], folder: string): Promise<UploadedImage[]> {
   assertConfigured();
 
@@ -81,10 +87,22 @@ export async function uploadImages(files: UploadableFile[], folder: string): Pro
     files.map((file) => prepareImage(file.buffer, file.originalname, file.mimetype)),
   );
 
+  const processed = await Promise.all(
+    prepared.map(async (image) => {
+      if (STUDIO_BACKGROUND_FOLDERS.has(folder)) {
+        return { ...image, buffer: await whitenStudioBackground(image.buffer, image.format) };
+      }
+      if (folder === LOGO_TRANSPARENCY_FOLDER) {
+        return { ...image, buffer: await punchLogoTransparency(image.buffer) };
+      }
+      return image;
+    }),
+  );
+
   const destination = `${CLOUDINARY_ROOT_FOLDER}/${folder}`;
 
   try {
-    const results = await Promise.all(prepared.map((image) => uploadBuffer(image.buffer, destination)));
+    const results = await Promise.all(processed.map((image) => uploadBuffer(image.buffer, destination)));
 
     return results.map((result) => ({
       publicId: result.public_id,

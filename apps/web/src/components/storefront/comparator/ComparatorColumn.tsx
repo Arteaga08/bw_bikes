@@ -15,9 +15,9 @@ export interface ComparatorColumnProps {
  * to the PDP.
  *
  * Same frame grammar as `ProductCard` — `aspect-[4/5]` with `object-contain`
- * over `bg-base`, because a bike's studio shot is landscape and `cover`
- * crops it at the wheels, and because a white frame over the page's ash
- * background reads as a visible box. Not `ProductCard` itself: that one is a
+ * over `bg-blanco`, because a bike's studio shot is landscape and `cover`
+ * crops it at the wheels, and to match the page background the studio shot
+ * is already photographed on. Not `ProductCard` itself: that one is a
  * `Link`-wrapped rail tile sized in `basis-*` percentages, and nesting its
  * anchor around a column that already owns a button would put a link inside
  * a link.
@@ -31,7 +31,7 @@ export function ComparatorColumn({ bike, isLoading = false }: ComparatorColumnPr
           : "opacity-100 transition-opacity duration-150"
       }
     >
-      <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-base">
+      <div className="relative aspect-[4/5] overflow-hidden rounded-card bg-blanco">
         {bike.image ? (
           <Image
             src={bike.image.url}

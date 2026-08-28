@@ -6,7 +6,7 @@ import { BrandMarquee } from "./BrandMarquee";
  * Server Component: el marquee de marcas del home ("banner de marca", M12
  * entrega 4/10), entre "Explorar Bicicletas" (`HomeCategories`) y la
  * siguiente entrega. Primera sección oscura de la home — `HomeHero` y
- * `HomeCategories` corren sobre `bg-base`; acá se rompe deliberadamente ese
+ * `HomeCategories` corren sobre `bg-blanco`; acá se rompe deliberadamente ese
  * ritmo de "card stack claro" (decisión de diseño confirmada vía la skill
  * `impeccable`).
  *

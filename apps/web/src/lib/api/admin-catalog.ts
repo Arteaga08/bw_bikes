@@ -547,7 +547,7 @@ function buildSpecTemplateListQuery(params: AdminSpecTemplateListParams): string
 
 export interface SpecTemplateInput {
   title: string;
-  fields?: Array<{ label: string; order: number }>;
+  fields?: Array<{ label: string; order: number; isFilterable?: boolean }>;
   order?: number;
   isActive?: boolean;
 }

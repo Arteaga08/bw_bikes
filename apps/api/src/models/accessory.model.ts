@@ -98,5 +98,8 @@ accessorySchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
 accessorySchema.index({ category: 1, isActive: 1, price: 1 });
 accessorySchema.index({ isNewArrival: 1, isActive: 1, createdAt: -1 });
 accessorySchema.index({ isCustomerFavorite: 1, isActive: 1, createdAt: -1 });
+// See `bike.model.ts`'s twin index for why this compound-multikey shape is
+// safe: both keys resolve from the same `specGroups.fields` array element.
+accessorySchema.index({ "specGroups.fields.label": 1, "specGroups.fields.value": 1 });
 
 export const Accessory = model<IAccessory>("Accessory", accessorySchema);

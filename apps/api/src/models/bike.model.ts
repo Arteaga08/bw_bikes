@@ -153,5 +153,11 @@ bikeSchema.index({ category: 1, isActive: 1, price: 1 });
 bikeSchema.index({ isNewArrival: 1, isActive: 1, createdAt: -1 });
 // The home's "Favoritas de los ciclistas" rail: same access pattern, own flag.
 bikeSchema.index({ isCustomerFavorite: 1, isActive: 1, createdAt: -1 });
+// The filter sidebar's spec-group facet (`product.service.ts`'s `getFilterOptions`)
+// matches by label then groups by value — both keys resolve from the same
+// `specGroups.fields` array element, so this is the supported "array of
+// subdocuments" compound-multikey shape, not the disallowed "two independent
+// arrays" one.
+bikeSchema.index({ "specGroups.fields.label": 1, "specGroups.fields.value": 1 });
 
 export const Bike = model<IBike>("Bike", bikeSchema);

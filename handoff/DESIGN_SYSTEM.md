@@ -280,6 +280,16 @@ de fondo.**
 - Nunca se rota, deforma ni cambia de proporción.
 - Máximo dos apariciones por vista (un modal abierto cuenta como su propia
   vista para este límite, independiente de la página que tiene debajo).
+  **Excepción, decidida el 2026-08-28:** la grilla de tarjetas de producto
+  del catálogo (`CatalogProductCard`) no cuenta contra este límite — cada
+  tarjeta lleva su propio rinoceronte dorado de 16px junto al eyebrow de
+  marca, así que una grilla de 24 productos muestra 24. Manuel lo eligió
+  tras comparar cinco mockups de tarjeta lado a lado (`impeccable` +
+  `design-taste-frontend`); no es un patrón de fondo repetido a gran escala
+  (la prohibición de arriba sigue vigente para eso) — es la misma firma
+  chica de marca, repetida una vez por ítem de una lista, el mismo criterio
+  que ya cubre "junto a un eyebrow" abajo, aplicado a cada tarjeta de la
+  grilla en vez de a una sola portada.
 - Usos válidos: junto a un eyebrow, junto al nombre de producto (H3), junto a
   un label de footer, dentro de un modal de confirmación. **El separador
   centrado entre reglas horizontales queda descartado** — se probó en
@@ -309,7 +319,7 @@ específico de la pantalla ya suman dos, ahí se detiene.
 | Pantalla / lugar | Footer (base) | Segunda aparición | Total | Nota |
 |---|---|---|---|---|
 | **Home** | Sí | Eyebrow del hero ("Edición 2026") | 2 (límite) | No agregar una tercera. |
-| **Catálogo** | Sí | Ninguna | 1 | Es una grilla densa de tarjetas de producto; el rinoceronte competiría con fotos/precios. Solo footer. |
+| **Catálogo** | Sí | Eyebrow de la portada ("Catálogo" / nombre de categoría) **+ uno por tarjeta en la grilla** | 2 en la portada + 1 por tarjeta | El catálogo tiene su propia portada editorial (`CatalogHero`) sobre la fila de categorías y la grilla de producto, igual grammar que el hero del home — esa sigue siendo la segunda aparición de la portada. **Actualizado 2026-08-28:** la grilla de tarjetas de producto (`CatalogProductCard`) sí lleva rinoceronte ahora, uno por tarjeta junto al eyebrow de marca — revierte la regla anterior ("la grilla sigue sin rinoceronte"), ver la excepción documentada en §5. |
 | **Ficha de producto** | Sí | Junto al nombre del producto (H3, ej. "Rhino Race") | 2 (límite) | Reemplaza el separador (descartado). Refuerza la marca justo donde ya aparece "Rhino" en el nombre del modelo — no es decoración añadida, es un eco del naming existente. El eyebrow de esta pantalla es breadcrumb de navegación, no lugar de marca — tampoco se usa ahí. |
 | **Carrito** | Sí | Ninguna | 1 | Pantalla de repaso transaccional: el foco son montos y el CTA "Ir a pagar", no decoración. |
 | **Checkout** | No (footer se oculta) | Ninguna | 0 | Pantalla de conversión de alto riesgo. Cero apariciones del rinoceronte mientras el usuario está pagando — ni siquiera el footer, que ya se retira en el mockup de referencia (nav reducida). La prioridad absoluta es que complete el pago sin fricción visual. |
@@ -329,6 +339,7 @@ define la regla general.
 |---|---|---|---|
 | Firma de footer (global) | 12px | `rhino-dorado.svg` (footer es siempre overlay negro) | Inline, inmediatamente antes de "© 2026 Black and White Bikes", mismo baseline, alineado a la izquierda del bloque de copyright. |
 | Home — eyebrow del hero | 16px | `rhino-dorado.svg` (sobre hero oscuro full-bleed) | Inline, antes del texto "EDICIÓN 2026", mismo baseline que el eyebrow. |
+| Catálogo — eyebrow de la portada | 16px | `rhino-dorado.svg` (sobre `CatalogHero`, siempre oscuro con scrim) | Inline, antes de "Catálogo" (índice) o del nombre del catálogo padre (página de categoría, ej. "Bicicletas" en `/bicicletas/montana`), mismo baseline que el eyebrow. |
 | Ficha de producto — junto al nombre | 20px | `rhino-negro.svg` (fondo claro, `surface-card`) | Inline, antes del H3 del nombre de producto (ej. antes de "Rhino Race"), alineado a la altura x del texto — no supera el alto del H3 (20px). |
 | Confirmación de pedido — eyebrow | 16px | `rhino-dorado.svg` si el fondo es oscuro (overlay), `rhino-negro.svg` si es claro (surface-base) | Inline, antes de "Pedido confirmado", mismo baseline que el eyebrow. |
 | Error 404 | 24px | `rhino-dorado.svg` (fondo negro overlay, como ya define el mockup) | Centrado horizontalmente, sobre el número "404", estático — sin rotación ni repetición. |

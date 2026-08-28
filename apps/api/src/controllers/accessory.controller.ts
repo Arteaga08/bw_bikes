@@ -12,6 +12,11 @@ export const listPublicAccessories = asyncHandler(async (req: Request, res: Resp
   sendResponse(res, 200, "Accesorios obtenidos.", { accessories: documents.map(toPublicAccessory) }, meta);
 });
 
+export const getAccessoryFilterOptions = asyncHandler(async (_req: Request, res: Response) => {
+  const options = await accessoryService.getFilterOptions();
+  sendResponse(res, 200, "Opciones de filtro obtenidas.", options);
+});
+
 export const getPublicAccessoryBySlug = asyncHandler(async (req: Request, res: Response) => {
   const accessory = await accessoryService.getBySlug(routeParam(req, "slug"), { publicOnly: true });
   sendResponse(res, 200, "Accesorio obtenido.", { accessory: toPublicAccessory(accessory) });

@@ -8,7 +8,7 @@ import { ProductCarousel } from "./ProductCarousel";
  * bug must still surface), filter out anything the card can't render, and
  * render nothing rather than an empty rail with an orphaned heading.
  *
- * `bg-base`, not `bg-overlay` — restores the light/dark/light rhythm after
+ * `bg-blanco`, not `bg-overlay` — restores the light/dark/light rhythm after
  * `HomeBrands`' dark marquee, same as the category rail did before it.
  */
 export async function HomeNewProducts() {
@@ -24,7 +24,7 @@ export async function HomeNewProducts() {
   if (productsWithImage.length === 0) return null;
 
   return (
-    <section className="bg-base py-3xl">
+    <section className="bg-blanco py-3xl">
       <h2 className="mb-xl px-lg font-display text-h2 font-extrabold uppercase text-negro sm:text-h1">
         Novedades
       </h2>

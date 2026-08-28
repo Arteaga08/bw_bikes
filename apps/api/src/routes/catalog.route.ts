@@ -1,6 +1,10 @@
 import { Router } from "express";
-import { getPublicAccessoryBySlug, listPublicAccessories } from "../controllers/accessory.controller.js";
-import { getPublicBikeBySlug, listPublicBikes } from "../controllers/bike.controller.js";
+import {
+  getAccessoryFilterOptions,
+  getPublicAccessoryBySlug,
+  listPublicAccessories,
+} from "../controllers/accessory.controller.js";
+import { getBikeFilterOptions, getPublicBikeBySlug, listPublicBikes } from "../controllers/bike.controller.js";
 import { getPublicBrandBySlug, listPublicBrands } from "../controllers/brand.controller.js";
 import { createCategoryController } from "../controllers/category.controller.js";
 import { recordProductView } from "../controllers/product-view.controller.js";
@@ -64,9 +68,15 @@ router.get("/brands", validate(brandListQuerySchema, "query"), listPublicBrands)
 router.get("/brands/:slug", validate(slugParamSchema, "params"), getPublicBrandBySlug);
 
 router.get("/bikes", validate(publicProductListQuerySchema, "query"), listPublicBikes);
+// Must come before `/bikes/:slug` — otherwise Express matches "filter-options"
+// against the `:slug` param and this 404s instead of running (same class of
+// mistake `getPublicBikeCategoryTree`'s doc comment already warns about for
+// the missing `/catalog` prefix).
+router.get("/bikes/filter-options", getBikeFilterOptions);
 router.get("/bikes/:slug", validate(slugParamSchema, "params"), getPublicBikeBySlug);
 
 router.get("/accessories", validate(publicProductListQuerySchema, "query"), listPublicAccessories);
+router.get("/accessories/filter-options", getAccessoryFilterOptions);
 router.get("/accessories/:slug", validate(slugParamSchema, "params"), getPublicAccessoryBySlug);
 
 // M7: anonymous "someone looked at this" event, feeding the preferences

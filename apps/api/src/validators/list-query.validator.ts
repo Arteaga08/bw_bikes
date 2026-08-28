@@ -1,6 +1,6 @@
 import Joi from "joi";
 import { MAX_PAGE } from "../utils/list-query.js";
-import { objectId, priceCents } from "./common.validator.js";
+import { objectId, objectIdList, priceCents } from "./common.validator.js";
 
 /**
  * Query-string schemas for list endpoints. Running these through
@@ -59,11 +59,16 @@ export const colorTemplateListQuerySchema = flatCatalogListQuerySchema;
  * (M12) is exactly a public `?isNewArrival=true` read, and the admin catalog reuses
  * the same filter to answer "which ones did I flag?". `isCustomerFavorite` is the
  * same case for the "Favoritas de los ciclistas" rail.
+ *
+ * `category`/`brand`/`size`/`color` all accept a comma-separated list (the
+ * filter sidebar's multi-select) as well as the single value every existing
+ * caller already sends — `?brand=trek` from the mega-menu keeps working
+ * unchanged, it's just a list of one.
  */
 const productFilters = {
   ...pagination,
-  category: objectId.optional().messages({ "string.pattern.base": "La categoría es inválida." }),
-  brand: Joi.string().trim().max(60).optional(),
+  category: objectIdList.optional().messages({ "string.pattern.base": "La categoría es inválida." }),
+  brand: Joi.string().trim().max(600).optional(),
   minPrice: priceCents.optional(),
   maxPrice: priceCents.optional(),
   isNewArrival: Joi.boolean().optional(),
@@ -72,13 +77,17 @@ const productFilters = {
 
 export const publicProductListQuerySchema = Joi.object({
   ...productFilters,
-  size: Joi.string().trim().max(16).optional(),
-  color: Joi.string().trim().max(40).optional(),
+  size: Joi.string().trim().max(170).optional(),
+  color: Joi.string().trim().max(420).optional(),
+  // Each item is `label:value1|value2` — AND across items, OR within one
+  // label's values. `.single()` so a lone `?spec=Material:Carbono` (no
+  // repeated key) still parses as a one-item array instead of a bare string.
+  spec: Joi.array().items(Joi.string().max(120)).max(6).single().optional(),
 });
 
 export const adminProductListQuerySchema = Joi.object({
   ...productFilters,
-  size: Joi.string().trim().max(16).optional(),
-  color: Joi.string().trim().max(40).optional(),
+  size: Joi.string().trim().max(170).optional(),
+  color: Joi.string().trim().max(420).optional(),
   isActive: Joi.boolean().optional(),
 });

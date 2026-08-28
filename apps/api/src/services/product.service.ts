@@ -1,10 +1,18 @@
-import type { AuditAction, ItemType, ProductImage, ProductVariant, SpecGroup } from "@bw-bikes/shared";
+import type {
+  AuditAction,
+  ItemType,
+  ProductImage,
+  ProductVariant,
+  PublicCatalogFilterOptions,
+  SpecGroup,
+} from "@bw-bikes/shared";
 import type { Document, Model, Types } from "mongoose";
 import { Types as MongooseTypes } from "mongoose";
 import type { ICategory } from "../models/index.js";
-import { Badge, Brand, InventoryItem, MAX_GALLERY_IMAGES } from "../models/index.js";
+import { Badge, Brand, ColorTemplate, InventoryItem, MAX_GALLERY_IMAGES, SpecTemplate } from "../models/index.js";
 import { AppError, buildMeta, escapeRegex, parseListQuery, slugify } from "../utils/index.js";
 import { recordAuditLog } from "./audit-log.service.js";
+import { toPublicBrand } from "./brand.service.js";
 import { learnSpecTemplates } from "./spec-template.service.js";
 import { deleteImage } from "./storage/storage.service.js";
 
@@ -59,6 +67,14 @@ const PUBLIC_VISIBILITY = { isActive: true, archivedAt: null } as const;
 
 /** A color only ever needs a "before"/"after" shot — the cap is optional (0 or 1 is fine), it just blocks a 3rd. Enforced on both the retag path and the upload-batch path. */
 const MAX_IMAGES_PER_COLOR = 2;
+
+/** `"a,b, c"` → `["a", "b", "c"]`. The multi-select shape for `category`/`brand`/`size`/`color` — a single value with no comma is still a valid one-item list, so `?brand=trek` keeps working unchanged. */
+function splitList(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 export function createProductService<TDoc extends ProductDocument>(
   Product: Model<TDoc>,
@@ -170,32 +186,37 @@ export function createProductService<TDoc extends ProductDocument>(
     }
 
     const category = query["category"];
-    if (typeof category === "string") {
+    if (typeof category === "string" && category !== "") {
       // Filtering by a parent category must include its children, otherwise
       // "Bicicletas de montaña" would show nothing while every bike sits in one
-      // of its subcategories.
-      const children = await categoryModel.find({ parent: category }).select("_id").exec();
-      const ids = [new MongooseTypes.ObjectId(category), ...children.map((child) => child._id)];
-      filter["category"] = { $in: ids };
+      // of its subcategories. One query expands every selected parent at once,
+      // rather than one per id, for the multi-select case.
+      const ids = splitList(category);
+      const children = await categoryModel.find({ parent: { $in: ids } }).select("_id").exec();
+      const allIds = [...ids.map((id) => new MongooseTypes.ObjectId(id)), ...children.map((child) => child._id)];
+      filter["category"] = { $in: allIds };
     }
 
-    // `brand` travels as its `slug` (never an id — the client never needs to
-    // know Mongo's ids), resolved to the actual reference here. No match
-    // means the filter deliberately matches nothing, same as any other unmet
-    // filter — not "ignore the filter".
+    // `brand` travels as `slug`s (never ids — the client never needs to know
+    // Mongo's), resolved to their references here. No match means the filter
+    // deliberately matches nothing, same as any other unmet filter — not
+    // "ignore the filter".
     if (typeof query["brand"] === "string" && query["brand"] !== "") {
-      const brand = await Brand.findOne({ slug: query["brand"].toLowerCase() })
+      const slugs = splitList(query["brand"]).map((slug) => slug.toLowerCase());
+      const brands = await Brand.find({ slug: { $in: slugs } })
         .select("_id")
         .exec();
-      filter["brand"] = brand ? brand._id : { $in: [] };
+      filter["brand"] = { $in: brands.map((brand) => brand._id) };
     }
 
     // Size and color live on variants; a product matches if any variant does.
     if (typeof query["size"] === "string" && query["size"] !== "") {
-      filter["variants.size"] = { $regex: `^${escapeRegex(query["size"])}$`, $options: "i" };
+      const patterns = splitList(query["size"]).map((value) => new RegExp(`^${escapeRegex(value)}$`, "i"));
+      filter["variants.size"] = { $in: patterns };
     }
     if (typeof query["color"] === "string" && query["color"] !== "") {
-      filter["variants.color"] = { $regex: `^${escapeRegex(query["color"])}$`, $options: "i" };
+      const patterns = splitList(query["color"]).map((value) => new RegExp(`^${escapeRegex(value)}$`, "i"));
+      filter["variants.color"] = { $in: patterns };
     }
 
     const minPrice = query["minPrice"];
@@ -205,6 +226,40 @@ export function createProductService<TDoc extends ProductDocument>(
       if (typeof minPrice === "number") range["$gte"] = minPrice;
       if (typeof maxPrice === "number") range["$lte"] = maxPrice;
       filter["price"] = range;
+    }
+
+    const specs = query["spec"];
+    if (Array.isArray(specs) && specs.length > 0) {
+      // Each item is `label:value1|value2` — AND across items (a product
+      // must match every selected label), OR within one label's values.
+      const clauses = specs
+        .filter((item): item is string => typeof item === "string" && item.includes(":"))
+        .map((item) => {
+          const separatorIndex = item.indexOf(":");
+          const label = item.slice(0, separatorIndex).trim();
+          const values = item
+            .slice(separatorIndex + 1)
+            .split("|")
+            .map((value) => value.trim())
+            .filter(Boolean);
+          return { label, values };
+        })
+        .filter((clause) => clause.label !== "" && clause.values.length > 0);
+
+      if (clauses.length > 0) {
+        filter["$and"] = clauses.map(({ label, values }) => ({
+          specGroups: {
+            $elemMatch: {
+              fields: {
+                $elemMatch: {
+                  label: new RegExp(`^${escapeRegex(label)}$`, "i"),
+                  value: { $in: values },
+                },
+              },
+            },
+          },
+        }));
+      }
     }
 
     return filter;
@@ -262,6 +317,134 @@ export function createProductService<TDoc extends ProductDocument>(
     ]);
 
     return { documents, meta: buildMeta(total, page, limit) };
+  }
+
+  /**
+   * The filter sidebar's vocabulary, derived from the products actually in
+   * this catalog — never a fixed enum, same reasoning as `SizeTemplate`/
+   * `ColorTemplate`'s own doc comments. One aggregation, one round trip:
+   * `$facet` runs every tally over the same `$match` pass. Each list comes
+   * back sorted by how many products carry that value, most first — the
+   * counts themselves never leave this function, since the filter sidebar
+   * shows no numbers next to an option (Manuel's call).
+   */
+  async function getFilterOptions(): Promise<PublicCatalogFilterOptions> {
+    // Only spec labels an admin explicitly turned on (`isFilterable`). The
+    // canonical display label is whichever template defined it first — a
+    // product's own spec sheet can carry a differently-cased copy of the
+    // same label, and grouping must not fork "Material" and "material" into
+    // two filter groups.
+    const templates = await SpecTemplate.find({ isActive: true, "fields.isFilterable": true })
+      .sort({ order: 1, title: 1 })
+      .lean()
+      .exec();
+
+    const canonicalLabelByKey = new Map<string, string>();
+    for (const template of templates) {
+      for (const field of template.fields) {
+        if (!field.isFilterable) continue;
+        const key = field.label.trim().toLowerCase();
+        if (!canonicalLabelByKey.has(key)) canonicalLabelByKey.set(key, field.label.trim());
+      }
+    }
+    const filterableKeys = [...canonicalLabelByKey.keys()];
+
+    const [facets] = await Product.aggregate<{
+      sizes: Array<{ _id: string; count: number }>;
+      colors: Array<{ _id: string; count: number }>;
+      brands: Array<{ _id: Types.ObjectId; count: number }>;
+      price: Array<{ _id: null; min: number; max: number }>;
+      specs: Array<{ _id: { key: string; value: string }; count: number }>;
+    }>([
+      { $match: PUBLIC_VISIBILITY },
+      {
+        $facet: {
+          sizes: [
+            { $unwind: "$variants" },
+            { $match: { "variants.size": { $type: "string", $ne: "" } } },
+            { $group: { _id: "$variants.size", count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+          ],
+          colors: [
+            { $unwind: "$variants" },
+            { $match: { "variants.color": { $type: "string", $ne: "" } } },
+            { $group: { _id: "$variants.color", count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+          ],
+          brands: [
+            { $group: { _id: "$brand", count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+          ],
+          price: [{ $group: { _id: null, min: { $min: "$price" }, max: { $max: "$price" } } }],
+          // Skipped entirely when no admin has turned any label on — an
+          // `$unwind` over `specGroups.fields` with nothing to `$match`
+          // against would just cost work for an empty result.
+          specs:
+            filterableKeys.length === 0
+              ? []
+              : [
+                  { $unwind: "$specGroups" },
+                  { $unwind: "$specGroups.fields" },
+                  {
+                    $addFields: {
+                      "specGroups.fields.__key": { $toLower: { $trim: { input: "$specGroups.fields.label" } } },
+                    },
+                  },
+                  { $match: { "specGroups.fields.__key": { $in: filterableKeys } } },
+                  {
+                    $group: {
+                      _id: { key: "$specGroups.fields.__key", value: "$specGroups.fields.value" },
+                      count: { $sum: 1 },
+                    },
+                  },
+                  { $sort: { count: -1 } },
+                ],
+        },
+      },
+    ]).exec();
+
+    const result = facets ?? { sizes: [], colors: [], brands: [], price: [], specs: [] };
+
+    const brandDocs = await Brand.find({ _id: { $in: result.brands.map((row) => row._id) }, isActive: true }).exec();
+    const brandById = new Map(brandDocs.map((brand) => [String(brand._id), brand]));
+    const brands = result.brands
+      .map((row) => brandById.get(String(row._id)))
+      .filter((brand): brand is (typeof brandDocs)[number] => Boolean(brand))
+      .map(toPublicBrand);
+
+    // Fetched in bulk (bounded by `MAX_COLOR_TEMPLATES`) rather than one
+    // query per color value — cheap either way, but this keeps it to one
+    // round trip regardless of how many distinct colors the catalog has.
+    const colorDocs = result.colors.length > 0 ? await ColorTemplate.find().exec() : [];
+    const colorByKey = new Map(colorDocs.map((doc) => [doc.value.trim().toLowerCase(), doc]));
+    const colors = result.colors.map((row) => {
+      const template = colorByKey.get(row._id.trim().toLowerCase());
+      return { value: row._id, hex: template?.hex ?? null, secondaryHex: template?.secondaryHex ?? null };
+    });
+
+    const sizes = result.sizes.map((row) => row._id);
+
+    const priceRow = result.price[0];
+    const price = priceRow ? { min: priceRow.min, max: priceRow.max } : null;
+
+    // `result.specs` arrives sorted by count descending across every
+    // label/value pair at once; splitting it into per-label buckets without
+    // re-sorting keeps each bucket's own values in that same descending
+    // order — a subsequence of a sorted sequence is still sorted.
+    const specValuesByKey = new Map<string, string[]>();
+    for (const row of result.specs) {
+      const values = specValuesByKey.get(row._id.key) ?? [];
+      values.push(row._id.value);
+      specValuesByKey.set(row._id.key, values);
+    }
+    // Template order, not facet order — the sidebar's group order follows
+    // admin-curated `SpecTemplate.order`, same as every other
+    // template-driven list in this catalog.
+    const specs = [...canonicalLabelByKey.entries()]
+      .map(([key, label]) => ({ label, values: specValuesByKey.get(key) ?? [] }))
+      .filter((group) => group.values.length > 0);
+
+    return { brands, sizes, colors, price, specs };
   }
 
   async function getBySlug(slug: string, scope: { publicOnly: boolean }): Promise<TDoc> {
@@ -578,6 +761,7 @@ export function createProductService<TDoc extends ProductDocument>(
     partitionNewVariants,
     resolveSlug,
     list,
+    getFilterOptions,
     getById,
     getBySlug,
     archive,

@@ -103,7 +103,10 @@ describe("SpecSheetEditor — applying a template (M10.3)", () => {
       {
         id: "tpl-1",
         title: "Geometría",
-        fields: [{ label: "Talla", order: 0 }, { label: "Stack", order: 1 }],
+        fields: [
+          { label: "Talla", order: 0, isFilterable: false },
+          { label: "Stack", order: 1, isFilterable: false },
+        ],
         source: "manual",
         order: 0,
         isActive: true,

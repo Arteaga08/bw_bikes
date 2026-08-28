@@ -4,6 +4,7 @@ import type { SpecTemplate } from "@bw-bikes/shared";
 import { DotsSixVertical, Trash } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Toggle } from "@/components/ui/Toggle";
@@ -22,13 +23,19 @@ export interface SpecTemplateFormModalProps {
 }
 
 interface FieldRow {
-  /** Local to this form, never sent to the API — `handleSubmit` maps to `{ label, order: index }`. Exists so a drag reorder can key each row by identity instead of position: keyed by index, reordering remounts every input below the moved row and drops focus mid-drag. */
+  /** Local to this form, never sent to the API — `handleSubmit` maps to `{ label, order: index, isFilterable }`. Exists so a drag reorder can key each row by identity instead of position: keyed by index, reordering remounts every input below the moved row and drops focus mid-drag. */
   id: string;
   label: string;
+  /** Whether this label shows up as a filter group on the public catalog. `update` replaces the whole `fields` array server-side, so every row must carry this through the round trip or a filter an admin already turned on reverts to off on the next save. */
+  isFilterable: boolean;
 }
 
 function fieldsFromTemplate(template?: SpecTemplate): FieldRow[] {
-  return (template?.fields ?? []).map((field) => ({ id: crypto.randomUUID(), label: field.label }));
+  return (template?.fields ?? []).map((field) => ({
+    id: crypto.randomUUID(),
+    label: field.label,
+    isFilterable: field.isFilterable,
+  }));
 }
 
 /** Same shape as `moveImage` (`lib/catalog/gallery.ts`): a target index, clamped rather than rejected, so both the pointer drag and the Arrow-key fallback can share one call. */
@@ -66,7 +73,7 @@ export function SpecTemplateFormModal({ onClose, onSaved, initial }: SpecTemplat
   function handleAddField(): void {
     const label = newLabel.trim();
     if (!label || fields.length >= MAX_SPEC_FIELDS_PER_GROUP) return;
-    setFields([...fields, { id: crypto.randomUUID(), label }]);
+    setFields([...fields, { id: crypto.randomUUID(), label, isFilterable: false }]);
     setNewLabel("");
   }
 
@@ -80,7 +87,11 @@ export function SpecTemplateFormModal({ onClose, onSaved, initial }: SpecTemplat
     try {
       const input: SpecTemplateInput = {
         title: title.trim(),
-        fields: fields.map((field, index) => ({ label: field.label, order: index })),
+        fields: fields.map((field, index) => ({
+          label: field.label,
+          order: index,
+          isFilterable: field.isFilterable,
+        })),
         order: Number.parseInt(order, 10) || 0,
         isActive,
       };
@@ -160,6 +171,18 @@ export function SpecTemplateFormModal({ onClose, onSaved, initial }: SpecTemplat
                   setFields(fields.map((row, rowIndex) => (rowIndex === index ? { ...row, label: event.target.value } : row)))
                 }
                 wrapperClassName="min-w-0 flex-1"
+              />
+              <Checkbox
+                label="Usar como filtro"
+                checked={field.isFilterable}
+                onChange={(event) =>
+                  setFields(
+                    fields.map((row, rowIndex) =>
+                      rowIndex === index ? { ...row, isFilterable: event.target.checked } : row,
+                    ),
+                  )
+                }
+                wrapperClassName="shrink-0 self-center"
               />
               <Button
                 variant="bare"
