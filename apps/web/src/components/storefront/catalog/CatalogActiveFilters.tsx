@@ -37,7 +37,11 @@ export function CatalogActiveFilters({ categoryTree, options }: CatalogActiveFil
       <CatalogFilterChips
         chips={chips}
         onRemove={(key) => setFilters(removeFilterChip(filters, key))}
-        onClearAll={() => setFilters(DEFAULT_FILTER_STATE)}
+        // Sort isn't a filter — it has no chip and `countActiveFilters`
+        // excludes it — so "Limpiar todo" resets every filter but keeps the
+        // shopper's chosen order instead of silently reverting it to
+        // whatever `DEFAULT_FILTER_STATE.sort` is.
+        onClearAll={() => setFilters({ ...DEFAULT_FILTER_STATE, sort: filters.sort })}
       />
     </div>
   );

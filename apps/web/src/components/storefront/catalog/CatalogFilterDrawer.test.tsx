@@ -39,15 +39,15 @@ describe("CatalogFilterDrawer", () => {
     expect(screen.getByRole("button", { name: "Filtros (2)" })).toBeInTheDocument();
   });
 
-  it("opens on trigger click, entering from the right", () => {
+  it("opens on trigger click, entering from the bottom", () => {
     render(<CatalogFilterDrawer categoryTree={CATEGORY_TREE} options={OPTIONS} />);
     fireEvent.click(screen.getByRole("button", { name: "Filtros" }));
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).not.toHaveAttribute("inert");
-    expect(dialog).toHaveClass("right-0");
-    expect(dialog).toHaveClass("translate-x-0");
-    expect(dialog).not.toHaveClass("translate-x-full");
+    expect(dialog).toHaveClass("bottom-0");
+    expect(dialog).toHaveClass("translate-y-0");
+    expect(dialog).not.toHaveClass("translate-y-full");
   });
 
   it("closes on the close button", () => {

@@ -5,8 +5,19 @@ import type { CategoryTreeNode } from "@/lib/api/admin-catalog";
 import { ProductEditor } from "../../ProductEditor";
 
 export default async function NuevaBicicletaPage() {
-  const [treeResult, brandsResult, badgesResult, templatesResult, sizeTemplatesResult, colorTemplatesResult] = await Promise.all([
+  const [
+    treeResult,
+    accessoryTreeResult,
+    brandsResult,
+    badgesResult,
+    templatesResult,
+    sizeTemplatesResult,
+    colorTemplatesResult,
+  ] = await Promise.all([
     serverApiFetch<{ tree: CategoryTreeNode[] }>("/admin/bike-categories/tree"),
+    // Feeds `RelatedAccessoriesPicker`'s category accordion — a separate tree
+    // from `treeResult` above, which is the bike's *own* category.
+    serverApiFetch<{ tree: CategoryTreeNode[] }>("/admin/accessory-categories/tree"),
     serverApiFetch<{ brands: AdminBrand[] }>("/admin/brands?limit=100&sort=name"),
     // Only active badges on create — there's nothing already assigned yet, so
     // offering an inactive one would just be a dead end.
@@ -25,6 +36,7 @@ export default async function NuevaBicicletaPage() {
         kind="bike"
         mode="create"
         categoryTree={treeResult.data.tree}
+        accessoryCategoryTree={accessoryTreeResult.data.tree}
         brands={brandsResult.data.brands}
         availableBadges={badgesResult.data.badges}
         specTemplates={templatesResult.data.templates}

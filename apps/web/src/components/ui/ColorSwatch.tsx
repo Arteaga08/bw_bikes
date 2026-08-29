@@ -13,6 +13,12 @@ export interface ColorSwatchProps {
  * a top/bottom split circle when `secondaryHex` is also set. Shared by
  * `ColoresView`, `ColorFormModal`/`HexPicker`, and `VariantsEditor` so the
  * three swatch renderings never drift from each other.
+ *
+ * `inline-block` is load-bearing, not decoration: a bare `<span>` is an
+ * inline non-replaced box, which ignores the `h-*`/`w-*` every caller passes.
+ * It only ever looked right inside a flex parent (which blockifies its
+ * items); dropped into plain flow — `ColorSwatchSelector`'s button — it
+ * collapsed to a zero-height sliver of border.
  */
 export function ColorSwatch({ hex, secondaryHex, className }: ColorSwatchProps) {
   const style = hex
@@ -24,7 +30,7 @@ export function ColorSwatch({ hex, secondaryHex, className }: ColorSwatchProps) 
   return (
     <span
       aria-hidden="true"
-      className={cn("shrink-0 rounded-full border", hex ? "border-borde" : "border-dashed border-grafito", className)}
+      className={cn("inline-block shrink-0 rounded-full border", hex ? "border-borde" : "border-dashed border-grafito", className)}
       style={style}
     />
   );

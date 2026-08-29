@@ -39,6 +39,14 @@ export interface ParseListQueryOptions {
   allowedSortFields: readonly string[];
   /** Applied when the request doesn't ask for a sort. Prefix with `-` for descending. */
   defaultSort: string;
+  /**
+   * Multi-field orders the server defines up front, resolved by name and
+   * checked before `allowedSortFields`. This is the only way to expose a
+   * compound sort: the client picks a name from a closed list, it never
+   * composes the Mongo sort object itself, so the guarantee `allowedSortFields`
+   * makes — no caller-controlled field ever reaches `.sort()` — still holds.
+   */
+  sortAliases?: Readonly<Record<string, Record<string, 1 | -1>>>;
   /** Per-endpoint ceiling, never above MAX_LIMIT. */
   maxLimit?: number;
 }
@@ -94,14 +102,19 @@ function parsePageInt(raw: unknown): number {
 
 function parseSort(raw: unknown, options: ParseListQueryOptions): Record<string, 1 | -1> {
   const requested = typeof raw === "string" && raw.trim() !== "" ? raw.trim() : options.defaultSort;
+
+  // Aliases win over the single-field path: an alias name may itself start
+  // with `-` (`-isNewArrival`), which the `-`-stripping below would otherwise
+  // mistake for a plain descending field and reject.
+  const alias = options.sortAliases?.[requested];
+  if (alias) return { ...alias };
+
   const descending = requested.startsWith("-");
   const field = descending ? requested.slice(1) : requested;
 
   if (!options.allowedSortFields.includes(field)) {
-    throw new AppError(
-      `No se puede ordenar por "${field}". Campos válidos: ${options.allowedSortFields.join(", ")}.`,
-      400,
-    );
+    const valid = [...options.allowedSortFields, ...Object.keys(options.sortAliases ?? {})];
+    throw new AppError(`No se puede ordenar por "${field}". Campos válidos: ${valid.join(", ")}.`, 400);
   }
 
   return { [field]: descending ? -1 : 1 };

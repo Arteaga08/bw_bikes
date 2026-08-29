@@ -10,6 +10,7 @@ export default async function EditarBicicletaPage({ params }: { params: Promise<
   const { id } = await params;
 
   let treeResult: Awaited<ReturnType<typeof serverApiFetch<{ tree: CategoryTreeNode[] }>>>;
+  let accessoryTreeResult: Awaited<ReturnType<typeof serverApiFetch<{ tree: CategoryTreeNode[] }>>>;
   let brandsResult: Awaited<ReturnType<typeof serverApiFetch<{ brands: AdminBrand[] }>>>;
   let badgesResult: Awaited<ReturnType<typeof serverApiFetch<{ badges: AdminBadge[] }>>>;
   let templatesResult: Awaited<ReturnType<typeof serverApiFetch<{ templates: SpecTemplate[] }>>>;
@@ -17,23 +18,34 @@ export default async function EditarBicicletaPage({ params }: { params: Promise<
   let colorTemplatesResult: Awaited<ReturnType<typeof serverApiFetch<{ colorTemplates: ColorTemplate[] }>>>;
   let bikeResult: Awaited<ReturnType<typeof serverApiFetch<{ bike: AdminBike }>>>;
   try {
-    [treeResult, brandsResult, badgesResult, templatesResult, sizeTemplatesResult, colorTemplatesResult, bikeResult] =
-      await Promise.all([
-        serverApiFetch<{ tree: CategoryTreeNode[] }>("/admin/bike-categories/tree"),
-        serverApiFetch<{ brands: AdminBrand[] }>("/admin/brands?limit=100&sort=name"),
-        // Unfiltered, unlike the create page: an already-assigned badge that's
-        // since been deactivated must still show, so it can be removed
-        // deliberately instead of just vanishing from the picker.
-        serverApiFetch<{ badges: AdminBadge[] }>("/admin/badges?limit=100&sort=order"),
-        serverApiFetch<{ templates: SpecTemplate[] }>("/admin/spec-templates?isActive=true&limit=100&sort=title"),
-        // `isActive=true` even on edit, same as spec templates: unlike a badge,
-        // an already-used-but-deactivated size still shows fine — `SizePicker`
-        // falls back to rendering any size already on a variant as its own
-        // chip regardless of whether it came back in this list.
-        serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/bike-size-templates?isActive=true&limit=100&sort=order"),
-        serverApiFetch<{ colorTemplates: ColorTemplate[] }>("/admin/color-templates?isActive=true&limit=100&sort=order"),
-        serverApiFetch<{ bike: AdminBike }>(`/admin/bikes/${id}`),
-      ]);
+    [
+      treeResult,
+      accessoryTreeResult,
+      brandsResult,
+      badgesResult,
+      templatesResult,
+      sizeTemplatesResult,
+      colorTemplatesResult,
+      bikeResult,
+    ] = await Promise.all([
+      serverApiFetch<{ tree: CategoryTreeNode[] }>("/admin/bike-categories/tree"),
+      // Feeds `RelatedAccessoriesPicker`'s category accordion — a separate
+      // tree from `treeResult` above, which is the bike's *own* category.
+      serverApiFetch<{ tree: CategoryTreeNode[] }>("/admin/accessory-categories/tree"),
+      serverApiFetch<{ brands: AdminBrand[] }>("/admin/brands?limit=100&sort=name"),
+      // Unfiltered, unlike the create page: an already-assigned badge that's
+      // since been deactivated must still show, so it can be removed
+      // deliberately instead of just vanishing from the picker.
+      serverApiFetch<{ badges: AdminBadge[] }>("/admin/badges?limit=100&sort=order"),
+      serverApiFetch<{ templates: SpecTemplate[] }>("/admin/spec-templates?isActive=true&limit=100&sort=title"),
+      // `isActive=true` even on edit, same as spec templates: unlike a badge,
+      // an already-used-but-deactivated size still shows fine — `SizePicker`
+      // falls back to rendering any size already on a variant as its own
+      // chip regardless of whether it came back in this list.
+      serverApiFetch<{ sizeTemplates: SizeTemplate[] }>("/admin/bike-size-templates?isActive=true&limit=100&sort=order"),
+      serverApiFetch<{ colorTemplates: ColorTemplate[] }>("/admin/color-templates?isActive=true&limit=100&sort=order"),
+      serverApiFetch<{ bike: AdminBike }>(`/admin/bikes/${id}`),
+    ]);
   } catch (error) {
     if (error instanceof ApiError && error.httpStatus === 404) notFound();
     throw error;
@@ -50,6 +62,7 @@ export default async function EditarBicicletaPage({ params }: { params: Promise<
         productId={bike.id}
         initialProduct={bike}
         categoryTree={treeResult.data.tree}
+        accessoryCategoryTree={accessoryTreeResult.data.tree}
         brands={brandsResult.data.brands}
         availableBadges={badgesResult.data.badges}
         specTemplates={templatesResult.data.templates}

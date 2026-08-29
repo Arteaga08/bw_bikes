@@ -83,7 +83,15 @@ export function CatalogProductCard({ product, colorSwatchIndex }: CatalogProduct
 
   return (
     <Link href={productHref(product)} className="group/card block overflow-hidden rounded-card bg-overlay">
-      <div className="relative aspect-[4/3] overflow-hidden bg-surface">
+      {/* `bg-blanco`, matching `ProductCard`/`ComparatorColumn`'s photo frame
+          and the studio backdrop baked into every gallery asset at upload
+          (`whitenStudioBackground`, apps/api) — not `bg-surface`'s pure
+          white, which is reserved for cards/inputs/modals. `contain`
+          letterboxes the photo, so the frame color is what a shopper
+          actually sees around it; matching the baked backdrop is what makes
+          the frame disappear instead of drawing a visible rectangle around
+          the photo. */}
+      <div className="relative aspect-[4/3] overflow-hidden bg-blanco">
         {secondImage ? (
           // Same mechanism as `HeroCarousel.tsx`'s slide track, reduced to
           // the two-photo case: both images sit side by side in one flex

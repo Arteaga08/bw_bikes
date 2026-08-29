@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
   usePathname: () => "/bicicletas",
-  useSearchParams: () => new URLSearchParams("brand=specialized"),
+  useSearchParams: () => new URLSearchParams("brand=specialized&category=cat-1"),
 }));
 
 const { CatalogFilterSidebar } = await import("./CatalogFilterSidebar");
@@ -37,7 +37,7 @@ describe("CatalogFilterSidebar", () => {
     expect(screen.getByRole("complementary")).toHaveClass("lg:block");
   });
 
-  it("renders Categoría (roots) and Grupo (children) from the tree", () => {
+  it("renders Categoría (roots) and, once cat-1 is selected, Grupo with its children", () => {
     render(<CatalogFilterSidebar categoryTree={CATEGORY_TREE} options={OPTIONS} />);
     expect(screen.getByRole("button", { name: "Categoría" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Grupo" })).toBeInTheDocument();

@@ -82,6 +82,15 @@ export interface ProductEditorProps {
    */
   initialProduct?: AdminBike | AdminAccessory;
   categoryTree: CategoryTreeNode[];
+  /**
+   * The accessory-categories tree, fetched independently of `categoryTree`
+   * even when `kind === "accessory"` (where the two would otherwise be the
+   * same tree) — `RelatedAccessoriesPicker` only ever renders for
+   * `kind === "bike"`, whose own `categoryTree` is the *bike*-categories
+   * tree instead. Optional because the accessory editor's two pages never
+   * fetch or pass it, having no cross-sell picker of their own.
+   */
+  accessoryCategoryTree?: CategoryTreeNode[];
   /** Active brands the "Marca" select offers — fetched by the page loader alongside the category tree. */
   brands: AdminBrand[];
   /** Active badges the picker offers — same fetch pattern as `brands`. */
@@ -205,6 +214,7 @@ function ProductEditorContent({
   productId,
   initialProduct,
   categoryTree,
+  accessoryCategoryTree,
   brands,
   availableBadges,
   specTemplates,
@@ -783,7 +793,11 @@ function ProductEditorContent({
                 count={{ current: relatedAccessories.length, max: MAX_RELATED_ACCESSORIES }}
                 help={<SectionHelp zone="accesorios" />}
               >
-                <RelatedAccessoriesPicker selected={relatedAccessories} onChange={setRelatedAccessories} />
+                <RelatedAccessoriesPicker
+                  selected={relatedAccessories}
+                  onChange={setRelatedAccessories}
+                  categoryTree={accessoryCategoryTree ?? []}
+                />
               </EditorSection>
             ) : null}
 

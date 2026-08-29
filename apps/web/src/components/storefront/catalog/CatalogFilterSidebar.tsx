@@ -5,6 +5,7 @@ export interface CatalogFilterSidebarProps {
   categoryTree: PublicCategoryTreeNode[];
   options: PublicCatalogFilterOptions;
   hideCategoryFilter?: boolean;
+  fixedCategoryId?: string;
 }
 
 /**
@@ -18,14 +19,24 @@ export interface CatalogFilterSidebarProps {
  * instead of here — this column is `hidden` below `lg`, and a mobile
  * shopper filtering via `CatalogFilterDrawer` still needs chip feedback.
  */
-export function CatalogFilterSidebar({ categoryTree, options, hideCategoryFilter }: CatalogFilterSidebarProps) {
+export function CatalogFilterSidebar({
+  categoryTree,
+  options,
+  hideCategoryFilter,
+  fixedCategoryId,
+}: CatalogFilterSidebarProps) {
   return (
     <aside className="hidden lg:block">
       {/* `top-16`/`h-16` matches the navbar's own fixed height (`Navbar.tsx`) —
           without it, `sticky top-0` would let the sidebar's own top scroll
           in under the fixed navbar instead of stopping just beneath it. */}
       <div className="sticky top-16 max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain py-xl pr-lg">
-        <CatalogFilterGroups categoryTree={categoryTree} options={options} hideCategoryFilter={hideCategoryFilter} />
+        <CatalogFilterGroups
+          categoryTree={categoryTree}
+          options={options}
+          hideCategoryFilter={hideCategoryFilter}
+          fixedCategoryId={fixedCategoryId}
+        />
       </div>
     </aside>
   );

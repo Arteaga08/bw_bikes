@@ -2,10 +2,12 @@ import type { PublicCatalogFilterOptions, PublicCategoryTreeNode } from "@bw-bik
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+const useSearchParamsMock = vi.hoisted(() => vi.fn(() => new URLSearchParams()));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
   usePathname: () => "/bicicletas",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: useSearchParamsMock,
 }));
 
 const { CatalogFilterGroups } = await import("./CatalogFilterGroups");
@@ -31,10 +33,19 @@ const OPTIONS: PublicCatalogFilterOptions = {
 };
 
 describe("CatalogFilterGroups", () => {
-  it("renders Categoría and Grupo by default", () => {
+  it("renders Categoría by default, with Grupo absent until a category is selected", () => {
     render(<CatalogFilterGroups categoryTree={CATEGORY_TREE} options={OPTIONS} />);
     expect(screen.getByRole("button", { name: "Categoría" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Grupo" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Grupo" })).not.toBeInTheDocument();
+  });
+
+  it("shows Grupo, expanded, with the selected category's own children once it's checked", () => {
+    useSearchParamsMock.mockReturnValueOnce(new URLSearchParams("category=cat-1"));
+    render(<CatalogFilterGroups categoryTree={CATEGORY_TREE} options={OPTIONS} />);
+
+    const grupo = screen.getByRole("button", { name: "Grupo" });
+    expect(grupo).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("checkbox", { name: "Cross Country" })).toBeInTheDocument();
   });
 
   it("hides Categoría and Grupo when hideCategoryFilter is set — a /[slug] page already fixes the category via its route", () => {

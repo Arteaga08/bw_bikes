@@ -16,7 +16,8 @@
     "seed:e2e-orders": "tsx src/scripts/seed-e2e-orders.ts",
     "seed:novedades-products": "tsx src/scripts/seed-novedades-products.ts",
     "e2e:mongo": "tsx src/scripts/e2e-mongo.ts",
-    "migrate:brands": "tsx src/scripts/migrate-brands.ts"
+    "migrate:brands": "tsx src/scripts/migrate-brands.ts",
+    "normalize:backgrounds": "tsx src/scripts/normalize-product-backgrounds.ts"
   },
   "dependencies": {
     "@bw-bikes/shared": "workspace:*",

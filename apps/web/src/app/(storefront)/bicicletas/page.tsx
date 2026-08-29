@@ -5,6 +5,8 @@ import { CatalogFilterDrawer } from "@/components/storefront/catalog/CatalogFilt
 import { CatalogFilterSidebar } from "@/components/storefront/catalog/CatalogFilterSidebar";
 import { CatalogHeader } from "@/components/storefront/catalog/CatalogHeader";
 import { CatalogProductSection } from "@/components/storefront/catalog/CatalogProductSection";
+import { CatalogSortMenu } from "@/components/storefront/catalog/CatalogSortMenu";
+import { HomeNewProducts } from "@/components/storefront/products/HomeNewProducts";
 import { ApiError } from "@/lib/api/error";
 import { getPublicBikeCategoryTree, getPublicCatalogFilterOptions } from "@/lib/api/public-catalog";
 import { EMPTY_CATALOG_FILTER_OPTIONS } from "@/lib/storefront-catalog";
@@ -63,10 +65,11 @@ export default async function BicicletasPage({ searchParams }: BicicletasPagePro
     <>
       <CatalogHeader catalog="bike" />
       <div className="bg-blanco lg:grid lg:grid-cols-[clamp(10rem,11vw,11rem)_1fr] lg:gap-md lg:pl-[clamp(1rem,4vw,4rem)] lg:pr-[clamp(1rem,4vw,4rem)]">
+        <CatalogFilterDrawer categoryTree={categoryTree} options={options} />
         <CatalogFilterSidebar categoryTree={categoryTree} options={options} />
-        <div className="px-lg sm:px-[clamp(2rem,8vw,8rem)] lg:px-0">
-          <div className="flex items-center pt-lg lg:hidden">
-            <CatalogFilterDrawer categoryTree={categoryTree} options={options} />
+        <div className="px-lg pt-md sm:px-[clamp(2rem,8vw,8rem)] lg:px-0 lg:pt-0">
+          <div className="flex justify-start pb-md">
+            <CatalogSortMenu />
           </div>
           <CatalogActiveFilters categoryTree={categoryTree} options={options} />
           <CatalogProductSection
@@ -79,6 +82,7 @@ export default async function BicicletasPage({ searchParams }: BicicletasPagePro
           />
         </div>
       </div>
+      <HomeNewProducts />
     </>
   );
 }

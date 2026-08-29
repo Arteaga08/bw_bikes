@@ -167,16 +167,43 @@ const LOGO_ALPHA_TOLERANCE = 30;
  * though the frame and the page shared the same class — caught visually,
  * via `impeccable`, after shipping the first version of this function.
  */
-const STUDIO_BACKGROUND_TARGET: RgbColor = { r: 250, g: 250, b: 250 };
+export const STUDIO_BACKGROUND_TARGET: RgbColor = { r: 250, g: 250, b: 250 };
 
-interface RgbColor {
+export interface RgbColor {
   r: number;
   g: number;
   b: number;
 }
 
-/** Average color of the four corner squares — the studio backdrop, assuming the subject doesn't touch a corner. */
-function sampleCornerBackground(data: Buffer, width: number, height: number, channels: number): RgbColor {
+/** Average color of one corner square. */
+function averageCorner(
+  data: Buffer,
+  width: number,
+  channels: number,
+  cornerX: number,
+  cornerY: number,
+  edge: number,
+): RgbColor {
+  let sumR = 0;
+  let sumG = 0;
+  let sumB = 0;
+  let count = 0;
+
+  for (let y = cornerY; y < cornerY + edge; y++) {
+    for (let x = cornerX; x < cornerX + edge; x++) {
+      const idx = (y * width + x) * channels;
+      sumR += data[idx]!;
+      sumG += data[idx + 1]!;
+      sumB += data[idx + 2]!;
+      count += 1;
+    }
+  }
+
+  return { r: sumR / count, g: sumG / count, b: sumB / count };
+}
+
+/** The four corner squares individually — callers that need to tell a flat backdrop from an uneven one (a second product, a gradient) read these before trusting their average. */
+function sampleCorners(data: Buffer, width: number, height: number, channels: number): RgbColor[] {
   const edge = Math.max(1, Math.min(BACKGROUND_SAMPLE_EDGE, Math.floor(width / 4), Math.floor(height / 4)));
   const corners: Array<[number, number]> = [
     [0, 0],
@@ -185,24 +212,60 @@ function sampleCornerBackground(data: Buffer, width: number, height: number, cha
     [width - edge, height - edge],
   ];
 
-  let sumR = 0;
-  let sumG = 0;
-  let sumB = 0;
-  let count = 0;
+  return corners.map(([cornerX, cornerY]) => averageCorner(data, width, channels, cornerX, cornerY, edge));
+}
 
-  for (const [cornerX, cornerY] of corners) {
-    for (let y = cornerY; y < cornerY + edge; y++) {
-      for (let x = cornerX; x < cornerX + edge; x++) {
-        const idx = (y * width + x) * channels;
-        sumR += data[idx]!;
-        sumG += data[idx + 1]!;
-        sumB += data[idx + 2]!;
-        count += 1;
-      }
+/** Average color of the four corner squares — the studio backdrop, assuming the subject doesn't touch a corner. */
+function sampleCornerBackground(data: Buffer, width: number, height: number, channels: number): RgbColor {
+  const corners = sampleCorners(data, width, height, channels);
+  const sum = corners.reduce((acc, c) => ({ r: acc.r + c.r, g: acc.g + c.g, b: acc.b + c.b }), { r: 0, g: 0, b: 0 });
+  return { r: sum.r / corners.length, g: sum.g / corners.length, b: sum.b / corners.length };
+}
+
+function rgbDistance(a: RgbColor, b: RgbColor): number {
+  return Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2);
+}
+
+/** Perceptual luminance (ITU-R BT.601), 0–255. Cheap stand-in for "is this corner dark" without a full colorimetric conversion. */
+function luminance(c: RgbColor): number {
+  return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+}
+
+export interface StudioBackgroundProbe {
+  /** The four corner squares, in the same order `sampleCorners` produces them. */
+  corners: RgbColor[];
+  /** Their average — what `whitenStudioBackground` treats as the backdrop. */
+  average: RgbColor;
+  /** Largest pairwise distance between corners. High means the four corners disagree — not a single flat backdrop (a second product corner-to-corner, a gradient, a lifestyle photo). */
+  maxCornerDistance: number;
+  /** Luminance of the averaged corner. Low means a dark backdrop — `whitenStudioBackground`'s color-distance tolerance can't tell "dark backdrop" from "dark product" the way it tells a light one apart, so a dark corner isn't safe to auto-whiten. */
+  luminance: number;
+}
+
+/**
+ * Read-only counterpart to `whitenStudioBackground`: samples the same four
+ * corners without touching a single pixel, for a caller that needs to decide
+ * *whether* an image is a normal studio photo before running the (partially
+ * destructive) whitening pass on it — the backfill script in
+ * `scripts/normalize-product-backgrounds.ts` is the first one.
+ */
+export async function probeStudioBackground(buffer: Buffer): Promise<StudioBackgroundProbe> {
+  const { data, info } = await sharp(buffer).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = info;
+
+  const corners = sampleCorners(data, width, height, channels);
+  const average = corners.reduce(
+    (acc, c) => ({ r: acc.r + c.r / corners.length, g: acc.g + c.g / corners.length, b: acc.b + c.b / corners.length }),
+    { r: 0, g: 0, b: 0 },
+  );
+  let maxCornerDistance = 0;
+  for (let i = 0; i < corners.length; i++) {
+    for (let j = i + 1; j < corners.length; j++) {
+      maxCornerDistance = Math.max(maxCornerDistance, rgbDistance(corners[i]!, corners[j]!));
     }
   }
 
-  return { r: sumR / count, g: sumG / count, b: sumB / count };
+  return { corners, average, maxCornerDistance, luminance: luminance(average) };
 }
 
 /**

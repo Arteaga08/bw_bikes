@@ -11,8 +11,10 @@ import { CatalogFilterPriceRange } from "./CatalogFilterPriceRange";
 export interface CatalogFilterGroupsProps {
   categoryTree: PublicCategoryTreeNode[];
   options: PublicCatalogFilterOptions;
-  /** Set on a `/[slug]` category page — the route already fixes the category, so the sidebar's own Categoría/Grupo groups would just be a second, unpreselected way to pick what's already decided. */
+  /** Set on a `/[slug]` category page — the route already fixes the category, so the sidebar's own Categoría group would just be a second, unpreselected way to pick what's already decided. */
   hideCategoryFilter?: boolean;
+  /** The category a `/[slug]` page fixed via its route (`category.id` there) — lets "Grupo" still offer that one category's own subcategories even with "Categoría" itself hidden. Ignored when `hideCategoryFilter` isn't set. */
+  fixedCategoryId?: string;
 }
 
 /**
@@ -26,11 +28,23 @@ export interface CatalogFilterGroupsProps {
  * empty accordion — same "degrade to absence, not to a broken control"
  * contract `CatalogHeader` already follows for its category rail.
  */
-export function CatalogFilterGroups({ categoryTree, options, hideCategoryFilter }: CatalogFilterGroupsProps) {
+export function CatalogFilterGroups({
+  categoryTree,
+  options,
+  hideCategoryFilter,
+  fixedCategoryId,
+}: CatalogFilterGroupsProps) {
   const { filters, setFilters } = useCatalogFilters();
 
   const rootCategories = categoryTree.map((category) => ({ value: category.id, label: category.name }));
+  // Which root(s) "Grupo" should read children from: on a `/[slug]` page
+  // it's always the route's own fixed category (there's no "Categoría" list
+  // to check a different one from); everywhere else it's whatever the
+  // shopper actually checked. "Grupo" stays absent until one of those has
+  // children, instead of every root's children pooled together.
+  const activeCategoryIds = hideCategoryFilter ? (fixedCategoryId ? [fixedCategoryId] : []) : filters.categories;
   const childCategories = categoryTree
+    .filter((category) => activeCategoryIds.includes(category.id))
     .flatMap((category) => category.children)
     .map((category) => ({ value: category.id, label: category.name }));
 
@@ -46,8 +60,11 @@ export function CatalogFilterGroups({ categoryTree, options, hideCategoryFilter 
         </CatalogFilterGroup>
       ) : null}
 
-      {!hideCategoryFilter && childCategories.length > 0 ? (
-        <CatalogFilterGroup title="Grupo">
+      {childCategories.length > 0 ? (
+        // No `key` needed to force the fresh-mount `defaultOpen` below: the
+        // group already unmounts/remounts on this branch's own condition
+        // each time `childCategories` goes empty <-> non-empty.
+        <CatalogFilterGroup title="Grupo" defaultOpen>
           <CatalogFilterCheckboxList
             options={childCategories}
             selected={filters.categories}

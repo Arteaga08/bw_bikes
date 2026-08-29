@@ -62,6 +62,17 @@ export interface ProductServiceOptions {
 
 const SORTABLE_FIELDS = ["createdAt", "price", "name"] as const;
 
+/**
+ * Named compound orders the storefront's "Ordenar por" control exposes for
+ * "Novedades primero"/"Favoritas primero" — a bare `-isNewArrival` would
+ * split the grid into two blocks with an arbitrary order inside each, so
+ * both alias to the flag first, `createdAt` descending as the tiebreaker.
+ */
+const SORT_ALIASES = {
+  "-isNewArrival": { isNewArrival: -1, createdAt: -1 },
+  "-isCustomerFavorite": { isCustomerFavorite: -1, createdAt: -1 },
+} as const;
+
 /** Only active, never-archived products are visible to the storefront. */
 const PUBLIC_VISIBILITY = { isActive: true, archivedAt: null } as const;
 
@@ -286,6 +297,7 @@ export function createProductService<TDoc extends ProductDocument>(
     const { page, limit, skip, sort, search } = parseListQuery(query, {
       allowedSortFields: SORTABLE_FIELDS,
       defaultSort: "-createdAt",
+      sortAliases: SORT_ALIASES,
     });
 
     const filter = await buildFilter(query, scope);

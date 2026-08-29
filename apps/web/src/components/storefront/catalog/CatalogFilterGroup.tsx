@@ -1,7 +1,7 @@
 "use client";
 
 import { CaretDown } from "@phosphor-icons/react";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useLayoutEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 export interface CatalogFilterGroupProps {
@@ -22,6 +22,17 @@ export interface CatalogFilterGroupProps {
 export function CatalogFilterGroup({ title, defaultOpen = false, children }: CatalogFilterGroupProps) {
   const [expanded, setExpanded] = useState(defaultOpen);
   const panelId = useId();
+
+  // Next.js preserves this component's state across back/forward navigation
+  // (client-side back/forward cache — see `staleTimes.md` in the local Next
+  // docs). Without this, leaving the catalog with a group expanded and
+  // coming back restores it exactly as it was instead of Manuel's requested
+  // fresh state.
+  useLayoutEffect(() => {
+    return () => {
+      setExpanded(defaultOpen);
+    };
+  }, [defaultOpen]);
 
   return (
     <div className="border-b border-borde py-md first:pt-0 last:border-b-0 last:pb-0">

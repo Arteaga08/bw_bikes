@@ -127,7 +127,8 @@ function extractColors(variants: (PublicBike | PublicAccessory)["variants"]): st
   return colors;
 }
 
-function toSummary(product: PublicBike | PublicAccessory, kind: "bike" | "accessory"): PublicProductSummary {
+/** Exported for `RelatedAccessories` (PDP cross-sell rail) — same view shape a catalog rail already needs, just built from `PublicBike.relatedAccessories` instead of a `/catalog/*` list response. */
+export function toSummary(product: PublicBike | PublicAccessory, kind: "bike" | "accessory"): PublicProductSummary {
   return {
     id: product.id,
     slug: product.slug,
@@ -247,10 +248,11 @@ const CATALOG_ENDPOINT: Record<CatalogKind, string> = {
  * exact same `serializeFilterState` the sidebar uses to write the URL, so
  * the query this function sends and the query a shopper sees in the address
  * bar can never drift apart. `categoryId` (the route's own, from a `/[slug]`
- * page) is applied *after*, overriding anything `filters.categories` might
- * carry: the sidebar hides its own category groups on those pages
- * (`CatalogFilterGroups`'s `hideCategoryFilter`), so this is a defensive
- * override, not a merge of two real category selections.
+ * page) only fills in `category` when `filters.categories` didn't already
+ * set one: a `/[slug]` page hides "Categoría" but still shows "Grupo" for
+ * its own subcategories (`CatalogFilterGroups`'s `fixedCategoryId`), and a
+ * real pick there has to win over the route's broader default, not get
+ * silently overridden by it.
  */
 export async function getPublicCatalogProducts(options: {
   catalog: CatalogKind;
@@ -262,7 +264,7 @@ export async function getPublicCatalogProducts(options: {
   const params = filters ? serializeFilterState(filters) : new URLSearchParams();
   params.set("page", String(page));
   params.set("limit", String(CATALOG_PAGE_SIZE));
-  if (categoryId) params.set("category", categoryId);
+  if (categoryId && !params.has("category")) params.set("category", categoryId);
 
   const endpoint = CATALOG_ENDPOINT[catalog];
   const res = await publicApiFetch<{ bikes?: PublicBike[]; accessories?: PublicAccessory[] }>(
@@ -295,6 +297,30 @@ export async function getPublicCatalogFilterOptions(catalog: CatalogKind): Promi
     revalidateSeconds: 300,
   });
   return res.data;
+}
+
+/**
+ * Server-side only, anonymous storefront read of one full product by slug —
+ * the PDP's own seam, distinct from `app/api/catalog/bikes/[slug]/route.ts`
+ * (that one is a client-side proxy serving `ComparableBike`, a projection
+ * for the comparator; this reads the full `PublicBike`/`PublicAccessory` a
+ * server component needs). Same 300s cache as every other catalog-shaped
+ * read here — a product's price/gallery/variants don't change on every
+ * request. 404s (and any other non-2xx) throw `ApiError`, same contract
+ * `findCategoryNode` already established for the category pages: the caller
+ * catches it and calls `notFound()`.
+ */
+export async function getPublicBikeBySlug(slug: string): Promise<PublicBike> {
+  const res = await publicApiFetch<{ bike: PublicBike }>(`/catalog/bikes/${slug}`, { revalidateSeconds: 300 });
+  return res.data.bike;
+}
+
+/** Same read as `getPublicBikeBySlug`, against the accessory catalog's own `/catalog/accessories/:slug`. */
+export async function getPublicAccessoryBySlug(slug: string): Promise<PublicAccessory> {
+  const res = await publicApiFetch<{ accessory: PublicAccessory }>(`/catalog/accessories/${slug}`, {
+    revalidateSeconds: 300,
+  });
+  return res.data.accessory;
 }
 
 /**

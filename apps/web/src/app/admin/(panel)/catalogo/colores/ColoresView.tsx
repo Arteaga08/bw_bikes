@@ -154,7 +154,7 @@ export function ColoresView() {
       kind: "text",
       render: (row) => (
         <span className="inline-flex items-center gap-xs">
-          <ColorSwatch hex={row.hex} secondaryHex={row.secondaryHex} className="inline-block h-4 w-4" />
+          <ColorSwatch hex={row.hex} secondaryHex={row.secondaryHex} className="h-4 w-4" />
           {row.value}
         </span>
       ),

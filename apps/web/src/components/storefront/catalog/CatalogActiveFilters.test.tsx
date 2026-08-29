@@ -68,4 +68,14 @@ describe("CatalogActiveFilters", () => {
     fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(replaceMock).toHaveBeenCalledWith("/bicicletas", { scroll: false });
   });
+
+  // Sort isn't a filter — it has no chip here and no CatalogSortMenu selection
+  // should vanish just because the shopper cleared brand/size.
+  it("keeps the active sort when clearing every filter", () => {
+    useSearchParamsMock.mockReturnValueOnce(new URLSearchParams("brand=specialized&size=M&sort=price"));
+    render(<CatalogActiveFilters categoryTree={CATEGORY_TREE} options={OPTIONS} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
+    expect(replaceMock).toHaveBeenCalledWith("/bicicletas?sort=price", { scroll: false });
+  });
 });

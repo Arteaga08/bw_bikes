@@ -113,6 +113,22 @@ describe("sorting", () => {
     expect(response.status).toBe(400);
     expect(response.body.message).toContain("No se puede ordenar");
   });
+
+  // Backs the storefront's "Ordenar por" control ("Novedades primero" /
+  // "Favoritas primero"): a bare `-isNewArrival` would split the grid into
+  // two blocks with an arbitrary order inside each, so the alias resolves to
+  // a compound `{ isNewArrival: -1, createdAt: -1 }` instead of a single field.
+  it("resolves a named sort alias to its compound order", async () => {
+    await Bike.updateOne({ slug: "bici-01" }, { isNewArrival: true }).exec();
+    await Bike.updateOne({ slug: "bici-03" }, { isNewArrival: true }).exec();
+
+    const response = await request(app).get(`${ADMIN}/bikes?sort=-isNewArrival`).set("Cookie", adminCookie);
+
+    expect(response.status).toBe(200);
+    const slugs = response.body.data.bikes.map((bike: { slug: string }) => bike.slug);
+    // Both flagged bikes sort before every unflagged one, regardless of name.
+    expect(slugs.slice(0, 2).sort()).toEqual(["bici-01", "bici-03"]);
+  });
 });
 
 describe("search is regex-escaped", () => {

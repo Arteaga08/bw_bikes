@@ -16,18 +16,34 @@ export interface CatalogFilterDrawerProps {
   categoryTree: PublicCategoryTreeNode[];
   options: PublicCatalogFilterOptions;
   hideCategoryFilter?: boolean;
+  fixedCategoryId?: string;
 }
 
 /**
  * Mobile filter entry point — below `lg` (`CatalogFilterSidebar` covers
  * `lg` and up). Timing and a11y mechanics copy `MobileMenu.tsx` (panel
- * always mounted so `translate-x` has something to animate, `inert` while
+ * always mounted so `translate-y` has something to animate, `inert` while
  * closed, focus trap + Escape + body scroll lock, faster exit than entry);
- * the entry edge follows `SlideOver`'s convention instead — filters are a
- * utility panel over content the shopper is still looking at, not a nav
- * drawer, so it opens from the **right**, not the left `MobileMenu` uses.
+ * unlike `MobileMenu`'s side drawer, this is a **bottom sheet** (Manuel's
+ * call, 2026-08-28) — filters are a thumb-reachable utility panel over
+ * content the shopper is still looking at, so it rises from the bottom
+ * edge and caps at `max-h` instead of spanning the full viewport height.
+ *
+ * Renders as a fragment, not a wrapping `<div>` (2026-08-28): the trigger
+ * lives in its own `sticky top-16` bar so it tracks scroll under the fixed
+ * navbar (`specialized.com` mobile reference, Manuel), and `position: sticky`
+ * plus a `z-index` opens a new stacking context — a scrim/panel nested
+ * *inside* that box would paint under the navbar's own `z-30`. As siblings,
+ * both stay in the root stacking context and their `z-30`/`z-40` behave the
+ * same as before. Callers now render this as a direct child of the page's
+ * outer wrapper, not inside the gutter column — see `bicicletas/page.tsx`.
  */
-export function CatalogFilterDrawer({ categoryTree, options, hideCategoryFilter }: CatalogFilterDrawerProps) {
+export function CatalogFilterDrawer({
+  categoryTree,
+  options,
+  hideCategoryFilter,
+  fixedCategoryId,
+}: CatalogFilterDrawerProps) {
   const [open, setOpen] = useState(false);
   const { filters } = useCatalogFilters();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -58,22 +74,38 @@ export function CatalogFilterDrawer({ categoryTree, options, hideCategoryFilter 
   const activeCount = countActiveFilters(filters);
 
   return (
-    <div className="lg:hidden">
-      <Button
-        ref={toggleRef}
-        variant="ghost"
-        tone="neutral"
-        size="sm"
-        onClick={() => setOpen(true)}
-        aria-expanded={isOpen}
-        aria-controls="catalog-filter-drawer"
-        iconLeft={<Funnel aria-hidden="true" />}
-      >
-        Filtros{activeCount > 0 ? ` (${activeCount})` : ""}
-      </Button>
+    <>
+      {/* Full-bleed bar so it can read as one continuous strip while sticky —
+          the gutter lives on the button's row, not the bar's background, so
+          the bar covers the page's edge-to-edge width under the navbar. */}
+      <div className="sticky top-16 z-20 border-b border-borde bg-blanco px-lg py-md sm:px-[clamp(2rem,8vw,8rem)] lg:hidden">
+        <Button
+          ref={toggleRef}
+          variant="secondary"
+          size="md"
+          className="w-full"
+          onClick={() => setOpen(true)}
+          aria-expanded={isOpen}
+          aria-controls="catalog-filter-drawer"
+          iconLeft={<Funnel aria-hidden="true" className="text-dorado" />}
+        >
+          {/* The count's leading space has to be its own sibling text node,
+              not the first character inside the span: the accessible-name
+              algorithm trims each descendant element's own text before
+              concatenating it, so a space living inside the span gets
+              stripped and the name reads "Filtros(2)". */}
+          {"Filtros"}
+          {activeCount > 0 ? (
+            <>
+              {" "}
+              <span className="text-dorado">({activeCount})</span>
+            </>
+          ) : null}
+        </Button>
+      </div>
 
       {isOpen ? (
-        <div aria-hidden="true" onClick={() => setOpen(false)} className="fixed inset-0 z-30 bg-negro/60" />
+        <div aria-hidden="true" onClick={() => setOpen(false)} className="fixed inset-0 z-30 bg-negro/60 lg:hidden" />
       ) : null}
 
       <div
@@ -84,10 +116,10 @@ export function CatalogFilterDrawer({ categoryTree, options, hideCategoryFilter 
         aria-label="Filtros"
         inert={!isOpen ? true : undefined}
         className={cn(
-          "fixed inset-y-0 right-0 z-40 flex w-80 max-w-[calc(100vw-3.5rem)] flex-col",
-          "border-l border-borde bg-surface",
+          "fixed inset-x-0 bottom-0 z-40 flex max-h-[85vh] flex-col overflow-hidden rounded-t-card-lg lg:hidden",
+          "border-t border-borde bg-surface",
           "transition-transform",
-          isOpen ? "translate-x-0 duration-[260ms] ease-drawer" : "translate-x-full duration-200 ease-out-strong",
+          isOpen ? "translate-y-0 duration-[260ms] ease-drawer" : "translate-y-full duration-200 ease-out-strong",
         )}
       >
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-borde px-lg">
@@ -96,7 +128,12 @@ export function CatalogFilterDrawer({ categoryTree, options, hideCategoryFilter 
         </div>
 
         <div className="flex-1 overflow-y-auto overscroll-contain px-lg py-md">
-          <CatalogFilterGroups categoryTree={categoryTree} options={options} hideCategoryFilter={hideCategoryFilter} />
+          <CatalogFilterGroups
+            categoryTree={categoryTree}
+            options={options}
+            hideCategoryFilter={hideCategoryFilter}
+            fixedCategoryId={fixedCategoryId}
+          />
         </div>
 
         <div className="shrink-0 border-t border-borde p-lg">
@@ -105,6 +142,6 @@ export function CatalogFilterDrawer({ categoryTree, options, hideCategoryFilter 
           </Button>
         </div>
       </div>
-    </div>
+    </>
   );
 }

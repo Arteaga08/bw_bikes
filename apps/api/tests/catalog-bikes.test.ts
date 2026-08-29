@@ -529,6 +529,39 @@ describe("isNewArrival curation flag (M12 entrega 5, Novedades)", () => {
     // accessories into one list and needs it to order them by recency.
     expect(pdp.body.data.bike.createdAt).toEqual(expect.any(String));
   });
+
+  // Backs the storefront's "Ordenar por: Novedades primero" option — distinct
+  // from the `isNewArrival=true` filter above, which hides everything else.
+  // `sort=-isNewArrival` keeps the full list, it just moves flagged bikes up.
+  it("sort=-isNewArrival moves flagged bikes to the front without hiding the rest", async () => {
+    await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(
+        bikePayload(categoryId, brandId, {
+          name: "Sin marcar",
+          slug: "sin-marcar",
+          variants: [{ sku: "BK-SORT-A", size: "M", color: "Negro", fulfillmentMode: "in_stock" }],
+        }),
+      );
+    await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(
+        bikePayload(categoryId, brandId, {
+          name: "Novedad",
+          slug: "novedad-sort",
+          isNewArrival: true,
+          variants: [{ sku: "BK-SORT-B", size: "M", color: "Negro", fulfillmentMode: "in_stock" }],
+        }),
+      );
+
+    const response = await request(app).get(`${PUBLIC}/bikes?sort=-isNewArrival`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.bikes).toHaveLength(2);
+    expect(response.body.data.bikes[0].slug).toBe("novedad-sort");
+  });
 });
 
 describe("isCustomerFavorite curation flag (M12 entrega 8, Favoritas de los ciclistas)", () => {
