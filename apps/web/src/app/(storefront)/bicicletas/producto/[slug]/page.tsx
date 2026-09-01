@@ -108,6 +108,7 @@ export default async function BicicletaProductoPage({ params }: BicicletaProduct
   return (
     <ProductDetail
       product={bike}
+      itemType="bike"
       colorSwatchIndex={buildColorSwatchIndex([...bikeColorSwatches, ...accessoryColorSwatches])}
       sizeGuide={sizeGuide}
       breadcrumbs={breadcrumbs}

@@ -1,3 +1,4 @@
+import type { ItemType } from "@bw-bikes/shared";
 import type { Request, Response } from "express";
 import type { AdjustStockInput, CreateInventoryItemInput } from "../services/inventory.service.js";
 import { inventoryService } from "../services/inventory.service.js";
@@ -32,4 +33,11 @@ export const adjustInventoryStock = asyncHandler(async (req: Request, res: Respo
     requireActor(req),
   );
   sendResponse(res, 200, "Stock actualizado.", { item: await inventoryService.toEnrichedAdminItem(item) });
+});
+
+export const getPublicAvailability = asyncHandler(async (req: Request, res: Response) => {
+  const itemType = req.query["itemType"] as ItemType;
+  const itemIds = (req.query["itemIds"] as string).split(",");
+  const availability = await inventoryService.getPublicAvailability(itemType, itemIds);
+  sendResponse(res, 200, "Disponibilidad obtenida.", { availability });
 });

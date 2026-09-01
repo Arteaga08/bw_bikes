@@ -1,4 +1,4 @@
-import type { CustomerFit, PublicAccessory, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
+import type { CustomerFit, ItemType, PublicAccessory, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
 import type { PublicColorSwatch } from "@/lib/api/public-catalog";
 import { HomeBikeOfMonth } from "@/components/storefront/bike-of-month/HomeBikeOfMonth";
 import { ProductBreadcrumbs, type ProductBreadcrumb } from "./ProductBreadcrumbs";
@@ -11,6 +11,8 @@ import { HomeNewProducts } from "./HomeNewProducts";
 
 export interface ProductDetailProps {
   product: PublicBike | PublicAccessory;
+  /** Passed explicitly by the PDP page — `"relatedAccessories" in product` used to infer it, which `ProductInfo`'s own doc comment calls out as fragile. */
+  itemType: ItemType;
   colorSwatchIndex: Map<string, PublicColorSwatch>;
   /** Bikes only — the accessory PDP never passes this, and `ProductInfo` treats an empty guide as "no data yet", not an error. */
   sizeGuide?: PublicSizeGuideEntry[];
@@ -72,7 +74,7 @@ export interface ProductDetailProps {
  * y `ScrollRail` ya traen su propio espaciado interno pensado para ir de
  * extremo a extremo, igual que en el home.
  */
-export function ProductDetail({ product, colorSwatchIndex, sizeGuide = [], breadcrumbs = [], fit }: ProductDetailProps) {
+export function ProductDetail({ product, itemType, colorSwatchIndex, sizeGuide = [], breadcrumbs = [], fit }: ProductDetailProps) {
   return (
     <>
       <div className="bg-blanco px-lg pt-md pb-2xl sm:px-[clamp(2rem,8vw,8rem)]">
@@ -83,7 +85,7 @@ export function ProductDetail({ product, colorSwatchIndex, sizeGuide = [], bread
           </div>
 
           <div className="mt-lg lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:sticky lg:top-16 lg:self-start">
-            <ProductInfo product={product} colorSwatchIndex={colorSwatchIndex} sizeGuide={sizeGuide} fit={fit} />
+            <ProductInfo product={product} itemType={itemType} colorSwatchIndex={colorSwatchIndex} sizeGuide={sizeGuide} fit={fit} />
           </div>
 
           <div className="lg:col-start-1 lg:row-start-2">

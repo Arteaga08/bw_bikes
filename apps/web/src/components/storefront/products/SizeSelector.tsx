@@ -24,8 +24,10 @@ export interface SizeSelectorProps {
 /**
  * Flat rectangular buttons, not a dropdown and not `ButtonGroup` — that
  * component is scoped to adjacent controls acting on the same thing (reorder
- * arrows, stepper), not a multi-choice picker. An unavailable size (no active
- * variant for it under the current color) stays visible, struck through and
+ * arrows, stepper), not a multi-choice picker. An unavailable size — no active
+ * variant for it under the current color, **or** an active variant that's
+ * sold out (`B-carrito.md` §4: `ProductInfo` folds `useVariantAvailability`
+ * into this same `available` flag) — stays visible, struck through and
  * disabled, rather than hidden: a shopper should see the size exists, not
  * wonder if it was never offered.
  *

@@ -1,12 +1,14 @@
 "use client";
 
-import type { CustomerFit, ProductVariant, PublicAccessory, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
+import type { CustomerFit, ItemType, ProductVariant, PublicAccessory, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { useVariantAvailability } from "@/hooks/use-variant-availability";
 import type { PublicColorSwatch } from "@/lib/api/public-catalog";
 import { recommendSize } from "@/lib/size-recommendation";
+import { AddToCartButton } from "./AddToCartButton";
 import { ColorSwatchSelector } from "./ColorSwatchSelector";
 import { PaymentMethodsBlock } from "./PaymentMethodsBlock";
 import { ProductDescriptionTeaser } from "./ProductDescriptionTeaser";
@@ -18,6 +20,8 @@ import { SizeSelector } from "./SizeSelector";
 
 export interface ProductInfoProps {
   product: PublicBike | PublicAccessory;
+  /** Passed explicitly from the PDP page, not inferred — see `ProductDetailProps.itemType`'s own comment. */
+  itemType: ItemType;
   /** Product `color` names → their template's hex, built once per page — same map `CatalogProductCard` reads. */
   colorSwatchIndex: Map<string, PublicColorSwatch>;
   /** Bikes only — see `ProductDetailProps.sizeGuide`. */
@@ -84,13 +88,26 @@ function findMatchingVariant(
  * carrito para agregar un SKU específico todavía), así que no vive en la
  * URL como los filtros del catálogo.
  */
-export function ProductInfo({ product, colorSwatchIndex, sizeGuide = [], fit }: ProductInfoProps) {
+export function ProductInfo({ product, itemType, colorSwatchIndex, sizeGuide = [], fit }: ProductInfoProps) {
+  const searchParams = useSearchParams();
+  const { isSoldOut } = useVariantAvailability(itemType, [product.id]);
+
   const activeVariants = useMemo(() => product.variants.filter((variant) => variant.isActive), [product.variants]);
   const colors = useMemo(() => extractColors(activeVariants), [activeVariants]);
   const usesSizes = product.category.usesSizes;
   const sizes = useMemo(() => (usesSizes ? extractSizes(activeVariants) : []), [activeVariants, usesSizes]);
 
-  const [selectedColor, setSelectedColor] = useState<string | undefined>(colors[0]);
+  // A return trip from `/ingresar` (`AddToCartButton`'s `?sku=…&agregar=1`
+  // round trip) preselects the exact variant the shopper had picked before
+  // being sent to log in, ahead of both the plain default and A4's fit
+  // suggestion below.
+  const returnedVariant = useMemo(() => {
+    const returnedSku = searchParams.get("sku");
+    if (!returnedSku) return undefined;
+    return activeVariants.find((variant) => variant.sku === returnedSku);
+  }, [searchParams, activeVariants]);
+
+  const [selectedColor, setSelectedColor] = useState<string | undefined>(returnedVariant?.color ?? colors[0]);
 
   // A4-mis-tallas.md: preselects `selectedSize` at mount from the customer's
   // saved height/ride style, only when the recommended size both exists and
@@ -107,19 +124,19 @@ export function ProductInfo({ product, colorSwatchIndex, sizeGuide = [], fit }: 
     );
     return isAvailable ? recommendation.primary : undefined;
   });
-  const [selectedSize, setSelectedSize] = useState<string | undefined>(suggestedSize);
+  const [selectedSize, setSelectedSize] = useState<string | undefined>(returnedVariant?.size ?? suggestedSize);
 
   const colorOptions = colors.map((value) => {
     const swatch = colorSwatchIndex.get(normalizeColorKey(value));
     return { value, hex: swatch?.hex ?? null, secondaryHex: swatch?.secondaryHex ?? null };
   });
 
-  const sizeOptions = sizes.map((value) => ({
-    value,
-    available: activeVariants.some(
-      (variant) => variant.size === value && (variant.color === undefined || variant.color === selectedColor),
-    ),
-  }));
+  const sizeOptions = sizes.map((value) => {
+    const variant = activeVariants.find(
+      (candidate) => candidate.size === value && (candidate.color === undefined || candidate.color === selectedColor),
+    );
+    return { value, available: variant !== undefined && !isSoldOut(variant.sku) };
+  });
 
   const selectedVariant = findMatchingVariant(activeVariants, selectedColor, selectedSize);
 
@@ -175,10 +192,15 @@ export function ProductInfo({ product, colorSwatchIndex, sizeGuide = [], fit }: 
       ) : null}
 
       <div className="mt-lg flex items-center gap-sm">
-        <Button variant="primary" size="md" disabled title="Disponible próximamente" className="w-full">
-          Comprar
-        </Button>
-        <SaveButton itemType={"shortDescription" in product ? "bike" : "accessory"} itemId={product.id} />
+        <AddToCartButton
+          itemType={itemType}
+          itemId={product.id}
+          sku={selectedVariant?.sku}
+          isSoldOut={selectedVariant !== undefined && isSoldOut(selectedVariant.sku)}
+          productName={product.name}
+          className="w-full"
+        />
+        <SaveButton itemType={itemType} itemId={product.id} />
       </div>
 
       <PaymentMethodsBlock />

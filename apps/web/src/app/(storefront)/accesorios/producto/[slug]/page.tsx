@@ -62,6 +62,7 @@ export default async function AccesorioProductoPage({ params }: AccesorioProduct
   return (
     <ProductDetail
       product={accessory}
+      itemType="accessory"
       colorSwatchIndex={buildColorSwatchIndex(colorSwatches)}
       breadcrumbs={breadcrumbs}
     />

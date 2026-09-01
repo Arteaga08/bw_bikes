@@ -3,7 +3,11 @@ import type { ReactNode } from "react";
 import { Navbar } from "@/components/storefront/Navbar";
 import { WishlistProvider } from "@/components/storefront/WishlistProvider";
 import { Footer } from "@/components/storefront/footer/Footer";
+import { CartDrawer } from "@/components/cart/CartDrawer";
+import { CartProvider } from "@/components/cart/CartProvider";
 import { SkipLink } from "@/components/shell/SkipLink";
+import { ToastProvider } from "@/components/ui/Toast";
+import { cloudinaryCloudName } from "@/lib/config";
 import { ApiError } from "@/lib/api/error";
 import { getPublicAccessoryCategoryTree, getPublicBikeCategoryTree, getPublicBrands } from "@/lib/api/public-catalog";
 
@@ -51,13 +55,18 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
   ]);
 
   return (
-    <WishlistProvider>
-      <SkipLink targetId="contenido" />
-      <Navbar bikeCategories={bikeCategories} accessoryCategories={accessoryCategories} brands={brands} />
-      <main id="contenido" tabIndex={-1} className="focus:outline-none">
-        {children}
-      </main>
-      <Footer />
-    </WishlistProvider>
+    <ToastProvider>
+      <CartProvider>
+        <WishlistProvider>
+          <SkipLink targetId="contenido" />
+          <Navbar bikeCategories={bikeCategories} accessoryCategories={accessoryCategories} brands={brands} />
+          <main id="contenido" tabIndex={-1} className="focus:outline-none">
+            {children}
+          </main>
+          <Footer />
+          <CartDrawer cloudName={cloudinaryCloudName()} />
+        </WishlistProvider>
+      </CartProvider>
+    </ToastProvider>
   );
 }

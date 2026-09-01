@@ -1,6 +1,7 @@
 import type { AccountDTO } from "@bw-bikes/shared";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { AccountBackLink } from "@/components/account/AccountBackLink";
 import { AccountSidebar } from "@/components/account/AccountSidebar";
 import { serverApiFetch } from "@/lib/api/server";
 import { requireCustomerSession } from "@/lib/auth/session";
@@ -20,9 +21,12 @@ export default async function MiCuentaLayout({ children }: { children: ReactNode
   const { data } = await serverApiFetch<{ account: AccountDTO }>("/account");
 
   return (
-    <div className="mx-auto flex w-full max-w-[80rem] flex-col md:grid md:grid-cols-[15rem_1fr] md:items-start">
+    <div className="mx-auto flex w-full max-w-[80rem] flex-col pt-lg pb-2xl md:grid md:grid-cols-[15rem_1fr] md:items-start md:pt-2xl md:pb-3xl">
       <AccountSidebar user={data.account} />
-      <div className="min-w-0 px-lg py-lg md:px-xl md:py-xl">{children}</div>
+      <div className="min-w-0 px-lg py-lg md:px-xl md:py-xl">
+        <AccountBackLink />
+        {children}
+      </div>
     </div>
   );
 }

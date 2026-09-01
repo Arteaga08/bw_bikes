@@ -23,7 +23,9 @@ export function ProfileView({ initialAccount }: ProfileViewProps) {
   const [editingPassword, setEditingPassword] = useState(false);
 
   return (
-    <div className="flex flex-col gap-lg">
+    <div className="flex flex-col gap-xl">
+      <h1 className="font-display text-h3 text-negro">Perfil</h1>
+
       <AccountCard
         title="Tu información"
         action={

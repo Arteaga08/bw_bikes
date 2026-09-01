@@ -12,6 +12,7 @@ import {
 } from "../controllers/bike.controller.js";
 import { getPublicBrandBySlug, listPublicBrands } from "../controllers/brand.controller.js";
 import { createCategoryController } from "../controllers/category.controller.js";
+import { getPublicAvailability } from "../controllers/inventory.controller.js";
 import { recordProductView } from "../controllers/product-view.controller.js";
 import { productViewRateLimiter, publicReadRateLimiter, validate } from "../middlewares/index.js";
 import { accessoryCategoryService } from "../services/accessory-category.service.js";
@@ -21,6 +22,7 @@ import {
   brandListQuerySchema,
   categoryListQuerySchema,
   productViewSchema,
+  publicAvailabilityQuerySchema,
   publicProductListQuerySchema,
   slugParamSchema,
 } from "../validators/index.js";
@@ -93,5 +95,11 @@ router.get("/accessories/:slug", validate(slugParamSchema, "params"), getPublicA
 // report. `productViewRateLimiter` runs in addition to the router-wide
 // `publicReadRateLimiter` above — see that limiter's own comment.
 router.post("/views", productViewRateLimiter, validate(productViewSchema), recordProductView);
+
+// M13-B: the one read on this router that must never be cached — stock is far
+// more volatile than the 300s the storefront caches the rest of the catalog
+// for, so this stays its own uncached endpoint instead of riding along on any
+// product DTO.
+router.get("/availability", validate(publicAvailabilityQuerySchema, "query"), getPublicAvailability);
 
 export { router as catalogRouter };

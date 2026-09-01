@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { usePathnameMock } = vi.hoisted(() => ({ usePathnameMock: vi.fn(() => "/") }));
 vi.mock("next/navigation", () => ({ usePathname: usePathnameMock }));
+vi.mock("@/components/cart/CartProvider", () => ({
+  useCart: () => ({ lineCount: 0, openDrawer: vi.fn() }),
+}));
 
 const { Navbar } = await import("./Navbar");
 
@@ -44,10 +47,10 @@ describe("Navbar", () => {
     expect(desktopNav.getByRole("button", { name: "Ofertas" })).toBeInTheDocument();
   });
 
-  it("renders Buscar/Carrito as disabled placeholders and Cuenta as a real link to /mi-cuenta — M13 A1", () => {
+  it("renders Buscar as a disabled placeholder, Carrito as a real trigger and Cuenta as a real link to /mi-cuenta — M13 B", () => {
     renderAt("/bicicletas");
     expect(screen.getByRole("button", { name: "Buscar" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /carrito/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Carrito (0)" })).toBeEnabled();
     expect(screen.getByRole("link", { name: "Cuenta" })).toHaveAttribute("href", "/mi-cuenta");
   });
 

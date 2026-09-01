@@ -1,8 +1,10 @@
 "use client";
 
-import { Heart, MapPin, Package, Ruler, SignOut, User } from "@phosphor-icons/react";
+import { SignOut } from "@phosphor-icons/react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ACCOUNT_NAV_ITEMS } from "@/components/account/nav-items";
 import { Button } from "@/components/ui/Button";
 import { logout } from "@/lib/auth/logout";
 import { cn } from "@/lib/cn";
@@ -11,48 +13,36 @@ export interface AccountSidebarProps {
   user: { firstName: string; lastName: string };
 }
 
-const NAV_ITEMS = [
-  { href: "/mi-cuenta", label: "Perfil", icon: User },
-  { href: "/mi-cuenta/direcciones", label: "Libreta de Direcciones", icon: MapPin },
-  { href: "/mi-cuenta/pedidos", label: "Historial de pedidos", icon: Package },
-  { href: "/mi-cuenta/mis-tallas", label: "Mis tallas", icon: Ruler },
-  { href: "/mi-cuenta/guardados", label: "Guardado para más tarde", icon: Heart },
-] as const;
-
-/**
- * `/mi-cuenta` only matches itself — otherwise Perfil would stay active on
- * every sub-route. Everything else matches by prefix, same reasoning as the
- * admin `Sidebar`.
- */
+/** Every entry matches by prefix — same reasoning as the admin `Sidebar`. */
 function isItemActive(pathname: string, href: string): boolean {
-  return href === "/mi-cuenta" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 /**
  * Fixed left column on `md` and up, over the gray `inset` surface (the
- * reference's sidebar chrome, never its visual style). Below `md` it
- * collapses to a horizontally scrollable strip of the same links — the
- * pattern already used by the admin panel's `TabList`, but as real
- * navigation links rather than in-place tab panels, since these change the
- * route.
+ * reference's sidebar chrome, never its visual style). Below `md`, account
+ * navigation lives in `AccountHub` (the widget grid at `/mi-cuenta`)
+ * instead — this rail renders nothing there.
  */
 export function AccountSidebar({ user }: AccountSidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="border-b border-borde bg-inset md:min-h-full md:w-60 md:shrink-0 md:border-b-0 md:border-r">
-      <div className="px-lg pb-md pt-lg md:pb-lg">
+    <aside className="hidden md:block md:min-h-full md:w-60 md:shrink-0 md:border-r md:border-borde md:bg-inset">
+      <div className="px-xl pt-2xl">
+        {/* Firma de marca del shell de cuenta (referencia visual de Manuel:
+            el wordmark de Specialized arriba a la izquierda de su sidebar,
+            2026-09-01) — dorado por decisión explícita de Manuel, el mismo
+            acento que usa el resto del sitio sobre fondos claros. */}
+        <Image src="/brand/rhino-dorado.svg" alt="" width={24} height={10} className="mb-sm" />
         <p className="font-ui text-caption text-grafito uppercase">Mi Cuenta</p>
         <p className="font-display text-h3 text-negro">
           {user.firstName} {user.lastName}
         </p>
       </div>
 
-      <nav
-        aria-label="Navegación de cuenta"
-        className="flex gap-lg overflow-x-auto px-lg pb-md md:flex-col md:gap-xs md:overflow-visible md:px-sm md:pb-lg"
-      >
-        {NAV_ITEMS.map((item) => {
+      <nav aria-label="Navegación de cuenta" className="flex flex-col gap-sm px-md pb-xl">
+        {ACCOUNT_NAV_ITEMS.map((item) => {
           const isActive = isItemActive(pathname, item.href);
           const Icon = item.icon;
           return (
@@ -61,11 +51,8 @@ export function AccountSidebar({ user }: AccountSidebarProps) {
               href={item.href}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex shrink-0 items-center gap-sm whitespace-nowrap border-b-2 py-sm font-ui text-ui transition-colors duration-150",
-                "md:min-h-11 md:rounded-control md:border-b-0 md:border-l-2 md:px-md md:py-sm",
-                isActive
-                  ? "border-dorado text-negro md:border-dorado md:bg-dorado/10"
-                  : "border-transparent text-grafito hover:text-negro md:hover:bg-surface",
+                "flex min-h-11 shrink-0 items-center gap-sm whitespace-nowrap rounded-control border-l-2 px-md py-sm font-ui text-ui transition-colors duration-150",
+                isActive ? "border-dorado bg-dorado/10 text-negro" : "border-transparent text-grafito hover:bg-surface hover:text-negro",
               )}
             >
               <Icon size={18} weight="regular" aria-hidden="true" />
@@ -75,7 +62,7 @@ export function AccountSidebar({ user }: AccountSidebarProps) {
         })}
       </nav>
 
-      <div className="border-t border-borde px-lg py-md md:px-sm">
+      <div className="border-t border-borde px-md py-lg">
         <Button variant="text" tone="neutral" onClick={logout} iconLeft={<SignOut />}>
           Cerrar sesión
         </Button>

@@ -8,6 +8,7 @@ import type {
   InventorySummaryGroup,
   InventorySummaryTotals,
   ItemType,
+  PublicProductAvailability,
   ReservationReferenceType,
 } from "@bw-bikes/shared";
 import type { ClientSession, Model } from "mongoose";
@@ -671,6 +672,61 @@ async function getAvailability(itemType: ItemType, itemId: string, sku: string):
   return toAvailability(item);
 }
 
+/**
+ * The storefront's only stock signal: whether a variant can be bought right
+ * now, never how many units back that answer. `in_stock` variants need a real
+ * `InventoryItem` row with `onHand - reserved > 0`; `on_request`/`preorder`
+ * hold no physical units, so they read the same as `PublicCartLine.available:
+ * null` — always available. An inactive variant or an archived/inactive
+ * product is simply omitted, never reported `false`, so its absence doesn't
+ * leak that it exists at all. A requested id that matches nothing (deleted,
+ * never existed) is likewise just missing from the response — never a 404.
+ */
+interface AvailabilityVariantDoc {
+  sku: string;
+  fulfillmentMode: FulfillmentMode;
+  isActive: boolean;
+}
+
+interface AvailabilityProductDoc {
+  _id: Types.ObjectId;
+  variants: AvailabilityVariantDoc[];
+}
+
+async function getPublicAvailability(itemType: ItemType, itemIds: string[]): Promise<PublicProductAvailability[]> {
+  const objectIds = itemIds.map((id) => new Types.ObjectId(id));
+
+  const [products, inventoryRows] = await Promise.all([
+    (CATALOG_LOOKUP_MODELS[itemType] as unknown as Model<AvailabilityProductDoc>)
+      .find({ _id: { $in: objectIds }, isActive: true, archivedAt: null })
+      .select("variants")
+      .lean()
+      .exec(),
+    InventoryItem.find({ itemType, itemId: { $in: objectIds } })
+      .select("itemId sku onHand reserved")
+      .lean()
+      .exec(),
+  ]);
+
+  const stockBySku = new Map<string, { onHand: number; reserved: number }>();
+  for (const row of inventoryRows) {
+    stockBySku.set(row.sku, { onHand: row.onHand, reserved: row.reserved });
+  }
+
+  return products.map((product) => ({
+    itemId: String(product._id),
+    variants: product.variants
+      .filter((variant) => variant.isActive)
+      .map((variant) => {
+        if (variant.fulfillmentMode !== "in_stock") {
+          return { sku: variant.sku, isAvailable: true };
+        }
+        const stock = stockBySku.get(variant.sku);
+        return { sku: variant.sku, isAvailable: stock !== undefined && stock.onHand - stock.reserved > 0 };
+      }),
+  }));
+}
+
 // --- Admin surface --------------------------------------------------------
 
 async function findByIdOrFail(id: string): Promise<IInventoryItem> {
@@ -1098,6 +1154,7 @@ export const inventoryService = {
   extendHold,
   releaseExpiredReservations,
   getAvailability,
+  getPublicAvailability,
   listItems,
   getSummary,
   findByIdOrFail,

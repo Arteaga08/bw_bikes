@@ -1,8 +1,22 @@
 import type { PublicAccessory } from "@bw-bikes/shared";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PublicColorSwatch } from "@/lib/api/public-catalog";
 import { RelatedAccessories } from "./RelatedAccessories";
+
+// `AddToCartButton`, rendered when an accessory resolves to exactly one
+// active variant, needs a router and `CartProvider`.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/bicicletas/producto/x",
+  useSearchParams: () => new URLSearchParams(),
+}));
+vi.mock("@/components/cart/CartProvider", () => ({
+  useCart: () => ({ addLine: vi.fn(), openDrawer: vi.fn() }),
+}));
+vi.mock("@/hooks/use-variant-availability", () => ({
+  useVariantAvailability: () => ({ status: "ready", isSoldOut: () => false }),
+}));
 
 function makeAccessory(overrides: Partial<PublicAccessory> = {}): PublicAccessory {
   return {
@@ -46,14 +60,24 @@ describe("RelatedAccessories", () => {
     expect(screen.getByRole("link", { name: /Casco Aero/ })).toHaveAttribute("href", "/accesorios/producto/casco-aero");
   });
 
-  it("renders a disabled add-to-cart CTA named after its own accessory", () => {
+  it("renders a real add-to-cart CTA named after its own accessory when it has a single active variant", () => {
     render(<RelatedAccessories accessories={[makeAccessory()]} colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
 
-    // El carrito todavía no existe (`Comprar` de `ProductInfo` también está
-    // `disabled`), así que el CTA declara la intención sin prometerla.
-    const cta = screen.getByRole("button", { name: "Añadir al carrito: Casco Aero" });
-    expect(cta).toBeDisabled();
-    expect(cta).toHaveAttribute("title", "Disponible próximamente");
+    const cta = screen.getByRole("button", { name: "Agregar al carrito: Casco Aero" });
+    expect(cta).toBeEnabled();
+  });
+
+  it("renders 'Ver opciones' when the accessory has more than one active variant", () => {
+    const accessory = makeAccessory({
+      variants: [
+        { sku: "SKU-1", color: "Negro", fulfillmentMode: "in_stock", isActive: true },
+        { sku: "SKU-2", color: "Blanco", fulfillmentMode: "in_stock", isActive: true },
+      ],
+    });
+    render(<RelatedAccessories accessories={[accessory]} colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
+
+    const cta = screen.getByRole("link", { name: "Ver opciones: Casco Aero" });
+    expect(cta).toHaveAttribute("href", "/accesorios/producto/casco-aero");
   });
 
   it("caps visible color swatches and shows a +N overflow count", () => {

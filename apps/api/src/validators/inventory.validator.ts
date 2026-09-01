@@ -74,6 +74,26 @@ export const adjustStockSchema = Joi.object({
     "object.missing": "Indica el nuevo stock físico (onHand) o un ajuste (delta).",
   });
 
+/**
+ * A comma-separated list of up to 20 ObjectIds for the public availability
+ * endpoint — wider than `objectIdList`'s 10-item cap because a PDP's
+ * `RelatedAccessories` block can legitimately ask about that many items in
+ * one call.
+ */
+const publicAvailabilityItemIds = Joi.string()
+  .trim()
+  .pattern(/^[a-f0-9]{24}(,[a-f0-9]{24}){0,19}$/)
+  .messages({
+    "string.empty": "El identificador es obligatorio.",
+    "string.pattern.base": "Identificador inválido.",
+    "any.required": "El identificador es obligatorio.",
+  });
+
+export const publicAvailabilityQuerySchema = Joi.object({
+  itemType: itemType.required(),
+  itemIds: publicAvailabilityItemIds.required(),
+});
+
 export const inventoryListQuerySchema = Joi.object({
   ...pagination,
   itemType: itemType.optional(),

@@ -4,10 +4,21 @@ import { describe, expect, it, vi } from "vitest";
 import type { PublicColorSwatch } from "@/lib/api/public-catalog";
 import { ProductInfo } from "./ProductInfo";
 
-// `SaveButton`, embedded next to "Comprar" (A5-guardados.md), needs a router and `WishlistProvider`.
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/bicicletas/producto/x" }));
+// `SaveButton` and `AddToCartButton`, embedded next to the buy CTA, need a
+// router, `WishlistProvider`, `CartProvider` and the availability hook.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/bicicletas/producto/x",
+  useSearchParams: () => new URLSearchParams(),
+}));
 vi.mock("@/components/storefront/WishlistProvider", () => ({
   useWishlist: () => ({ isSignedIn: true, isSaved: () => false, toggle: vi.fn() }),
+}));
+vi.mock("@/components/cart/CartProvider", () => ({
+  useCart: () => ({ addLine: vi.fn(), openDrawer: vi.fn() }),
+}));
+vi.mock("@/hooks/use-variant-availability", () => ({
+  useVariantAvailability: () => ({ status: "ready", isSoldOut: () => false }),
 }));
 
 function makeBike(overrides: Partial<PublicBike> = {}): PublicBike {
@@ -39,21 +50,20 @@ describe("ProductInfo", () => {
     const bike = makeBike({
       variants: [{ sku: "SKU-1", fulfillmentMode: "in_stock", isActive: true }],
     });
-    render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
+    render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
 
     expect(screen.getByText("$25,000.00")).toBeInTheDocument();
     expect(screen.queryByRole("radiogroup", { name: "Color" })).not.toBeInTheDocument();
     expect(screen.queryByRole("radiogroup", { name: "Talla" })).not.toBeInTheDocument();
   });
 
-  it("strips the brand from the name and shows the CTA disabled with the 'coming soon' title", () => {
+  it("strips the brand from the name and disables the CTA until a variant is selected", () => {
     const bike = makeBike();
-    render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
+    render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
 
     expect(screen.getByRole("heading", { name: "Verve+ 2" })).toBeInTheDocument();
-    const cta = screen.getByRole("button", { name: "Comprar" });
+    const cta = screen.getByRole("button", { name: "Selecciona una talla" });
     expect(cta).toBeDisabled();
-    expect(cta).toHaveAttribute("title", "Disponible próximamente");
   });
 
   it("pre-selects the first color and shows only sizes matching it as available", () => {
@@ -63,7 +73,7 @@ describe("ProductInfo", () => {
         { sku: "SKU-BLUE-LG", color: "Azul", size: "LG", fulfillmentMode: "in_stock", isActive: true },
       ],
     });
-    render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
+    render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
 
     expect(screen.getByRole("radio", { name: "Rojo" })).toHaveAttribute("aria-checked", "true");
     // MD only exists under Rojo (the pre-selected color) — available.
@@ -80,7 +90,7 @@ describe("ProductInfo", () => {
         { sku: "SKU-RED-LG", color: "Rojo", size: "LG", price: 2700000, fulfillmentMode: "in_stock", isActive: true },
       ],
     });
-    render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
+    render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
 
     expect(screen.getByText("$25,000.00")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "LG" }));
@@ -92,7 +102,7 @@ describe("ProductInfo", () => {
     // Estuvieron invertidos (h1 en `text-h3`, precio en `text-h2`) y el precio
     // le ganaba al nombre — este caso existe para que no se revierta solo.
     const bike = makeBike({ price: 2500000 });
-    render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
+    render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
 
     expect(screen.getByRole("heading", { name: "Verve+ 2" })).toHaveClass("text-h2");
     expect(screen.getByText("$25,000.00")).toHaveClass("text-h3");
@@ -105,7 +115,7 @@ describe("ProductInfo", () => {
         { sku: "SKU-ARCHIVED", color: "Verde", fulfillmentMode: "in_stock", isActive: false },
       ],
     });
-    render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
+    render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
 
     expect(screen.queryByRole("radio", { name: "Verde" })).not.toBeInTheDocument();
     // A single remaining active color still shows — it's product info, not a choice.
@@ -129,7 +139,7 @@ describe("ProductInfo", () => {
       ]);
       const fit: CustomerFit = { heightCm: 170, rideStyle: "balanced", gearSizes: [] };
 
-      render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} fit={fit} />);
+      render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} fit={fit} />);
 
       expect(screen.getByRole("radio", { name: "MD" })).toHaveAttribute("aria-checked", "true");
       expect(screen.getByText("Sugerida según tu perfil · cambiar")).toBeInTheDocument();
@@ -139,7 +149,7 @@ describe("ProductInfo", () => {
       const bike = makeBikeWithSizes([{ sku: "SKU-LG", size: "LG", fulfillmentMode: "in_stock", isActive: true }]);
       const fit: CustomerFit = { heightCm: 170, rideStyle: "balanced", gearSizes: [] };
 
-      render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} fit={fit} />);
+      render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} fit={fit} />);
 
       expect(screen.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
       expect(screen.queryByText("Sugerida según tu perfil · cambiar")).not.toBeInTheDocument();
@@ -148,7 +158,7 @@ describe("ProductInfo", () => {
     it("does not preselect anything without a saved fit", () => {
       const bike = makeBikeWithSizes([{ sku: "SKU-MD", size: "MD", fulfillmentMode: "in_stock", isActive: true }]);
 
-      render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} />);
+      render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} />);
 
       expect(screen.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
       expect(screen.queryByText("Sugerida según tu perfil · cambiar")).not.toBeInTheDocument();

@@ -90,3 +90,15 @@ export interface InventorySummary {
   groups: InventorySummaryGroup[];
   totals: InventorySummaryTotals;
 }
+
+/** One SKU's public availability signal — no counts, just whether it can be sold right now. */
+export interface PublicVariantAvailability {
+  sku: string;
+  isAvailable: boolean;
+}
+
+/** What `GET /catalog/availability` returns per requested `itemId`. */
+export interface PublicProductAvailability {
+  itemId: string;
+  variants: PublicVariantAvailability[];
+}

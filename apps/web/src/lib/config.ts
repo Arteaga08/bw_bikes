@@ -47,3 +47,4 @@ export const PANEL_HOME_PATH = "/admin";
 export const CUSTOMER_LOGIN_PATH = "/ingresar";
 export const CUSTOMER_REGISTER_PATH = "/crear-cuenta";
 export const ACCOUNT_PATH = "/mi-cuenta";
+export const ACCOUNT_PROFILE_PATH = "/mi-cuenta/perfil";

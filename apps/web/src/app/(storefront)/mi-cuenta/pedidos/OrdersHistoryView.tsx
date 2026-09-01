@@ -1,5 +1,5 @@
 import type { ApiResponseMeta, PublicOrder } from "@bw-bikes/shared";
-import { Package } from "@phosphor-icons/react";
+import { Package } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/ButtonLink";

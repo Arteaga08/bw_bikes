@@ -19,12 +19,12 @@ function renderAt(pathname: string) {
 
 describe("AccountSidebar", () => {
   it("shows the customer's full name", () => {
-    renderAt("/mi-cuenta");
+    renderAt("/mi-cuenta/perfil");
     expect(screen.getByText("Ana Pérez")).toBeInTheDocument();
   });
 
-  it("marks Perfil current only on the exact /mi-cuenta route", () => {
-    renderAt("/mi-cuenta");
+  it("marks Perfil current on its own route", () => {
+    renderAt("/mi-cuenta/perfil");
     expect(screen.getByRole("link", { name: /Perfil/ })).toHaveAttribute("aria-current", "page");
   });
 
@@ -36,7 +36,7 @@ describe("AccountSidebar", () => {
 
   it("logs the customer out when 'Cerrar sesión' is clicked", async () => {
     const user = userEvent.setup();
-    renderAt("/mi-cuenta");
+    renderAt("/mi-cuenta/perfil");
 
     await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));
 

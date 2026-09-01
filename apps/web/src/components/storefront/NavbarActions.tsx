@@ -1,4 +1,7 @@
-import { MagnifyingGlass, ShoppingCart, User } from "@phosphor-icons/react/ssr";
+"use client";
+
+import { MagnifyingGlass, ShoppingCart, User } from "@phosphor-icons/react";
+import { useCart } from "@/components/cart/CartProvider";
 import { Button, type ButtonTone } from "@/components/ui/Button";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { ACCOUNT_PATH } from "@/lib/config";
@@ -65,6 +68,8 @@ const ICON_SIZE = 28;
  * stays on all three.
  */
 export function NavbarActions({ tone }: NavbarActionsProps) {
+  const { lineCount, openDrawer } = useCart();
+
   return (
     <div className="flex items-center gap-xs">
       <Button
@@ -90,10 +95,21 @@ export function NavbarActions({ tone }: NavbarActionsProps) {
         variant="bare"
         tone={tone}
         size="icon-lg"
-        disabled
-        aria-label="Carrito (0)"
-        title="Disponible próximamente"
-        iconLeft={<ShoppingCart style={{ width: ICON_SIZE, height: ICON_SIZE }} />}
+        onClick={openDrawer}
+        aria-label={`Carrito (${lineCount})`}
+        iconLeft={
+          <span className="relative inline-flex">
+            <ShoppingCart style={{ width: ICON_SIZE, height: ICON_SIZE }} />
+            {lineCount > 0 ? (
+              <span
+                aria-hidden="true"
+                className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-dorado px-1 font-ui text-[10px] leading-none text-negro"
+              >
+                {lineCount}
+              </span>
+            ) : null}
+          </span>
+        }
         className="hover:!text-dorado"
       />
     </div>

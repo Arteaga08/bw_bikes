@@ -1,10 +1,14 @@
+"use client";
+
 import type { PublicAccessory } from "@bw-bikes/shared";
 import Image from "next/image";
 import Link from "next/link";
-import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
 import { ColorSwatch } from "@/components/ui/ColorSwatch";
+import { useVariantAvailability } from "@/hooks/use-variant-availability";
 import { formatCurrencyCents } from "@/lib/format";
 import { toSummary, type PublicColorSwatch } from "@/lib/api/public-catalog";
+import { AddToCartButton } from "./AddToCartButton";
 import { productHref } from "./product-href";
 import { stripBrandFromName } from "./product-name";
 
@@ -15,7 +19,6 @@ export interface RelatedAccessoriesProps {
 }
 
 const HEADING = "Completa tu equipo";
-const CTA_LABEL = "Añadir al carrito";
 /** El renglón del precio deja ~200px libres a la derecha; cuatro puntos de 20px con su `+N` los llenan, un quinto empujaría contra el precio. */
 const MAX_COLOR_SWATCHES = 4;
 
@@ -71,9 +74,16 @@ function normalizeColorKey(value: string): string {
  * `HomeNewProducts`/`ProductCard` apply elsewhere.
  */
 export function RelatedAccessories({ accessories, colorSwatchIndex }: RelatedAccessoriesProps) {
-  const items = accessories
-    .filter((accessory) => accessory.gallery.length > 0)
-    .map((accessory) => toSummary(accessory, "accessory"));
+  const shown = accessories.filter((accessory) => accessory.gallery.length > 0);
+  const items = shown.map((accessory) => toSummary(accessory, "accessory"));
+
+  // One call for every accessory in the block (B-carrito.md §4) — the PDP's
+  // own `useVariantAvailability` call above is a separate, single-product
+  // request; this is never folded into it.
+  const { isSoldOut } = useVariantAvailability(
+    "accessory",
+    shown.map((accessory) => accessory.id),
+  );
 
   if (items.length === 0) return null;
 
@@ -82,13 +92,19 @@ export function RelatedAccessories({ accessories, colorSwatchIndex }: RelatedAcc
       <h2 className="font-display text-h3 text-negro">{HEADING}</h2>
 
       <ul className="mt-md flex flex-col gap-lg">
-        {items.map((item) => {
+        {items.map((item, index) => {
           const image = item.gallery[0];
           if (!image) return null;
 
           const displayName = stripBrandFromName(item.name, item.brand.name);
           const shownColors = item.colors.slice(0, MAX_COLOR_SWATCHES);
           const extraColors = item.colors.length - shownColors.length;
+
+          // The backend needs one concrete SKU (`POST /cart/lines`) and there's
+          // no color/size picker here — a real `AddToCartButton` only makes
+          // sense when the accessory resolves to exactly one purchasable variant.
+          const activeVariants = shown[index]!.variants.filter((variant) => variant.isActive);
+          const singleVariant = activeVariants.length === 1 ? activeVariants[0] : undefined;
 
           return (
             <li key={item.id}>
@@ -142,21 +158,32 @@ export function RelatedAccessories({ accessories, colorSwatchIndex }: RelatedAcc
               </Link>
 
               {/*
-                `aria-label` con el nombre del producto: tres botones seguidos
-                con la misma etiqueta "Añadir al carrito" son indistinguibles
-                para un lector de pantalla que recorre la lista de controles.
-                Queda listo para cuando el botón deje de estar `disabled`.
+                `aria-label`/`aria-label` con el nombre del producto: tres
+                botones seguidos con la misma etiqueta son indistinguibles para
+                un lector de pantalla que recorre la lista de controles.
               */}
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled
-                title="Disponible próximamente"
-                aria-label={`${CTA_LABEL}: ${displayName}`}
-                className="mt-sm w-full"
-              >
-                {CTA_LABEL}
-              </Button>
+              {singleVariant ? (
+                <AddToCartButton
+                  itemType="accessory"
+                  itemId={item.id}
+                  sku={singleVariant.sku}
+                  isSoldOut={isSoldOut(singleVariant.sku)}
+                  productName={displayName}
+                  variant="ghost"
+                  size="sm"
+                  className="mt-sm w-full"
+                />
+              ) : (
+                <ButtonLink
+                  href={productHref(item)}
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Ver opciones: ${displayName}`}
+                  className="mt-sm w-full"
+                >
+                  Ver opciones
+                </ButtonLink>
+              )}
             </li>
           );
         })}

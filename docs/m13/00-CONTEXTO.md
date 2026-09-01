@@ -29,11 +29,17 @@ el repo verde.
 | A5 | [`A5-guardados.md`](A5-guardados.md) | "Guardado para más tarde" y el botón de corazón |
 | A6 | [`A6-pedidos.md`](A6-pedidos.md) | Historial de pedidos y detalle en `/pedidos/[número]` |
 | B | [`B-carrito.md`](B-carrito.md) | Disponibilidad pública, estado de carrito, botón real, drawer y `/carrito` |
+| C1 | [`C1-checkout-datos.md`](C1-checkout-datos.md) | `/checkout/envio`: dirección, CFDI y resumen antes de pagar |
+| C2 | [`C2-checkout-pago.md`](C2-checkout-pago.md) | `/checkout/pago` con Stripe Elements y `/gracias/[número]` |
 
 Orden obligatorio: **A1 primero** (todo lo demás necesita sesión de cliente). A2 antes que A3–A6
-(aportan el shell de `/mi-cuenta`). A3–A6 son independientes entre sí. B va al final.
+(aportan el shell de `/mi-cuenta`). A3–A6 son independientes entre sí. B va al final de la fase 1.
+C1 requiere B (el carrito) y A3 (libreta de direcciones y CFDI, que reutiliza). C2 requiere C1 —
+no puede empezar sin el carrito ya listo para `POST /orders`.
 
-Checkout, `/checkout` y Stripe Elements en el front son **la fase 2 de M13**, posterior a todo esto.
+Checkout, `/checkout` y Stripe Elements en el front son **la fase 2 de M13**, posterior a todo esto
+— documentada en [`C1-checkout-datos.md`](C1-checkout-datos.md) y
+[`C2-checkout-pago.md`](C2-checkout-pago.md).
 
 ## Decisiones cerradas
 
