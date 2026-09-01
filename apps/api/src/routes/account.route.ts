@@ -1,11 +1,14 @@
 import { Router } from "express";
 import {
+  addWishlistItemHandler,
   changePasswordHandler,
   createAddressHandler,
   getAccountHandler,
   listAddressesHandler,
+  listWishlistHandler,
   removeAddressHandler,
   removeBillingInfoHandler,
+  removeWishlistItemHandler,
   setBillingInfoHandler,
   setDefaultAddressHandler,
   setFitHandler,
@@ -16,10 +19,12 @@ import { authActionRateLimiter, protect, validate } from "../middlewares/index.j
 import {
   accountBillingInfoSchema,
   addressIdParamSchema,
+  addWishlistItemSchema,
   changePasswordSchema,
   saveAddressSchema,
   updateFitSchema,
   updateProfileSchema,
+  wishlistItemParamSchema,
 } from "../validators/index.js";
 
 /**
@@ -58,5 +63,9 @@ router.put("/billing-info", validate(accountBillingInfoSchema), setBillingInfoHa
 router.delete("/billing-info", removeBillingInfoHandler);
 
 router.put("/fit", validate(updateFitSchema), setFitHandler);
+
+router.get("/wishlist", listWishlistHandler);
+router.post("/wishlist", validate(addWishlistItemSchema), addWishlistItemHandler);
+router.delete("/wishlist/:itemType/:itemId", validate(wishlistItemParamSchema, "params"), removeWishlistItemHandler);
 
 export { router as accountRouter };

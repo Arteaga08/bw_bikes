@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { CustomerRegisterForm } from "./CustomerRegisterForm";
 
 export const metadata: Metadata = {
@@ -10,7 +11,8 @@ export default function CrearCuentaPage() {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-base p-lg">
       <div className="w-full max-w-card rounded-card-lg border border-borde bg-surface p-xl">
-        <h1 className="mb-lg font-display text-h2 text-negro">Crear cuenta</h1>
+        <Image src="/brand/rhino-dorado.svg" alt="" width={40} height={17} className="mx-auto mb-sm" />
+        <h1 className="mb-lg text-center font-display text-h2 text-negro">Crear cuenta</h1>
         <CustomerRegisterForm />
       </div>
     </main>

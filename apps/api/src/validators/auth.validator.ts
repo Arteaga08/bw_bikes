@@ -7,12 +7,18 @@ const email = Joi.string().trim().lowercase().email().required().messages({
   "any.required": "El correo es obligatorio.",
 });
 
-const newPassword = Joi.string().min(8).max(72).required().messages({
-  "string.empty": "La contraseña es obligatoria.",
-  "string.min": "La contraseña debe tener al menos 8 caracteres.",
-  "string.max": "La contraseña no puede exceder 72 caracteres.",
-  "any.required": "La contraseña es obligatoria.",
-});
+const newPassword = Joi.string()
+  .min(8)
+  .max(72)
+  .pattern(/(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9])/)
+  .required()
+  .messages({
+    "string.empty": "La contraseña es obligatoria.",
+    "string.min": "La contraseña debe tener al menos 8 caracteres.",
+    "string.max": "La contraseña no puede exceder 72 caracteres.",
+    "string.pattern.base": "La contraseña debe incluir una mayúscula, un número y un carácter especial.",
+    "any.required": "La contraseña es obligatoria.",
+  });
 
 const passwordConfirm = Joi.string().valid(Joi.ref("password")).required().messages({
   "any.only": "Las contraseñas no coinciden.",

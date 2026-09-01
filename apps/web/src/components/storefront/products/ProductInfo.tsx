@@ -13,6 +13,7 @@ import { ProductDescriptionTeaser } from "./ProductDescriptionTeaser";
 import { ProductPrice } from "./ProductPrice";
 import { stripBrandFromName } from "./product-name";
 import { RelatedAccessories } from "./RelatedAccessories";
+import { SaveButton } from "./SaveButton";
 import { SizeSelector } from "./SizeSelector";
 
 export interface ProductInfoProps {
@@ -173,9 +174,12 @@ export function ProductInfo({ product, colorSwatchIndex, sizeGuide = [], fit }: 
         </div>
       ) : null}
 
-      <Button variant="primary" size="md" disabled title="Disponible próximamente" className="mt-lg w-full">
-        Comprar
-      </Button>
+      <div className="mt-lg flex items-center gap-sm">
+        <Button variant="primary" size="md" disabled title="Disponible próximamente" className="w-full">
+          Comprar
+        </Button>
+        <SaveButton itemType={"shortDescription" in product ? "bike" : "accessory"} itemId={product.id} />
+      </div>
 
       <PaymentMethodsBlock />
 

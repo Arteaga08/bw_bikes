@@ -1,12 +1,22 @@
-import type { BillingInfo, SaveAddressInput, UpdateAccountProfileInput, UpdateFitInput } from "@bw-bikes/shared";
+import type {
+  AddWishlistItemInput,
+  BillingInfo,
+  ItemType,
+  SaveAddressInput,
+  UpdateAccountProfileInput,
+  UpdateFitInput,
+} from "@bw-bikes/shared";
 import type { Request, Response } from "express";
 import {
+  addWishlistItem,
   changePassword,
   createAddress,
   getAccount,
   listAddresses,
+  listWishlist,
   removeAddress,
   removeBillingInfo,
+  removeWishlistItem,
   setBillingInfo,
   setDefaultAddress,
   setFit,
@@ -76,4 +86,23 @@ export const removeBillingInfoHandler = asyncHandler(async (req: Request, res: R
 export const setFitHandler = asyncHandler(async (req: Request, res: Response) => {
   const fit = await setFit(requireUserId(req), req.body as UpdateFitInput);
   sendResponse(res, 200, "Tus tallas se guardaron.", { fit });
+});
+
+export const listWishlistHandler = asyncHandler(async (req: Request, res: Response) => {
+  const wishlist = await listWishlist(requireUserId(req));
+  sendResponse(res, 200, "Guardados obtenidos.", { wishlist });
+});
+
+export const addWishlistItemHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { wishlist, wasNew } = await addWishlistItem(requireUserId(req), req.body as AddWishlistItemInput);
+  sendResponse(res, wasNew ? 201 : 200, "Producto guardado.", { wishlist });
+});
+
+export const removeWishlistItemHandler = asyncHandler(async (req: Request, res: Response) => {
+  const wishlist = await removeWishlistItem(
+    requireUserId(req),
+    routeParam(req, "itemType") as ItemType,
+    routeParam(req, "itemId"),
+  );
+  sendResponse(res, 200, "Producto quitado de guardados.", { wishlist });
 });

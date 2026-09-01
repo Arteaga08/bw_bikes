@@ -1,8 +1,14 @@
 import type { CustomerFit, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PublicColorSwatch } from "@/lib/api/public-catalog";
 import { ProductInfo } from "./ProductInfo";
+
+// `SaveButton`, embedded next to "Comprar" (A5-guardados.md), needs a router and `WishlistProvider`.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/bicicletas/producto/x" }));
+vi.mock("@/components/storefront/WishlistProvider", () => ({
+  useWishlist: () => ({ isSignedIn: true, isSaved: () => false, toggle: vi.fn() }),
+}));
 
 function makeBike(overrides: Partial<PublicBike> = {}): PublicBike {
   return {

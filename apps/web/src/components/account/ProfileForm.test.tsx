@@ -16,6 +16,7 @@ const INITIAL: AccountDTO = {
   birthDate: "1990-05-10T00:00:00.000Z",
   city: "CDMX",
   addresses: [],
+  wishlistCount: 0,
 };
 
 describe("ProfileForm", () => {

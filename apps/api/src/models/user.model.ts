@@ -5,6 +5,7 @@ import { BCRYPT_SALT_ROUNDS } from "../config/auth.js";
 import { billingInfoSchema } from "./schemas/billing-info.schema.js";
 import { fitSchema } from "./schemas/fit.schema.js";
 import { type ISavedAddress, MAX_SAVED_ADDRESSES, savedAddressSchema } from "./schemas/saved-address.schema.js";
+import { type IWishlistEntry, MAX_WISHLIST_ITEMS, wishlistEntrySchema } from "./schemas/wishlist-entry.schema.js";
 
 export interface IUser extends Document {
   email: string;
@@ -28,6 +29,7 @@ export interface IUser extends Document {
   addresses: Types.DocumentArray<ISavedAddress>;
   billingInfo?: BillingInfo;
   fit?: CustomerFit;
+  wishlist: IWishlistEntry[];
   twoFactor: {
     enabled: boolean;
     secret?: string; // AES-256-GCM encrypted, never plaintext at rest
@@ -88,6 +90,21 @@ const userSchema = new Schema<IUser>(
     },
     billingInfo: { type: billingInfoSchema },
     fit: { type: fitSchema },
+    // Duplicate check is by `(itemType, itemId)`, not a real Mongo unique
+    // index: that would constrain the pair across every user's wishlist, not
+    // within one document. Same pattern as `fitSchema`'s `gearSizes`
+    // validator. `addWishlistItem` never pushes a duplicate in practice
+    // (A5-guardados.md's idempotent `POST`) — this is defense in depth.
+    wishlist: {
+      type: [wishlistEntrySchema],
+      default: [],
+      validate: {
+        validator: (entries: IWishlistEntry[]) =>
+          entries.length <= MAX_WISHLIST_ITEMS &&
+          new Set(entries.map((entry) => `${entry.itemType}:${String(entry.itemId)}`)).size === entries.length,
+        message: `No puedes guardar más de ${MAX_WISHLIST_ITEMS} productos guardados, ni repetir uno.`,
+      },
+    },
     twoFactor: {
       enabled: { type: Boolean, default: false },
       secret: { type: String, select: false },

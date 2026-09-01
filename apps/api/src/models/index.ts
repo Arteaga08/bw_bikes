@@ -29,6 +29,7 @@ export * from "./schemas/saved-address.schema.js";
 export * from "./schemas/shipment.schema.js";
 export * from "./schemas/shipping-address.schema.js";
 export * from "./schemas/spec-group.schema.js";
+export * from "./schemas/wishlist-entry.schema.js";
 export * from "./session.model.js";
 export * from "./settings.model.js";
 export * from "./size-template.model.js";

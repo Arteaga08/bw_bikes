@@ -1,15 +1,23 @@
 import type {
   AccountDTO,
+  AddWishlistItemInput,
   BillingInfo,
   CustomerFit,
+  ItemType,
   SaveAddressInput,
   SavedAddress,
   UpdateAccountProfileInput,
   UpdateFitInput,
+  WishlistEntry,
 } from "@bw-bikes/shared";
+import { Types } from "mongoose";
 import { type ISavedAddress, MAX_SAVED_ADDRESSES } from "../models/schemas/saved-address.schema.js";
-import { type IUser, User } from "../models/index.js";
+import { type IWishlistEntry, MAX_WISHLIST_ITEMS } from "../models/schemas/wishlist-entry.schema.js";
+import { type IAccessory, type IBike, type IUser, User } from "../models/index.js";
 import { AppError } from "../utils/index.js";
+import { toPublicAccessory } from "./accessory.service.js";
+import { toPublicBike } from "./bike.service.js";
+import { loadProducts } from "./order-pricing.js";
 import { passwordBreachService } from "./password-breach.service.js";
 import { revokeAllSessions } from "./token.service.js";
 
@@ -45,6 +53,7 @@ function toAccountDTO(user: IUser): AccountDTO {
     addresses: user.addresses.map(toSavedAddressDTO),
     billingInfo: user.billingInfo,
     fit: user.fit,
+    wishlistCount: user.wishlist.length,
   };
 }
 
@@ -215,4 +224,76 @@ export async function setFit(userId: string, input: UpdateFitInput): Promise<Cus
   };
   await user.save();
   return user.fit!;
+}
+
+/**
+ * Resolves every saved reference against the live catalog in one batch —
+ * reusing `loadProducts`, the same lookup `resolveCartLines` prices a cart
+ * with, so this never re-implements "does this itemId still exist and is it
+ * active" a second time. A product that no longer resolves, or resolves but
+ * is archived, comes back `isAvailable: false` instead of being dropped —
+ * the wishlist never silently shrinks (A5-guardados.md).
+ */
+async function hydrateWishlist(entries: IWishlistEntry[]): Promise<WishlistEntry[]> {
+  if (entries.length === 0) return [];
+
+  const products = await loadProducts(
+    entries.map((entry) => ({ itemType: entry.itemType, itemId: String(entry.itemId), sku: "", qty: 1 })),
+  );
+
+  return entries.map((entry) => {
+    const itemId = String(entry.itemId);
+    const product = products.get(`${entry.itemType}:${itemId}`);
+
+    return {
+      itemType: entry.itemType,
+      itemId,
+      addedAt: entry.addedAt.toISOString(),
+      isAvailable: Boolean(product?.isActive),
+      ...(product
+        ? { product: entry.itemType === "bike" ? toPublicBike(product as IBike) : toPublicAccessory(product as IAccessory) }
+        : {}),
+    };
+  });
+}
+
+export async function listWishlist(userId: string): Promise<WishlistEntry[]> {
+  const user = await findAccountUser(userId);
+  return hydrateWishlist(user.wishlist);
+}
+
+/**
+ * Idempotent: saving an already-saved product is a no-op, not a duplicate or
+ * an error (A5-guardados.md) — `wasNew` is what lets the controller answer
+ * 200 instead of 201 for that case.
+ */
+export async function addWishlistItem(
+  userId: string,
+  input: AddWishlistItemInput,
+): Promise<{ wishlist: WishlistEntry[]; wasNew: boolean }> {
+  const user = await findAccountUser(userId);
+  const alreadySaved = user.wishlist.some(
+    (entry) => entry.itemType === input.itemType && String(entry.itemId) === input.itemId,
+  );
+
+  if (!alreadySaved) {
+    if (user.wishlist.length >= MAX_WISHLIST_ITEMS) {
+      throw new AppError(`No puedes guardar más de ${MAX_WISHLIST_ITEMS} productos guardados.`, 409);
+    }
+    user.wishlist.push({
+      itemType: input.itemType,
+      itemId: new Types.ObjectId(input.itemId),
+      addedAt: new Date(),
+    } as IWishlistEntry);
+    await user.save();
+  }
+
+  return { wishlist: await hydrateWishlist(user.wishlist), wasNew: !alreadySaved };
+}
+
+export async function removeWishlistItem(userId: string, itemType: ItemType, itemId: string): Promise<WishlistEntry[]> {
+  const user = await findAccountUser(userId);
+  user.wishlist = user.wishlist.filter((entry) => !(entry.itemType === itemType && String(entry.itemId) === itemId));
+  await user.save();
+  return hydrateWishlist(user.wishlist);
 }

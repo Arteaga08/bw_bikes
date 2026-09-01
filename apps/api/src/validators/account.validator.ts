@@ -1,3 +1,4 @@
+import type { ItemType } from "@bw-bikes/shared";
 import { GEAR_SIZE_CATEGORIES, MAX_GEAR_SIZES, RIDE_STYLE_VALUES } from "@bw-bikes/shared";
 import Joi from "joi";
 import { MAX_GEAR_SIZE_VALUE_LENGTH, MAX_HEIGHT_CM, MIN_HEIGHT_CM } from "../models/schemas/fit.schema.js";
@@ -5,6 +6,15 @@ import { MAX_LABEL_LENGTH } from "../models/schemas/saved-address.schema.js";
 import { billingInfoSchema as cartBillingInfoSchema } from "./billing.validator.js";
 import { objectId } from "./common.validator.js";
 import { shippingAddressSchema as cartShippingAddressSchema } from "./shipping.validator.js";
+
+const WISHLIST_ITEM_TYPES: ItemType[] = ["bike", "accessory"];
+
+const wishlistItemType = Joi.string()
+  .valid(...WISHLIST_ITEM_TYPES)
+  .messages({
+    "any.only": "El tipo de producto no es válido.",
+    "any.required": "El tipo de producto es obligatorio.",
+  });
 
 export const updateProfileSchema = Joi.object({
   firstName: Joi.string().trim().min(2).max(60).messages({
@@ -93,4 +103,16 @@ export const updateFitSchema = Joi.object({
       "array.max": `No puedes guardar más de ${MAX_GEAR_SIZES} tallas de equipamiento.`,
       "array.unique": "Cada categoría solo puede tener una talla guardada.",
     }),
+});
+
+/** `POST /account/wishlist` — what identifies a product to save, nothing else (A5-guardados.md: price/name are never trusted from the client). */
+export const addWishlistItemSchema = Joi.object({
+  itemType: wishlistItemType.required(),
+  itemId: objectId.required().messages({ "string.pattern.base": "El producto es inválido." }),
+});
+
+/** `:itemType/:itemId` path params, reused by `DELETE /account/wishlist/:itemType/:itemId`. */
+export const wishlistItemParamSchema = Joi.object({
+  itemType: wishlistItemType.required(),
+  itemId: objectId.required().messages({ "string.pattern.base": "El producto es inválido." }),
 });

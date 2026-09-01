@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { Suspense, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { PasswordStrengthMeter } from "@/components/ui/PasswordStrengthMeter";
 import { apiFetch } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
 
@@ -43,9 +44,11 @@ function ResetPasswordFormContent() {
         type="password"
         autoComplete="new-password"
         required
+        aria-describedby="password-strength"
         value={password}
         onChange={(event) => setPassword(event.target.value)}
       />
+      <PasswordStrengthMeter id="password-strength" password={password} />
       <Input
         label="Confirmar contraseña"
         type="password"

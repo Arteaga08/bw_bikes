@@ -1,7 +1,15 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PublicColorSwatch, PublicProductSummary } from "@/lib/api/public-catalog";
 import { CatalogProductCard } from "./CatalogProductCard";
+
+// `SaveButton`, embedded in every card (A5-guardados.md), needs a router and
+// `WishlistProvider` neither is mounted here — this suite exercises the card
+// itself, not the heart toggle (see `SaveButton.test.tsx`).
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/bicicletas" }));
+vi.mock("@/components/storefront/WishlistProvider", () => ({
+  useWishlist: () => ({ isSignedIn: true, isSaved: () => false, toggle: vi.fn() }),
+}));
 
 function makeProduct(overrides: Partial<PublicProductSummary> = {}): PublicProductSummary {
   return {

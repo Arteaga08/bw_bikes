@@ -1,12 +1,12 @@
 "use client";
 
-import type { InputHTMLAttributes } from "react";
+import type { InputHTMLAttributes, ReactNode } from "react";
 import { forwardRef, useId } from "react";
 import { Check } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 
 export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "size"> {
-  label: string;
+  label: ReactNode;
   /** Hides the visible label text while keeping it for screen readers — a group heading or swatch name already says what the option is. */
   labelHidden?: boolean;
   /** Layout classes for the outer `<label>` (alignment, spacing in a row) — `className` targets the underlying `<input>`, which is `sr-only` and has no visual layout of its own. Same split as `Input`'s `wrapperClassName`. */

@@ -1,6 +1,7 @@
 import type { PublicBrand, PublicCategoryTreeNode } from "@bw-bikes/shared";
 import type { ReactNode } from "react";
 import { Navbar } from "@/components/storefront/Navbar";
+import { WishlistProvider } from "@/components/storefront/WishlistProvider";
 import { Footer } from "@/components/storefront/footer/Footer";
 import { SkipLink } from "@/components/shell/SkipLink";
 import { ApiError } from "@/lib/api/error";
@@ -50,13 +51,13 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
   ]);
 
   return (
-    <>
+    <WishlistProvider>
       <SkipLink targetId="contenido" />
       <Navbar bikeCategories={bikeCategories} accessoryCategories={accessoryCategories} brands={brands} />
       <main id="contenido" tabIndex={-1} className="focus:outline-none">
         {children}
       </main>
       <Footer />
-    </>
+    </WishlistProvider>
   );
 }

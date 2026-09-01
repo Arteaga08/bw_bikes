@@ -1,4 +1,5 @@
 import type { BillingInfo } from "./billing.js";
+import type { ItemType, PublicAccessory, PublicBike } from "./catalog.js";
 import type { MexicanState } from "./shipping.js";
 
 /**
@@ -17,6 +18,12 @@ export interface AccountDTO {
   addresses: SavedAddress[];
   billingInfo?: BillingInfo;
   fit?: CustomerFit;
+  /**
+   * Just the count, not the hydrated list (A5-guardados.md): resolving every
+   * saved product against the live catalog is worth paying for only on
+   * `GET /account/wishlist`, not on every `GET /account` read.
+   */
+  wishlistCount: number;
 }
 
 export interface UpdateAccountProfileInput {
@@ -106,3 +113,28 @@ export interface CustomerFit {
 }
 
 export type UpdateFitInput = Partial<CustomerFit>;
+
+/** Cap on `User.wishlist` (A5-guardados.md), same reasoning as `MAX_SAVED_ADDRESSES`: a short list only its owner ever reads, not a reason for pagination. */
+export const MAX_WISHLIST_ITEMS = 50;
+
+/** One saved product reference (`User.wishlist`, A5) — stores only what's needed to look the product up again; price and name are re-resolved on every read, never persisted here (see `WishlistEntry`). */
+export interface WishlistItem {
+  itemType: ItemType;
+  itemId: string;
+  addedAt: string;
+}
+
+export type AddWishlistItemInput = Pick<WishlistItem, "itemType" | "itemId">;
+
+/**
+ * `GET /account/wishlist`'s hydrated view of one `WishlistItem` — the product
+ * is re-resolved against the live catalog on every read (A5-guardados.md), so
+ * a saved product never just disappears: an archived one comes back with
+ * `isAvailable: false` and its last-known `product` data instead, and the
+ * client decides whether to remove it. `product` is only absent for an
+ * `itemId` that no longer resolves to any document at all.
+ */
+export interface WishlistEntry extends WishlistItem {
+  isAvailable: boolean;
+  product?: PublicBike | PublicAccessory;
+}

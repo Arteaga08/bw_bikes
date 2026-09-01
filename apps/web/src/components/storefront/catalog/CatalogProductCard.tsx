@@ -6,6 +6,7 @@ import { ColorSwatch } from "@/components/ui/ColorSwatch";
 import type { PublicColorSwatch, PublicProductSummary } from "@/lib/api/public-catalog";
 import { formatCurrencyCents } from "@/lib/format";
 import { productHref } from "@/components/storefront/products/product-href";
+import { SaveButton } from "@/components/storefront/products/SaveButton";
 
 export interface CatalogProductCardProps {
   product: PublicProductSummary;
@@ -141,6 +142,10 @@ export function CatalogProductCard({ product, colorSwatchIndex }: CatalogProduct
             ))}
           </div>
         ) : null}
+
+        <div className="absolute right-md top-md z-10">
+          <SaveButton itemType={product.kind} itemId={product.id} tone="inverse" className="bg-negro/40 backdrop-blur-sm" />
+        </div>
       </div>
 
       <div className="p-md">

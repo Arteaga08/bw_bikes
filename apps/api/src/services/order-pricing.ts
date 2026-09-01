@@ -88,6 +88,13 @@ function effectivePriceCents(product: CatalogProduct, variant: ProductVariant): 
  * per catalog — instead of one per line. A ten-line cart is not a reason for
  * ten round trips, and the two catalogs are separate collections, which is why
  * it is two and not one.
+ *
+ * Also the resolver `account.service.ts` reuses to hydrate the wishlist
+ * (A5-guardados.md) against `{ itemType, itemId }` alone — the cart's own
+ * `sku`/`qty` on `CartLineInput` are simply unused by that caller. `category`
+ * and `badges` are populated too, alongside `brand`: the cart snapshot never
+ * reads them, but `toPublicBike`/`toPublicAccessory` need them populated to
+ * serialize a full card-displayable product for the wishlist read.
  */
 async function loadProducts(lines: CartLineInput[]): Promise<Map<string, CatalogProduct>> {
   const bikeIds: Types.ObjectId[] = [];
@@ -101,9 +108,11 @@ async function loadProducts(lines: CartLineInput[]): Promise<Map<string, Catalog
   }
 
   const [bikes, accessories] = await Promise.all([
-    bikeIds.length > 0 ? Bike.find({ _id: { $in: bikeIds } }).populate("brand").exec() : Promise.resolve([]),
+    bikeIds.length > 0
+      ? Bike.find({ _id: { $in: bikeIds } }).populate("brand").populate("category").populate("badges").exec()
+      : Promise.resolve([]),
     accessoryIds.length > 0
-      ? Accessory.find({ _id: { $in: accessoryIds } }).populate("brand").exec()
+      ? Accessory.find({ _id: { $in: accessoryIds } }).populate("brand").populate("category").populate("badges").exec()
       : Promise.resolve([]),
   ]);
 
@@ -320,5 +329,5 @@ function calculateTotals(
   };
 }
 
-export type { LineResolution, ResolvedLine };
-export { buildLineSnapshots, calculateTotals, resolveCaptureMethod, resolveCartLines, resolveLineCategoryIds };
+export type { CatalogProduct, LineResolution, ResolvedLine };
+export { buildLineSnapshots, calculateTotals, loadProducts, resolveCaptureMethod, resolveCartLines, resolveLineCategoryIds };
