@@ -1,5 +1,7 @@
 import { MagnifyingGlass, ShoppingCart, User } from "@phosphor-icons/react/ssr";
 import { Button, type ButtonTone } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
+import { ACCOUNT_PATH } from "@/lib/config";
 
 export interface NavbarActionsProps {
   /** Follows the navbar's own transparent/solid state — `inverse` over the hero, `neutral` once scrolled. */
@@ -19,20 +21,23 @@ export interface NavbarActionsProps {
 const ICON_SIZE = 28;
 
 /**
- * Buscar / Cuenta / Carrito. All three are visual placeholders in this
- * entrega: search opens once the catalog exists (a later entrega), and
- * Cuenta/Carrito are M13. Rendered `disabled` — not omitted — so the bar
- * already has its final proportions; M13 only swaps each `Button` for a
- * real control, no re-layout. The count in "Carrito (0)" mirrors the
- * mockup's "Carrito (0)" and moves once M13 wires up a real cart.
+ * Buscar / Cuenta / Carrito. Buscar and Carrito are visual placeholders
+ * still: search opens once the catalog exists (a later entrega), and
+ * Carrito is M13's entrega B. Cuenta became a real link in M13 A1 — it goes
+ * straight to `ACCOUNT_PATH` (`/mi-cuenta`), which A2's own guard redirects
+ * to `/ingresar` for an anonymous visitor. Buscar/Carrito stay `disabled` —
+ * not omitted — so the bar keeps its final proportions until each one is
+ * wired up in turn, no re-layout when they are. The count in "Carrito (0)"
+ * mirrors the mockup's "Carrito (0)" and moves once M13 wires up a real
+ * cart.
  *
  * Buscar and Cuenta hide below `md`: four 44px squares plus the wordmark
  * don't fit a 390px phone without overflowing (verified — they pushed
  * Carrito and the hamburger off-screen). Carrito stays, as the one
  * persistent affordance shoppers expect on mobile; the other two are
  * reachable once they actually do something (Buscar with the catalog,
- * Cuenta once M13 exists) rather than crowding a screen this narrow with
- * three controls that do nothing yet.
+ * Cuenta now that it links to `/mi-cuenta`) rather than crowding a screen
+ * this narrow with three controls, two of which still do nothing.
  *
  * `max-md:hidden`, not bare `hidden md:inline-flex`: `Button`'s own
  * `CONTROL_CLASSES` already bakes in an unconditional `inline-flex`, so a
@@ -46,17 +51,18 @@ const ICON_SIZE = 28;
  *
  * `hover:!text-dorado`: `bare`'s `neutral` tone hovers to `text-negro`, not
  * gold — correct for the admin's row actions, wrong for this storefront nav,
- * where every hover (links included) turns gold. Overriding it needs the
- * same care as the two cases above, plus one more wrinkle: these controls
- * are `disabled`, and `disabled:text-*` is a same-specificity sibling of
- * `hover:*` that Tailwind's default variant order puts *after* it — so a
- * plain `hover:text-dorado` would lose to the disabled color, not just to
- * `bare`'s own built-in hover. `!` (important) is the one thing that
- * deterministically wins over both without touching `Button.tsx` — which
- * would ripple into every other `bare`/`neutral` control in the admin panel
- * that relies on today's negro hover. Scoped here, on purpose: the color is
- * cosmetic only, `disabled` still blocks the click and pulls it out of tab
- * order — nothing about the control's actual inertness changes.
+ * where every hover (links included) turns gold. `!` (important) is what
+ * deterministically wins over `bare`'s own built-in hover without touching
+ * `Button.tsx` — which would ripple into every other `bare`/`neutral`
+ * control in the admin panel that relies on today's negro hover.
+ *
+ * Buscar and Carrito still carry a *second* reason for the `!`: they're
+ * `disabled`, and `disabled:text-*` is a same-specificity sibling of
+ * `hover:*` that Tailwind's default variant order puts *after* it — a plain
+ * `hover:text-dorado` would lose to the disabled color, not just to `bare`'s
+ * own hover. Cuenta is a `ButtonLink` now, not `disabled`, so only the first
+ * reason still applies there — but it's still one real reason, so the `!`
+ * stays on all three.
  */
 export function NavbarActions({ tone }: NavbarActionsProps) {
   return (
@@ -71,13 +77,12 @@ export function NavbarActions({ tone }: NavbarActionsProps) {
         iconLeft={<MagnifyingGlass style={{ width: ICON_SIZE, height: ICON_SIZE }} />}
         className="max-md:hidden hover:!text-dorado"
       />
-      <Button
+      <ButtonLink
+        href={ACCOUNT_PATH}
         variant="bare"
         tone={tone}
         size="icon-lg"
-        disabled
         aria-label="Cuenta"
-        title="Disponible próximamente"
         iconLeft={<User style={{ width: ICON_SIZE, height: ICON_SIZE }} />}
         className="max-md:hidden hover:!text-dorado"
       />

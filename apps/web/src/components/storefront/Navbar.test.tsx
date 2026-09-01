@@ -44,11 +44,11 @@ describe("Navbar", () => {
     expect(desktopNav.getByRole("button", { name: "Ofertas" })).toBeInTheDocument();
   });
 
-  it("renders Buscar/Cuenta/Carrito as disabled placeholders — M13 wires them up", () => {
+  it("renders Buscar/Carrito as disabled placeholders and Cuenta as a real link to /mi-cuenta — M13 A1", () => {
     renderAt("/bicicletas");
     expect(screen.getByRole("button", { name: "Buscar" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Cuenta" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /carrito/i })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Cuenta" })).toHaveAttribute("href", "/mi-cuenta");
   });
 
   it("renders exactly one mobile menu toggle", () => {

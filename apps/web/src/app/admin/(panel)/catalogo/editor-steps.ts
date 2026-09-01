@@ -6,7 +6,7 @@ import type { ProductBasicsValue } from "./ProductBasicsSection";
  * Lives here (not in `ProductEditor.tsx`) because the step map below is
  * defined in terms of it and both need to agree on the same key set.
  */
-export type FormErrors = Partial<Record<keyof ProductBasicsValue | keyof BikeBasicsValue | "variants", string>>;
+export type FormErrors = Partial<Record<keyof ProductBasicsValue | keyof BikeBasicsValue | "variants" | "specGroups", string>>;
 
 export type EditorStepId = "basics" | "variants" | "specs" | "images" | "review";
 
@@ -16,7 +16,7 @@ export interface EditorStepDefinition {
   /**
    * `FormErrors` keys this step owns — used both to partition `validate()`'s
    * output for the stepper's dots and to gate "Siguiente" in `create`. Steps
-   * with no keys of their own (specs, images, review) never block advancing.
+   * with no keys of their own (images, review) never block advancing.
    */
   errorKeys: readonly (keyof FormErrors)[];
 }
@@ -28,7 +28,7 @@ export const EDITOR_STEPS: readonly EditorStepDefinition[] = [
     errorKeys: ["name", "brand", "category", "description", "priceInput", "compareAtPriceInput", "shortDescription"],
   },
   { id: "variants", label: "Tallas y variantes", errorKeys: ["variants"] },
-  { id: "specs", label: "Ficha técnica y resumen", errorKeys: [] },
+  { id: "specs", label: "Ficha técnica y resumen", errorKeys: ["specGroups"] },
   { id: "images", label: "Imágenes", errorKeys: [] },
   { id: "review", label: "Revisar y guardar", errorKeys: [] },
 ];

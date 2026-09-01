@@ -3,7 +3,13 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ProductDetail } from "@/components/storefront/products/ProductDetail";
 import { ApiError } from "@/lib/api/error";
-import { buildColorSwatchIndex, getPublicAccessoryBySlug, getPublicColorSwatches } from "@/lib/api/public-catalog";
+import {
+  buildColorSwatchIndex,
+  findCategoryAncestry,
+  getPublicAccessoryBySlug,
+  getPublicAccessoryCategoryTree,
+  getPublicColorSwatches,
+} from "@/lib/api/public-catalog";
 
 interface AccesorioProductoPageProps {
   params: Promise<{ slug: string }>;
@@ -32,14 +38,32 @@ export async function generateMetadata({ params }: AccesorioProductoPageProps): 
 
 export default async function AccesorioProductoPage({ params }: AccesorioProductoPageProps) {
   const { slug } = await params;
-  const [accessory, colorSwatches] = await Promise.all([
+  const [accessory, colorSwatches, categoryTree] = await Promise.all([
     loadAccessory(slug),
     getPublicColorSwatches("accessory").catch((error: unknown) => {
+      if (!(error instanceof ApiError)) throw error;
+      return [];
+    }),
+    getPublicAccessoryCategoryTree().catch((error: unknown) => {
       if (!(error instanceof ApiError)) throw error;
       return [];
     }),
   ]);
   if (!accessory) notFound();
 
-  return <ProductDetail product={accessory} colorSwatchIndex={buildColorSwatchIndex(colorSwatches)} />;
+  const breadcrumbs = [
+    ...findCategoryAncestry(categoryTree, accessory.category.id).map((category) => ({
+      label: category.name,
+      href: `/accesorios/${category.slug}`,
+    })),
+    { label: accessory.name },
+  ];
+
+  return (
+    <ProductDetail
+      product={accessory}
+      colorSwatchIndex={buildColorSwatchIndex(colorSwatches)}
+      breadcrumbs={breadcrumbs}
+    />
+  );
 }

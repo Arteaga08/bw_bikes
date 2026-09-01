@@ -8,6 +8,7 @@ import type {
   PublicCatalogFilterOptions,
   PublicCategory,
   PublicCategoryTreeNode,
+  PublicSizeGuideEntry,
 } from "@bw-bikes/shared";
 import type { CatalogKind } from "@/lib/storefront-catalog";
 import { serializeFilterState, type CatalogFilterState } from "@/lib/storefront-catalog-filters";
@@ -66,6 +67,26 @@ export function findCategoryInTree(
     if (child) return child;
   }
   return undefined;
+}
+
+/**
+ * Root → leaf chain for a product's category, for the PDP breadcrumb trail.
+ * Same "never nests past one level" assumption as `findCategoryInTree`: a
+ * root-level category (no parent) resolves to a single-entry chain, a child
+ * category resolves to `[root, child]`. Returns `[]` if `categoryId` isn't in
+ * the tree at all — degrades the same way a stale/missing category does
+ * elsewhere on the PDP, no breadcrumb rather than a broken one.
+ */
+export function findCategoryAncestry(
+  tree: PublicCategoryTreeNode[],
+  categoryId: string,
+): (PublicCategoryTreeNode | PublicCategory)[] {
+  for (const root of tree) {
+    if (root.id === categoryId) return [root];
+    const child = root.children.find((candidate) => candidate.id === categoryId);
+    if (child) return [root, child];
+  }
+  return [];
 }
 
 /**
@@ -335,6 +356,21 @@ export type PublicColorSwatch = PublicCatalogFilterOptions["colors"][number];
 export async function getPublicColorSwatches(catalog: CatalogKind): Promise<PublicColorSwatch[]> {
   const options = await getPublicCatalogFilterOptions(catalog);
   return options.colors;
+}
+
+/**
+ * The PDP's "¿Cuál es mi talla?" / "Guía de tallas" for one bike category —
+ * every active size with a height range that resolves for it, category
+ * overrides already applied server-side. Bikes only: an accessory PDP never
+ * calls this. Same 300s cache as the rest of this file's catalog-shaped
+ * reads — a captured height range doesn't change on every request.
+ */
+export async function getPublicBikeSizeGuide(categoryId: string): Promise<PublicSizeGuideEntry[]> {
+  const res = await publicApiFetch<{ sizeGuide: PublicSizeGuideEntry[] }>(
+    `/catalog/bike-size-guide?categoryId=${encodeURIComponent(categoryId)}`,
+    { revalidateSeconds: 300 },
+  );
+  return res.data.sizeGuide;
 }
 
 /** Same normalization the API's own `getFilterOptions` matches templates by — a color template's `value` is looked up case-insensitively, trimmed. */

@@ -1,3 +1,4 @@
+import type { PublicSizeGuideEntry } from "@bw-bikes/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SizeSelector, type SizeOption } from "./SizeSelector";
@@ -6,6 +7,8 @@ const SIZES: SizeOption[] = [
   { value: "MD", available: true },
   { value: "LG", available: false },
 ];
+
+const SIZE_GUIDE: PublicSizeGuideEntry[] = [{ value: "MD", minHeightCm: 170, maxHeightCm: 180 }];
 
 describe("SizeSelector", () => {
   it("renders nothing when there are no sizes", () => {
@@ -36,5 +39,33 @@ describe("SizeSelector", () => {
 
     fireEvent.click(screen.getByRole("radio", { name: "LG" }));
     expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't render the size-guide links when there's no guide data", () => {
+    render(<SizeSelector sizes={SIZES} selected={undefined} onSelect={vi.fn()} sizeGuide={[]} />);
+    expect(screen.queryByRole("button", { name: "¿Cuál es mi talla?" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Guía de tallas" })).not.toBeInTheDocument();
+  });
+
+  it("opens the guide modal on the finder tab from the first link, and on the guide tab from the second", () => {
+    render(<SizeSelector sizes={SIZES} selected={undefined} onSelect={vi.fn()} sizeGuide={SIZE_GUIDE} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Guía de tallas" }));
+    expect(screen.getByRole("tab", { name: "Guía de tallas" })).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "¿Cuál es mi talla?" }));
+    expect(screen.getByRole("tab", { name: "¿Cuál es mi talla?" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("selecting a size from the guide's result step calls this component's own onSelect", () => {
+    const onSelect = vi.fn();
+    render(<SizeSelector sizes={SIZES} selected={undefined} onSelect={onSelect} sizeGuide={SIZE_GUIDE} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "¿Cuál es mi talla?" }));
+    fireEvent.click(screen.getByRole("button", { name: "Siguiente" }));
+    fireEvent.click(screen.getByRole("button", { name: "Siguiente" }));
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar talla" }));
+
+    expect(onSelect).toHaveBeenCalledWith("MD");
   });
 });

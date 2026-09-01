@@ -4,7 +4,12 @@ import {
   getPublicAccessoryBySlug,
   listPublicAccessories,
 } from "../controllers/accessory.controller.js";
-import { getBikeFilterOptions, getPublicBikeBySlug, listPublicBikes } from "../controllers/bike.controller.js";
+import {
+  getBikeFilterOptions,
+  getBikeSizeGuide,
+  getPublicBikeBySlug,
+  listPublicBikes,
+} from "../controllers/bike.controller.js";
 import { getPublicBrandBySlug, listPublicBrands } from "../controllers/brand.controller.js";
 import { createCategoryController } from "../controllers/category.controller.js";
 import { recordProductView } from "../controllers/product-view.controller.js";
@@ -12,6 +17,7 @@ import { productViewRateLimiter, publicReadRateLimiter, validate } from "../midd
 import { accessoryCategoryService } from "../services/accessory-category.service.js";
 import { bikeCategoryService } from "../services/bike-category.service.js";
 import {
+  bikeSizeGuideQuerySchema,
   brandListQuerySchema,
   categoryListQuerySchema,
   productViewSchema,
@@ -73,6 +79,10 @@ router.get("/bikes", validate(publicProductListQuerySchema, "query"), listPublic
 // mistake `getPublicBikeCategoryTree`'s doc comment already warns about for
 // the missing `/catalog` prefix).
 router.get("/bikes/filter-options", getBikeFilterOptions);
+// Same reasoning, and same fix — not nested under `/bikes` at all, so there's
+// no `:slug` to collide with regardless, but it lives here with its sibling
+// bike-scoped reads rather than at the bottom of the file.
+router.get("/bike-size-guide", validate(bikeSizeGuideQuerySchema, "query"), getBikeSizeGuide);
 router.get("/bikes/:slug", validate(slugParamSchema, "params"), getPublicBikeBySlug);
 
 router.get("/accessories", validate(publicProductListQuerySchema, "query"), listPublicAccessories);

@@ -14,6 +14,7 @@ import { type ActorContext, createProductService } from "./product.service.js";
 import { bikeSizeTemplateService } from "./bike-size-template.service.js";
 import { learnColorTemplates } from "./color-template.service.js";
 import { learnSpecTemplates } from "./spec-template.service.js";
+import { toPublicSpecGroups } from "./spec-groups.js";
 
 const MODULE_NAME = "catalog.bikes";
 
@@ -54,37 +55,6 @@ async function assertAccessoriesExist(ids: string[]): Promise<void> {
   if (found !== ids.length) {
     throw new AppError("Uno o más accesorios sugeridos no existen.", 404);
   }
-}
-
-/**
- * Drops everything the storefront must not render: a group the admin turned
- * off, a row it turned off, and a row left blank (a template applied but never
- * filled in). Groups emptied by that filter are dropped too — an apartado with
- * no rows would render as a bare heading.
- *
- * Done here rather than in the storefront for the same reason
- * `toPublicBike` filters `variants` to `isActive`: shipping a value the UI is
- * expected not to paint is a leak, not a convenience. The admin DTO below
- * keeps every row, since the editor has to be able to turn them back on.
- */
-function toPublicSpecGroups(groups: IBike["specGroups"]): PublicBike["specGroups"] {
-  return [...groups]
-    .filter((group) => group.visible !== false)
-    .sort((a, b) => a.order - b.order)
-    .map((group) => ({
-      // Rebuilt field by field rather than spread: these are Mongoose
-      // subdocuments, and `{...subdoc}` copies its internals (`$__`, `_doc`)
-      // instead of the data. The arrays above only ever spread the *array*,
-      // leaving the subdocuments themselves to serialize through `toJSON`.
-      title: group.title,
-      order: group.order,
-      visible: group.visible,
-      fields: [...group.fields]
-        .filter((field) => field.visible !== false && field.value.trim() !== "")
-        .sort((a, b) => a.order - b.order)
-        .map((field) => ({ label: field.label, value: field.value, order: field.order, visible: field.visible })),
-    }))
-    .filter((group) => group.fields.length > 0);
 }
 
 /**

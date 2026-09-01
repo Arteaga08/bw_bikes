@@ -91,3 +91,8 @@ export const adminProductListQuerySchema = Joi.object({
   color: Joi.string().trim().max(420).optional(),
   isActive: Joi.boolean().optional(),
 });
+
+/** `GET /catalog/bike-size-guide?categoryId=` — the one query param the PDP's size guide needs to resolve category overrides against. */
+export const bikeSizeGuideQuerySchema = Joi.object({
+  categoryId: objectId.required(),
+});

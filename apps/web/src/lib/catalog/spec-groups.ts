@@ -169,3 +169,55 @@ export function moveFieldTo(groups: SpecGroup[], groupIndex: number, from: numbe
     return { ...group, fields: normalizeOrder(nextFields) };
   });
 }
+
+/**
+ * Una fila sin etiqueta *ni* valor no lleva ningún dato: es la fila que
+ * "Agregar especificación" acaba de crear y que el admin todavía no llenó
+ * (`addField(groups, groupIndex, "", "")`). El backend exige `label` no
+ * vacío (`spec-group.validator.ts`), así que enviarla tal cual tumba el
+ * guardado completo de la ficha con un mensaje que no dice ni el apartado ni
+ * la fila responsable. Se llama antes de las dos rutas de guardado en
+ * `ProductEditor` (el `specGroups` del POST de creación y el `PUT
+ * /spec-groups` de edición) — nunca dentro de los mutadores de arriba, que
+ * deben poder crear una fila vacía sin que desaparezca en cuanto se agrega.
+ */
+export function pruneEmptyFields(groups: SpecGroup[]): SpecGroup[] {
+  return groups.map((group) => ({
+    ...group,
+    fields: normalizeOrder(group.fields.filter((field) => field.label.trim() !== "" || field.value.trim() !== "")),
+  }));
+}
+
+export interface SpecSheetError {
+  groupIndex: number;
+  fieldIndex?: number;
+  message: string;
+}
+
+/**
+ * Errores reales del admin que sí deben bloquear el guardado, a diferencia de
+ * la fila 100% vacía que `pruneEmptyFields` descarta en silencio: un apartado
+ * sin título, o una fila con `value` lleno pero `label` vacío (a medio
+ * escribir, no simplemente sin tocar). Nombra el apartado en el mensaje —
+ * `SpecSheetEditor` solo tiene un apartado abierto a la vez, así que sin esto
+ * el admin no tiene forma de saber cuál de los veinte le está fallando.
+ */
+export function findSpecSheetError(groups: SpecGroup[]): SpecSheetError | undefined {
+  for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
+    const group = groups[groupIndex]!;
+    if (group.title.trim() === "") {
+      return { groupIndex, message: "El apartado no tiene título." };
+    }
+    for (let fieldIndex = 0; fieldIndex < group.fields.length; fieldIndex += 1) {
+      const field = group.fields[fieldIndex]!;
+      if (field.label.trim() === "" && field.value.trim() !== "") {
+        return {
+          groupIndex,
+          fieldIndex,
+          message: `El apartado «${group.title}» tiene una especificación con valor pero sin etiqueta.`,
+        };
+      }
+    }
+  }
+  return undefined;
+}

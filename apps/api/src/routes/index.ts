@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { accountRouter } from "./account.route.js";
 import { adminApplicationRouter } from "./admin-application.route.js";
 import { adminAuditLogRouter } from "./admin-audit-log.route.js";
 import { adminCatalogRouter } from "./admin-catalog.route.js";
@@ -34,6 +35,7 @@ v1Router.use("/auth", authRouter);
 v1Router.use("/catalog", catalogRouter);
 v1Router.use("/content", contentRouter);
 v1Router.use("/cart", cartRouter);
+v1Router.use("/account", accountRouter);
 v1Router.use("/orders", orderRouter);
 v1Router.use("/applications", applicationRouter);
 v1Router.use("/admin", adminCatalogRouter);

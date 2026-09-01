@@ -126,6 +126,29 @@ describe("apiFetch", () => {
     }
   });
 
+  it("resolves the original 401 instead of navigating when unauthorizedRedirectPath is null and the refresh fails", async () => {
+    const fetchSpy = vi.fn((url: string) => {
+      if (url === "/api/v1/auth/refresh") {
+        return Promise.resolve(new Response(null, { status: 401 }));
+      }
+      return Promise.resolve(jsonResponse({ status: "fail", message: "No autenticado." }, 401));
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", { configurable: true, value: { ...originalLocation, href: "" } });
+
+    try {
+      await expect(apiFetch("/account", undefined, { unauthorizedRedirectPath: null })).rejects.toMatchObject({
+        name: "ApiError",
+        httpStatus: 401,
+      });
+      expect(window.location.href).toBe("");
+    } finally {
+      Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
+    }
+  });
+
   it("shares a single refresh across concurrent 401s", async () => {
     let refreshCalls = 0;
     let nonRefreshCalls = 0;

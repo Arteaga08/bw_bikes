@@ -14,13 +14,17 @@ export interface ProductPriceProps {
  * frame) and falls back to `basePrice` once no variant is selected yet or
  * the matched one carries no override. `compareAtPrice` stays product-level
  * always: no variant carries its own "precio anterior".
+ *
+ * `text-h3`, un escalón por debajo del `<h1>` de `ProductInfo` (`text-h2`):
+ * el título de la página es el nombre del producto, no su precio. Antes
+ * ambos estaban invertidos y el precio le ganaba al nombre.
  */
 export function ProductPrice({ basePrice, compareAtPrice, selectedVariant }: ProductPriceProps) {
   const displayPrice = selectedVariant?.price ?? basePrice;
 
   return (
     <div className="flex flex-wrap items-baseline gap-x-sm gap-y-0">
-      <p className="font-display text-h2 text-negro">{formatCurrencyCents(displayPrice)}</p>
+      <p className="font-display text-h3 font-extrabold text-negro">{formatCurrencyCents(displayPrice)}</p>
       <span className="font-body text-caption text-grafito">{CURRENCY}</span>
       {compareAtPrice && compareAtPrice > displayPrice ? (
         <p className="font-body text-body text-grafito">

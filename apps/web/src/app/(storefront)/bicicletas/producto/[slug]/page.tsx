@@ -3,7 +3,14 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ProductDetail } from "@/components/storefront/products/ProductDetail";
 import { ApiError } from "@/lib/api/error";
-import { buildColorSwatchIndex, getPublicBikeBySlug, getPublicColorSwatches } from "@/lib/api/public-catalog";
+import {
+  buildColorSwatchIndex,
+  findCategoryAncestry,
+  getPublicBikeBySlug,
+  getPublicBikeCategoryTree,
+  getPublicBikeSizeGuide,
+  getPublicColorSwatches,
+} from "@/lib/api/public-catalog";
 
 interface BicicletaProductoPageProps {
   params: Promise<{ slug: string }>;
@@ -49,7 +56,35 @@ export default async function BicicletaProductoPage({ params }: BicicletaProduct
   ]);
   if (!bike) notFound();
 
+  // Needs `bike.category.id`, so it can't join the `Promise.all` above — it
+  // only knows what to fetch once the bike itself has resolved. Degrades to
+  // `[]` the same way the color-swatch reads do: a size guide that fails to
+  // load just means the "¿Cuál es mi talla?"/"Guía de tallas" links don't
+  // render, not a broken PDP.
+  const [sizeGuide, categoryTree] = await Promise.all([
+    getPublicBikeSizeGuide(bike.category.id).catch((error: unknown) => {
+      if (!(error instanceof ApiError)) throw error;
+      return [];
+    }),
+    getPublicBikeCategoryTree().catch((error: unknown) => {
+      if (!(error instanceof ApiError)) throw error;
+      return [];
+    }),
+  ]);
+  const breadcrumbs = [
+    ...findCategoryAncestry(categoryTree, bike.category.id).map((category) => ({
+      label: category.name,
+      href: `/bicicletas/${category.slug}`,
+    })),
+    { label: bike.name },
+  ];
+
   return (
-    <ProductDetail product={bike} colorSwatchIndex={buildColorSwatchIndex([...bikeColorSwatches, ...accessoryColorSwatches])} />
+    <ProductDetail
+      product={bike}
+      colorSwatchIndex={buildColorSwatchIndex([...bikeColorSwatches, ...accessoryColorSwatches])}
+      sizeGuide={sizeGuide}
+      breadcrumbs={breadcrumbs}
+    />
   );
 }

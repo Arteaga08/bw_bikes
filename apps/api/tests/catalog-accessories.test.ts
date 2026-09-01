@@ -132,4 +132,60 @@ describe("accessory CRUD", () => {
     expect(response.body.data.accessory.category.slug).toBe("cascos");
     expect(response.body.data.accessory).not.toHaveProperty("isActive");
   });
+
+  /**
+   * `toPublicAccessory` used to sort `specGroups` and ship it as-is, unlike
+   * `toPublicBike`'s `toPublicSpecGroups` — a hidden group, a hidden field or
+   * a blank value reached the accessory PDP while the same sheet on a bike
+   * was already withheld. Mirrors `catalog-spec-groups.test.ts`'s
+   * "visibility (M10.6)" suite (bikes) so the two kinds are pinned to the
+   * same contract going forward.
+   */
+  describe("spec sheet visibility (bug parity with bikes)", () => {
+    const MIXED_GROUPS = [
+      {
+        title: "Certificaciones",
+        order: 0,
+        visible: true,
+        fields: [
+          { label: "Norma", value: "CPSC / EN 1078", order: 0, visible: true },
+          { label: "Oculta", value: "No debe verse", order: 1, visible: false },
+          { label: "Sin llenar", value: "", order: 2, visible: true },
+        ],
+      },
+      {
+        title: "Apartado oculto",
+        order: 1,
+        visible: false,
+        fields: [{ label: "Peso", value: "250 g", order: 0, visible: true }],
+      },
+    ];
+
+    it("keeps every row in the admin DTO but withholds the hidden/blank ones from the storefront", async () => {
+      const created = await request(app)
+        .post(`${ADMIN}/accessories`)
+        .set("Cookie", adminCookie)
+        .send(accessoryPayload(categoryId, brandId));
+      const id = created.body.data.accessory.id as string;
+
+      await request(app).put(`${ADMIN}/accessories/${id}/spec-groups`).set("Cookie", adminCookie).send({ groups: MIXED_GROUPS });
+
+      const admin = await request(app).get(`${ADMIN}/accessories/${id}`).set("Cookie", adminCookie);
+      const adminGroups = admin.body.data.accessory.specGroups as typeof MIXED_GROUPS;
+      expect(adminGroups).toHaveLength(2);
+      expect(adminGroups[1]?.visible).toBe(false);
+      expect(adminGroups[0]?.fields[1]?.visible).toBe(false);
+      expect(adminGroups[0]?.fields[2]?.value).toBe("");
+
+      const stored = await Accessory.findById(id).exec();
+      const publicResponse = await request(app).get(`${PUBLIC}/accessories/${stored!.slug}`);
+      const publicGroups = publicResponse.body.data.accessory.specGroups as typeof MIXED_GROUPS;
+      // "Apartado oculto" is gone entirely; "Certificaciones" keeps only the
+      // row that is both visible and filled in.
+      expect(publicGroups).toHaveLength(1);
+      expect(publicGroups[0]?.title).toBe("Certificaciones");
+      expect(publicGroups[0]?.fields).toHaveLength(1);
+      expect(publicGroups[0]?.fields[0]?.label).toBe("Norma");
+    });
+  });
 });

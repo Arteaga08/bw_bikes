@@ -29,11 +29,21 @@ import { parseApiResponse, type ParsedResponse } from "./parse-response";
  * itself is excluded so `requireAdminSession`'s own `serverApiFetch("/auth/me")`
  * keeps throwing a catchable error instead of redirecting out from under it —
  * it already applies its own redirect after inspecting the failure.
+ *
+ * `options.unauthorizedRedirectPath` defaults to `LOGIN_PATH` (today's
+ * behaviour, unchanged for every admin call site). Passing `null` — used by
+ * `requireCustomerSession` — skips the redirect entirely, so a failed
+ * `/auth/me` throws a normal, catchable `ApiError(401)` instead of sending an
+ * anonymous storefront visitor to the admin login screen.
  */
 export async function serverApiFetch<TData = unknown>(
   path: string,
   init?: RequestInit,
+  options?: { unauthorizedRedirectPath?: string | null },
 ): Promise<ParsedResponse<TData>> {
+  // `??` would treat an explicit `null` the same as "not passed" and fall
+  // back to `LOGIN_PATH` — the one value this option exists to allow.
+  const unauthorizedRedirectPath = options?.unauthorizedRedirectPath === undefined ? LOGIN_PATH : options.unauthorizedRedirectPath;
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
@@ -52,8 +62,8 @@ export async function serverApiFetch<TData = unknown>(
     throw new ApiError(NETWORK_ERROR_MESSAGE, 0);
   }
 
-  if (res.status === 401 && !path.startsWith("/auth/")) {
-    redirect(LOGIN_PATH);
+  if (res.status === 401 && !path.startsWith("/auth/") && unauthorizedRedirectPath !== null) {
+    redirect(unauthorizedRedirectPath);
   }
 
   return parseApiResponse<TData>(res);

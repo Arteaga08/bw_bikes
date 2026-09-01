@@ -46,6 +46,16 @@ describe("RelatedAccessories", () => {
     expect(screen.getByRole("link", { name: /Casco Aero/ })).toHaveAttribute("href", "/accesorios/producto/casco-aero");
   });
 
+  it("renders a disabled add-to-cart CTA named after its own accessory", () => {
+    render(<RelatedAccessories accessories={[makeAccessory()]} colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
+
+    // El carrito todavía no existe (`Comprar` de `ProductInfo` también está
+    // `disabled`), así que el CTA declara la intención sin prometerla.
+    const cta = screen.getByRole("button", { name: "Añadir al carrito: Casco Aero" });
+    expect(cta).toBeDisabled();
+    expect(cta).toHaveAttribute("title", "Disponible próximamente");
+  });
+
   it("caps visible color swatches and shows a +N overflow count", () => {
     const accessory = makeAccessory({
       variants: ["Negro", "Blanco", "Rojo", "Azul", "Verde"].map((color, index) => ({

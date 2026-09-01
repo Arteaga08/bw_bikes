@@ -47,7 +47,12 @@ function refreshSession(): Promise<boolean> {
  * login. `/auth/*` itself is excluded — a wrong password or TOTP code
  * legitimately responds 401 and must not trigger a pointless refresh attempt.
  */
-async function fetchWithRefresh(path: string, init: RequestInit | undefined, isFormData: boolean): Promise<Response> {
+async function fetchWithRefresh(
+  path: string,
+  init: RequestInit | undefined,
+  isFormData: boolean,
+  unauthorizedRedirectPath: string | null,
+): Promise<Response> {
   const requestInit = withJsonHeaders(init, isFormData);
   const res = await fetch(`${API_BASE_PATH}${path}`, requestInit);
 
@@ -57,7 +62,10 @@ async function fetchWithRefresh(path: string, init: RequestInit | undefined, isF
 
   const refreshed = await refreshSession();
   if (!refreshed) {
-    window.location.href = LOGIN_PATH;
+    if (unauthorizedRedirectPath === null) {
+      return res;
+    }
+    window.location.href = unauthorizedRedirectPath;
     // Navigation is async — never resolve so nothing downstream acts on a
     // response that belongs to a page that's already leaving.
     return new Promise<Response>(() => {});
@@ -75,13 +83,27 @@ async function fetchWithRefresh(path: string, init: RequestInit | undefined, isF
  * it's what lets the browser send the API's `HttpOnly` cookies without ever
  * needing `credentials: "include"` (same-origin requests carry cookies by
  * default). No CORS negotiation ever happens on this path.
+ *
+ * `options.unauthorizedRedirectPath` defaults to `LOGIN_PATH` (today's
+ * behaviour, unchanged for every admin call site). Passing `null` — used by
+ * storefront call sites that must not send an anonymous visitor into the
+ * admin panel — makes a failed refresh resolve the original 401 response
+ * instead of navigating, so `parseApiResponse` throws a normal, catchable
+ * `ApiError(401)`.
  */
-export async function apiFetch<TData = unknown>(path: string, init?: RequestInit): Promise<ParsedResponse<TData>> {
+export async function apiFetch<TData = unknown>(
+  path: string,
+  init?: RequestInit,
+  options?: { unauthorizedRedirectPath?: string | null },
+): Promise<ParsedResponse<TData>> {
   const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
+  // `??` would treat an explicit `null` the same as "not passed" and fall
+  // back to `LOGIN_PATH` — the one value this option exists to allow.
+  const unauthorizedRedirectPath = options?.unauthorizedRedirectPath === undefined ? LOGIN_PATH : options.unauthorizedRedirectPath;
 
   let res: Response;
   try {
-    res = await fetchWithRefresh(path, init, isFormData);
+    res = await fetchWithRefresh(path, init, isFormData, unauthorizedRedirectPath);
   } catch {
     throw new ApiError(NETWORK_ERROR_MESSAGE, 0);
   }

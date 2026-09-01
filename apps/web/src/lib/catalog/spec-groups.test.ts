@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   addField,
   addGroup,
+  findSpecSheetError,
   moveField,
   moveFieldTo,
   moveGroup,
   moveGroupTo,
   normalizeOrder,
+  pruneEmptyFields,
   removeField,
   removeGroup,
   renameGroup,
@@ -207,5 +209,59 @@ describe("normalizeOrder", () => {
   it("reindexes any array of ordered items to a dense 0..n-1 sequence", () => {
     const items = [{ order: 5 }, { order: 9 }, { order: 2 }];
     expect(normalizeOrder(items).map((item) => item.order)).toEqual([0, 1, 2]);
+  });
+});
+
+describe("pruneEmptyFields", () => {
+  it("drops a field with neither label nor value", () => {
+    const groups = [group("Frenos", 0, [field("Freno Delantero", "Shimano", 0), field("", "", 1)])];
+    const next = pruneEmptyFields(groups);
+
+    expect(next[0]?.fields).toHaveLength(1);
+    expect(next[0]?.fields[0]?.label).toBe("Freno Delantero");
+  });
+
+  it("keeps a field with a value but a blank label — that's a real error, not a no-op row", () => {
+    const groups = [group("Frenos", 0, [field("", "Shimano", 0)])];
+    expect(pruneEmptyFields(groups)[0]?.fields).toHaveLength(1);
+  });
+
+  it("renormalizes order after dropping a field in the middle", () => {
+    const groups = [group("Frenos", 0, [field("Delantero", "A", 0), field("", "", 1), field("Trasero", "B", 2)])];
+    const next = pruneEmptyFields(groups);
+
+    expect(next[0]?.fields.map((f) => f.order)).toEqual([0, 1]);
+    expect(next[0]?.fields.map((f) => f.label)).toEqual(["Delantero", "Trasero"]);
+  });
+
+  it("leaves an already-clean sheet untouched", () => {
+    const groups = [group("Frenos", 0, [field("Delantero", "A", 0)])];
+    expect(pruneEmptyFields(groups)).toEqual(groups);
+  });
+});
+
+describe("findSpecSheetError", () => {
+  it("reports a field with a value but no label, naming its group", () => {
+    const groups = [group("Cuadro", 0), group("Frenos", 1, [field("", "Shimano Dura-Ace BR-R9270", 0)])];
+    expect(findSpecSheetError(groups)).toEqual({
+      groupIndex: 1,
+      fieldIndex: 0,
+      message: "El apartado «Frenos» tiene una especificación con valor pero sin etiqueta.",
+    });
+  });
+
+  it("reports a group with no title", () => {
+    const groups = [group("", 0, [field("Peso", "8.2 kg", 0)])];
+    expect(findSpecSheetError(groups)).toEqual({ groupIndex: 0, message: "El apartado no tiene título." });
+  });
+
+  it("ignores a field with neither label nor value — that's pruneEmptyFields's job", () => {
+    const groups = [group("Frenos", 0, [field("", "", 0)])];
+    expect(findSpecSheetError(groups)).toBeUndefined();
+  });
+
+  it("returns undefined for a clean sheet", () => {
+    const groups = [group("Frenos", 0, [field("Delantero", "Shimano", 0)])];
+    expect(findSpecSheetError(groups)).toBeUndefined();
   });
 });

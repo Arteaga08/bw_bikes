@@ -3,7 +3,7 @@
 import type { SpecGroup, SpecTemplate } from "@bw-bikes/shared";
 import { CaretRight, DotsSixVertical, Eye, EyeSlash, Trash } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -25,6 +25,7 @@ import {
   toggleFieldVisible,
   toggleGroupVisible,
   updateField,
+  type SpecSheetError,
 } from "@/lib/catalog/spec-groups";
 import { cn } from "@/lib/cn";
 
@@ -33,6 +34,13 @@ export interface SpecSheetEditorProps {
   onChange: (groups: SpecGroup[]) => void;
   /** Active saved shapes (M10.3) — feeds "Aplicar plantilla" and the title/label autocomplete. Managed from `/admin/catalogo/fichas-tecnicas`. */
   templates: SpecTemplate[];
+  /**
+   * The one row `ProductEditor`'s `validate()` flagged, if any (a value with
+   * no etiqueta, or an apartado with no título). Opens that apartado and
+   * marks the offending input — without this the admin has no way to tell
+   * which of up to twenty collapsed apartados is the one blocking the save.
+   */
+  error?: SpecSheetError;
 }
 
 const TITLES_DATALIST_ID = "spec-template-titles";
@@ -129,6 +137,7 @@ function SpecFieldsList({
   fieldLabels,
   fieldLabelsDatalistId,
   groupVisible,
+  fieldError,
 }: {
   groups: SpecGroup[];
   onChange: (groups: SpecGroup[]) => void;
@@ -136,6 +145,8 @@ function SpecFieldsList({
   fieldLabels: string[];
   fieldLabelsDatalistId: string;
   groupVisible: boolean;
+  /** The one field within *this* apartado `ProductEditor` flagged, if any — see `SpecSheetEditorProps.error`. */
+  fieldError?: SpecSheetError;
 }) {
   const group = groups[groupIndex];
   const fieldCount = group?.fields.length ?? 0;
@@ -191,6 +202,7 @@ function SpecFieldsList({
                 list={fieldLabels.length > 0 ? fieldLabelsDatalistId : undefined}
                 value={field.label}
                 onChange={(event) => onChange(updateField(groups, groupIndex, fieldIndex, { label: event.target.value }))}
+                error={fieldError?.fieldIndex === fieldIndex ? fieldError.message : undefined}
                 wrapperClassName="min-w-0 flex-1 sm:max-w-[16rem]"
               />
               <Input
@@ -246,11 +258,17 @@ function SpecFieldsList({
  * `fichas-tecnicas/SpecTemplateFormModal.tsx` already established, with its
  * Arrow-key fallback covering keyboard users.
  */
-export function SpecSheetEditor({ groups, onChange, templates }: SpecSheetEditorProps) {
+export function SpecSheetEditor({ groups, onChange, templates, error }: SpecSheetEditorProps) {
   const [newGroupTitle, setNewGroupTitle] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [openIndex, setOpenIndex] = useState<number | null>(groups.length > 0 ? 0 : null);
   const panelIdBase = useId();
+
+  // A fresh `error` always wins over whatever apartado the admin last had
+  // open — it's the one `ProductEditor` just refused to save.
+  useEffect(() => {
+    if (error) setOpenIndex(error.groupIndex);
+  }, [error]);
 
   const { draggingIndex, dropTargetIndex, registerRow, getHandleProps } = useDragReorder({
     itemCount: groups.length,
@@ -321,6 +339,7 @@ export function SpecSheetEditor({ groups, onChange, templates }: SpecSheetEditor
         const groupVisible = group.visible !== false;
         const isOpen = openIndex === groupIndex;
         const panelId = `${panelIdBase}-panel-${groupIndex}`;
+        const groupError = error?.groupIndex === groupIndex ? error : undefined;
 
         return (
           // `bg-inset`, not `bg-base`: this panel lives inside an
@@ -371,6 +390,7 @@ export function SpecSheetEditor({ groups, onChange, templates }: SpecSheetEditor
                     list={TITLES_DATALIST_ID}
                     value={group.title}
                     onChange={(event) => onChange(renameGroup(groups, groupIndex, event.target.value))}
+                    error={groupError && groupError.fieldIndex === undefined ? groupError.message : undefined}
                     wrapperClassName="min-w-[14rem] flex-1"
                   />
                   <GroupVisibilityToggle checked={groupVisible} onChange={() => onChange(toggleGroupVisible(groups, groupIndex))} />
@@ -389,6 +409,7 @@ export function SpecSheetEditor({ groups, onChange, templates }: SpecSheetEditor
                   fieldLabels={fieldLabels}
                   fieldLabelsDatalistId={fieldLabelsDatalistId}
                   groupVisible={groupVisible}
+                  fieldError={groupError}
                 />
               </div>
             ) : null}

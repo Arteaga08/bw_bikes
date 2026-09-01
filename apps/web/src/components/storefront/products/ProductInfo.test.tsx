@@ -81,6 +81,17 @@ describe("ProductInfo", () => {
     expect(screen.getByText("$27,000.00")).toBeInTheDocument();
   });
 
+  it("keeps the product name a step above the price in the type scale", () => {
+    // El nombre es el título de la página; el precio, un dato de ese título.
+    // Estuvieron invertidos (h1 en `text-h3`, precio en `text-h2`) y el precio
+    // le ganaba al nombre — este caso existe para que no se revierta solo.
+    const bike = makeBike({ price: 2500000 });
+    render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} />);
+
+    expect(screen.getByRole("heading", { name: "Verve+ 2" })).toHaveClass("text-h2");
+    expect(screen.getByText("$25,000.00")).toHaveClass("text-h3");
+  });
+
   it("excludes inactive variants from the color/size options", () => {
     const bike = makeBike({
       variants: [

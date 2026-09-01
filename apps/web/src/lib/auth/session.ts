@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { serverApiFetch } from "../api/server";
 import { ACCESS_TOKEN_COOKIE, FORBIDDEN_PATH, LOGIN_PATH } from "../config";
+import { loginHref } from "./customer-redirect";
 
 /**
  * The admin-panel route guard (DASHBOARD_GUIDELINES.md §1,
@@ -60,6 +61,39 @@ export async function requireSuperadminSession(): Promise<AuthUser> {
 
   if (user.role !== "superadmin") {
     redirect(FORBIDDEN_PATH);
+  }
+
+  return user;
+}
+
+/**
+ * The storefront account guard — same first two checks as
+ * `requireAdminSession` (cookie present → `serverApiFetch("/auth/me")`
+ * confirms it), but no role check: any authenticated account, including an
+ * admin browsing the storefront, has its own cart. Passes
+ * `unauthorizedRedirectPath: null` so a failed session doesn't itself
+ * redirect to the admin login — this guard decides where to send the visitor
+ * instead, via `loginHref`, preserving `returnTo` so they land back where
+ * they started once signed in.
+ *
+ * IMPORTANT: same note as `requireAdminSession` — the `try/catch` wraps only
+ * the `serverApiFetch` call, never a `redirect()`, which works by throwing a
+ * Next.js control-flow exception that must never be swallowed.
+ */
+export async function requireCustomerSession(returnTo?: string): Promise<AuthUser> {
+  const cookieStore = await cookies();
+  if (!cookieStore.get(ACCESS_TOKEN_COOKIE)) {
+    redirect(loginHref(returnTo));
+  }
+
+  let user: AuthUser;
+  try {
+    const { data } = await serverApiFetch<{ user: AuthUser }>("/auth/me", undefined, {
+      unauthorizedRedirectPath: null,
+    });
+    user = data.user;
+  } catch {
+    redirect(loginHref(returnTo));
   }
 
   return user;

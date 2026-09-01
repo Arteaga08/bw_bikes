@@ -23,7 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { AccessoryInput, BikeInput } from "@/lib/api/admin-catalog";
 import { adminAccessoriesApi, adminBikesApi } from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
-import { MAX_SPEC_GROUPS } from "@/lib/catalog/spec-groups";
+import { findSpecSheetError, MAX_SPEC_GROUPS, pruneEmptyFields, type SpecSheetError } from "@/lib/catalog/spec-groups";
 import { MAX_SUMMARY_ROWS } from "@/lib/catalog/summary";
 import { centsToPriceInput, parsePriceToCents } from "@/lib/catalog/price";
 import { BadgesPicker, MAX_PRODUCT_BADGES } from "./BadgesPicker";
@@ -115,6 +115,7 @@ const ERROR_TARGET_IDS: Partial<Record<keyof FormErrors, string>> = {
   compareAtPriceInput: PRODUCT_FIELD_IDS.compareAtPriceInput,
   shortDescription: PRODUCT_FIELD_IDS.shortDescription,
   variants: "section-variants",
+  specGroups: "section-specs",
 };
 
 /**
@@ -299,6 +300,11 @@ function ProductEditorContent({
   }, [pendingGallery]);
 
   const [errors, setErrors] = useState<FormErrors>({});
+  // Location of the one `specGroups` error `errors.specGroups` names but
+  // can't point to on its own — `SpecSheetEditor` only opens one apartado at
+  // a time, so this is what lets it open the right one and mark the right
+  // input, instead of leaving the admin to search all twenty by hand.
+  const [specSheetError, setSpecSheetError] = useState<SpecSheetError | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
 
@@ -358,7 +364,15 @@ function ProductEditorContent({
   }
 
   /** Every field `validate()` covers, independent of whether the whole form ends up valid — `validate()` and "Siguiente"'s per-step gate both read from this. */
-  function computeErrors(): { errors: FormErrors; priceCents: number | null; compareAtPriceCents: number | null } {
+  function computeErrors(): {
+    errors: FormErrors;
+    priceCents: number | null;
+    compareAtPriceCents: number | null;
+    /** The specific row `errors.specGroups` names, if any — `undefined` once the sheet is clean. */
+    specSheetError: SpecSheetError | undefined;
+    /** `specGroups` with every no-op empty row already dropped — what actually goes to the API on a clean validate. */
+    prunedSpecGroups: SpecGroup[];
+  } {
     const nextErrors: FormErrors = {};
 
     if (!basics.name.trim()) nextErrors.name = "El nombre es obligatorio.";
@@ -387,26 +401,35 @@ function ProductEditorContent({
       nextErrors.variants = "Hay SKU repetidos entre variantes — corrígelos antes de guardar.";
     }
 
-    return { errors: nextErrors, priceCents, compareAtPriceCents };
+    // A row `SpecSheetEditor`'s "Agregar especificación" just added and the
+    // admin never filled in carries no data at all — pruned in silence,
+    // never surfaced as an error. Only what's left after that prune (a group
+    // with no title, a row with a value but no label) is a real mistake.
+    const prunedSpecGroups = pruneEmptyFields(specGroups);
+    const specSheetError = findSpecSheetError(prunedSpecGroups);
+    if (specSheetError) nextErrors.specGroups = specSheetError.message;
+
+    return { errors: nextErrors, priceCents, compareAtPriceCents, specSheetError, prunedSpecGroups };
   }
 
   type ValidationResult =
-    | { ok: true; priceCents: number; compareAtPriceCents: number | null }
+    | { ok: true; priceCents: number; compareAtPriceCents: number | null; specGroups: SpecGroup[] }
     | { ok: false; errors: FormErrors };
 
   function validate(): ValidationResult {
-    const { errors: nextErrors, priceCents, compareAtPriceCents } = computeErrors();
+    const { errors: nextErrors, priceCents, compareAtPriceCents, specSheetError, prunedSpecGroups } = computeErrors();
     setErrors(nextErrors);
+    setSpecSheetError(specSheetError);
     if (Object.keys(nextErrors).length > 0 || priceCents === null) return { ok: false, errors: nextErrors };
-    return { ok: true, priceCents, compareAtPriceCents };
+    return { ok: true, priceCents, compareAtPriceCents, specGroups: prunedSpecGroups };
   }
 
   /**
    * `create` only: validates and, if the *current* step owns no errors,
    * advances — errors belonging to other steps don't block leaving this one
    * (they'll gate their own step when its turn comes). Steps that own no
-   * validated field (specs, images, review) skip validation entirely and
-   * just move on. `edit` never gates; every step is already unlocked.
+   * validated field (images, review) skip validation entirely and just move
+   * on.  `edit` never gates; every step is already unlocked.
    */
   function handleNext(): void {
     const nextStepId = stepIdAt(stepIndex(currentStepId) + 1);
@@ -416,8 +439,9 @@ function ProductEditorContent({
     }
     const currentStepDef = EDITOR_STEPS[stepIndex(currentStepId)];
     if (currentStepDef && currentStepDef.errorKeys.length > 0) {
-      const { errors: nextErrors } = computeErrors();
+      const { errors: nextErrors, specSheetError } = computeErrors();
       setErrors(nextErrors);
+      setSpecSheetError(specSheetError);
       if (stepHasErrors(nextErrors, currentStepId)) return;
     }
     goToStep(nextStepId);
@@ -431,11 +455,14 @@ function ProductEditorContent({
    * The second half of a `edit`-mode save. Its own try/catch so a failure
    * here reports precisely — "the product saved, the sheet didn't" — instead
    * of falling into the generic "no se pudo guardar" from the outer catch,
-   * which would wrongly imply nothing was persisted.
+   * which would wrongly imply nothing was persisted. Takes `groups` rather
+   * than reading `specGroups` off the closure: the caller already ran it
+   * through `validate()`'s prune, and sending the raw state back here would
+   * undo that.
    */
-  async function persistSpecSheet(id: string): Promise<boolean> {
+  async function persistSpecSheet(id: string, groups: SpecGroup[]): Promise<boolean> {
     try {
-      const saved = await productApi.replaceSpecGroups(id, specGroups);
+      const saved = await productApi.replaceSpecGroups(id, groups);
       setSpecGroups(saved);
       return true;
     } catch (error) {
@@ -455,7 +482,7 @@ function ProductEditorContent({
       if (failingStep) goToStep(failingStep);
       return;
     }
-    const { priceCents, compareAtPriceCents } = validated;
+    const { priceCents, compareAtPriceCents, specGroups: sanitizedSpecGroups } = validated;
 
     const resolvedVariants = variants.map((row) => {
       const overridePrice = row.priceInput.trim() ? parsePriceToCents(row.priceInput) : null;
@@ -495,8 +522,9 @@ function ProductEditorContent({
       isNewArrival,
       isCustomerFavorite,
       // The sheet only rides along on create — on edit it's its own PUT,
-      // fired below once the product itself has saved.
-      ...(mode === "create" ? { specGroups } : {}),
+      // fired below once the product itself has saved. `sanitizedSpecGroups`,
+      // not the raw `specGroups` state — already pruned by `validate()`.
+      ...(mode === "create" ? { specGroups: sanitizedSpecGroups } : {}),
     };
 
     /**
@@ -560,7 +588,7 @@ function ProductEditorContent({
         };
         const saved =
           mode === "create" ? await adminBikesApi.create(payload) : await adminBikesApi.update(productId!, payload);
-        if (mode === "edit" && !(await persistSpecSheet(productId!))) return;
+        if (mode === "edit" && !(await persistSpecSheet(productId!, sanitizedSpecGroups))) return;
         await persistPendingGeometry(saved.id);
         await persistPendingGallery(saved.id);
         afterSave(saved.id);
@@ -570,7 +598,7 @@ function ProductEditorContent({
           mode === "create"
             ? await adminAccessoriesApi.create(payload)
             : await adminAccessoriesApi.update(productId!, payload);
-        if (mode === "edit" && !(await persistSpecSheet(productId!))) return;
+        if (mode === "edit" && !(await persistSpecSheet(productId!, sanitizedSpecGroups))) return;
         await persistPendingGallery(saved.id);
         afterSave(saved.id);
       }
@@ -716,7 +744,8 @@ function ProductEditorContent({
               count={{ current: specGroups.length, max: MAX_SPEC_GROUPS }}
               help={<SectionHelp zone="fichaTecnica" />}
             >
-              <SpecSheetEditor groups={specGroups} onChange={setSpecGroups} templates={specTemplates} />
+              {errors.specGroups ? <p className="font-body text-caption text-estado-error">{errors.specGroups}</p> : null}
+              <SpecSheetEditor groups={specGroups} onChange={setSpecGroups} templates={specTemplates} error={specSheetError} />
             </EditorSection>
           </>
         );

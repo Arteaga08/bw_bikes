@@ -24,6 +24,14 @@ export interface ProductSpecGroupsProps {
  * frases largas ("Tarmac SL9 FACT 10r Carbon, Rider First Engineered, Win
  * Tunnel Engineered..."), así que el label va arriba y el valor debajo, con
  * el mismo tope de 68ch que `ProductOverview` usa para su propio texto largo.
+ *
+ * La etiqueta ("Freno Delantero") se pinta en el mismo tamaño que el valor,
+ * solo que en `negro`/`font-medium` contra el `grafito` regular del valor —
+ * jerarquía por peso y color, no por tamaño. Antes era un eyebrow de 11px en
+ * mayúsculas (`text-eyebrow uppercase`), que funciona para un resumen de 4-5
+ * filas (`ProductSummaryCard`) pero no para una subcategoría real dentro de
+ * un apartado — la referencia que Manuel trajo (Specialized/Cannondale) la
+ * lee como un renglón más de la ficha, no como metadata diminuta.
  */
 export function ProductSpecGroups({ groups }: ProductSpecGroupsProps) {
   return (
@@ -42,8 +50,8 @@ export function ProductSpecGroups({ groups }: ProductSpecGroupsProps) {
           <dl className="mt-md grid gap-lg lg:mt-0">
             {group.fields.map((field) => (
               <div key={`${field.order}-${field.label}`}>
-                <dt className="font-body text-eyebrow uppercase text-grafito">{field.label}</dt>
-                <dd className="mt-xs max-w-[68ch] font-body text-body-l text-negro">{field.value}</dd>
+                <dt className="font-body text-body-l font-medium text-negro">{field.label}</dt>
+                <dd className="mt-xs max-w-[68ch] font-body text-body-l text-grafito">{field.value}</dd>
               </div>
             ))}
           </dl>

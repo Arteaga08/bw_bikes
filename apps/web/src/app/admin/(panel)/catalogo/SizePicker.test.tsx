@@ -5,7 +5,7 @@ import { SizePicker } from "./SizePicker";
 import { emptyVariantRow, type VariantRow } from "./VariantsEditor";
 
 function template(overrides: Partial<SizeTemplate> = {}): SizeTemplate {
-  return { id: "size-1", value: "54", source: "manual", order: 0, isActive: true, ...overrides };
+  return { id: "size-1", value: "54", source: "manual", order: 0, isActive: true, categoryOverrides: [], ...overrides };
 }
 
 function row(overrides: Partial<VariantRow> = {}): VariantRow {

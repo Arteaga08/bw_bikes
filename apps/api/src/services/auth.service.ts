@@ -55,7 +55,7 @@ async function issueEmailVerification(user: IUser): Promise<void> {
   };
   await user.save();
 
-  const verifyUrl = `${env.clientUrl}/verify-email?token=${rawToken}`;
+  const verifyUrl = `${env.clientUrl}/verificar-correo?token=${rawToken}`;
   await createMailer().sendVerificationEmail({ to: user.email, firstName: user.firstName, verifyUrl });
 }
 
@@ -143,7 +143,7 @@ export async function forgotPassword(email: string): Promise<void> {
   };
   await user.save();
 
-  const resetUrl = `${env.clientUrl}/reset-password?token=${rawToken}`;
+  const resetUrl = `${env.clientUrl}/restablecer-contrasena?token=${rawToken}`;
   await createMailer().sendPasswordResetEmail({ to: user.email, firstName: user.firstName, resetUrl });
 }
 

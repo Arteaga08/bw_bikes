@@ -22,6 +22,16 @@ import { Bike, BikeCategory } from "../models/index.js";
  * specs — demo catalog, so internal consistency with what's already on the
  * PDP mattered more than chasing the exact current-year trim.
  *
+ * `specGroups` is six apartados (Motor y batería, Cuadro, Frenos,
+ * Transmisión, Ruedas, Peso), not the one apartado literally titled
+ * "Especificaciones técnicas" this script originally wrote. That title
+ * belongs to the section itself (`ProductSpecSheet.tsx`'s fixed
+ * `<ProductDisclosure title="Especificaciones técnicas">`) — a group
+ * reusing it duplicated the heading on the PDP and left the ficha with no
+ * real categories underneath, which is what Manuel flagged comparing this
+ * page against Specialized/Cannondale's. This is the reference the rest of
+ * the catalog's fichas should copy.
+ *
  * Idempotent: re-running overwrites the same fields with the same values,
  * never duplicates. Bypasses `bikeService` on purpose, same reasoning as
  * `seed-novedades-products.ts` — no `ActorContext` outside HTTP.
@@ -66,7 +76,7 @@ async function run(): Promise<void> {
 
     bike.specGroups = [
       {
-        title: "Especificaciones técnicas",
+        title: "Motor y batería",
         order: 0,
         visible: true,
         fields: [
@@ -74,13 +84,40 @@ async function run(): Promise<void> {
           { label: "Batería", value: "400 Wh, integrada en el cuadro (removible)", order: 1, visible: true },
           { label: "Autonomía", value: "Hasta 80 km en modo Eco", order: 2, visible: true },
           { label: "Panel de control", value: "Bosch Purion, montado en el manubrio", order: 3, visible: true },
-          { label: "Cuadro", value: "Aluminio Alpha Gold, posición de manejo erguida", order: 4, visible: true },
-          { label: "Horquilla", value: "Suspensión, 50 mm de recorrido", order: 5, visible: true },
-          { label: "Frenos", value: "Hidráulicos de disco", order: 6, visible: true },
-          { label: "Transmisión", value: "Shimano Altus, 8 velocidades", order: 7, visible: true },
-          { label: "Ruedas", value: "27.5\" x 2.0\"", order: 8, visible: true },
-          { label: "Peso", value: "Aprox. 24.5 kg", order: 9, visible: true },
         ],
+      },
+      {
+        title: "Cuadro",
+        order: 1,
+        visible: true,
+        fields: [
+          { label: "Cuadro", value: "Aluminio Alpha Gold, posición de manejo erguida", order: 0, visible: true },
+          { label: "Horquilla", value: "Suspensión, 50 mm de recorrido", order: 1, visible: true },
+        ],
+      },
+      {
+        title: "Frenos",
+        order: 2,
+        visible: true,
+        fields: [{ label: "Frenos", value: "Hidráulicos de disco", order: 0, visible: true }],
+      },
+      {
+        title: "Transmisión",
+        order: 3,
+        visible: true,
+        fields: [{ label: "Transmisión", value: "Shimano Altus, 8 velocidades", order: 0, visible: true }],
+      },
+      {
+        title: "Ruedas",
+        order: 4,
+        visible: true,
+        fields: [{ label: "Ruedas", value: "27.5\" x 2.0\"", order: 0, visible: true }],
+      },
+      {
+        title: "Peso",
+        order: 5,
+        visible: true,
+        fields: [{ label: "Peso", value: "Aprox. 24.5 kg", order: 0, visible: true }],
       },
     ];
 

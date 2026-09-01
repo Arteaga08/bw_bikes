@@ -620,6 +620,9 @@ export interface SizeTemplateInput {
   value: string;
   order?: number;
   isActive?: boolean;
+  /** Bikes only in practice — `null` clears a previously captured range. */
+  heightRange?: { minHeightCm: number; maxHeightCm: number } | null;
+  categoryOverrides?: Array<{ categoryId: string; minHeightCm: number; maxHeightCm: number }>;
 }
 
 function createSizeTemplateApi(basePath: string) {

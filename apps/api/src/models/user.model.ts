@@ -19,6 +19,9 @@ export interface IUser extends Document {
     expiresAt?: Date;
   };
   passwordChangedAt?: Date;
+  phone?: string;
+  birthDate?: Date;
+  city?: string;
   twoFactor: {
     enabled: boolean;
     secret?: string; // AES-256-GCM encrypted, never plaintext at rest
@@ -63,6 +66,9 @@ const userSchema = new Schema<IUser>(
     // it on every request to invalidate tokens issued before a password
     // change, without an extra explicit .select().
     passwordChangedAt: { type: Date },
+    phone: { type: String, trim: true, maxlength: 10 },
+    birthDate: { type: Date },
+    city: { type: String, trim: true, maxlength: 80 },
     twoFactor: {
       enabled: { type: Boolean, default: false },
       secret: { type: String, select: false },

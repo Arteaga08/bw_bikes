@@ -80,4 +80,14 @@ describe("serverApiFetch", () => {
     await expect(serverApiFetch("/admin/bikes/bike-1")).rejects.toThrow("REDIRECT:/admin/login");
     expect(redirectMock).toHaveBeenCalledWith("/admin/login");
   });
+
+  it("does not redirect on a 401 outside /auth/* when unauthorizedRedirectPath is null", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ status: "fail", message: "No autenticado." }, 401)));
+
+    await expect(serverApiFetch("/account", undefined, { unauthorizedRedirectPath: null })).rejects.toMatchObject({
+      name: "ApiError",
+      httpStatus: 401,
+    });
+    expect(redirectMock).not.toHaveBeenCalled();
+  });
 });

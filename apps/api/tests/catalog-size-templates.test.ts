@@ -1,11 +1,19 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { AccessoryCategory, AccessorySizeTemplate, BikeSizeTemplate, MAX_SIZE_TEMPLATES } from "../src/models/index.js";
+import {
+  AccessoryCategory,
+  AccessorySizeTemplate,
+  BikeCategory,
+  BikeSizeTemplate,
+  MAX_SIZE_TEMPLATES,
+} from "../src/models/index.js";
+import { resolveHeightRange } from "../src/services/size-template.service.js";
 import { createAdminSession } from "./helpers/admin-session.js";
 import { createBikeCategoryDoc, createBrandDoc } from "./helpers/factories.js";
 
 const ADMIN = "/api/v1/admin";
+const PUBLIC = "/api/v1/catalog";
 
 describe("size template CRUD (both trees)", () => {
   let app: ReturnType<typeof buildApp>;
@@ -216,5 +224,220 @@ describe("learning sizes from a product's variants", () => {
 
     const templates = await BikeSizeTemplate.find({}).sort({ value: 1 }).exec();
     expect(templates.map((t) => t.value)).toEqual(["54", "58"]);
+  });
+});
+
+describe("resolveHeightRange", () => {
+  it("falls back through exact override → parent override → base range → undefined", () => {
+    const template = {
+      heightRange: { minHeightCm: 170, maxHeightCm: 178 },
+      categoryOverrides: [
+        { categoryId: "root-category", minHeightCm: 165, maxHeightCm: 172 },
+        { categoryId: "child-category", minHeightCm: 168, maxHeightCm: 175 },
+      ],
+    };
+
+    // Exact match wins over everything else.
+    expect(resolveHeightRange(template, "child-category", "root-category")).toEqual({
+      minHeightCm: 168,
+      maxHeightCm: 175,
+    });
+
+    // No exact match, but the parent has one.
+    expect(resolveHeightRange(template, "grandchild-category", "root-category")).toEqual({
+      minHeightCm: 165,
+      maxHeightCm: 172,
+    });
+
+    // Neither the category nor its parent has an override — falls back to the base range.
+    expect(resolveHeightRange(template, "unrelated-category", "another-unrelated-category")).toEqual({
+      minHeightCm: 170,
+      maxHeightCm: 178,
+    });
+
+    // No base range and no matching override at all.
+    expect(
+      resolveHeightRange({ heightRange: undefined, categoryOverrides: [] }, "unrelated-category"),
+    ).toBeUndefined();
+  });
+});
+
+describe("bike size guide", () => {
+  let app: ReturnType<typeof buildApp>;
+  let adminCookie: string;
+  let rootCategoryId: string;
+  let childCategoryId: string;
+
+  beforeEach(async () => {
+    app = buildApp();
+    adminCookie = await createAdminSession(app);
+    const root = await createBikeCategoryDoc({ name: "Ruta" });
+    rootCategoryId = String(root._id);
+    const child = await BikeCategory.create({
+      name: "Ruta Endurance",
+      slug: `ruta-endurance-${Math.random().toString(16).slice(2, 8)}`,
+      parent: root._id,
+      isActive: true,
+    });
+    childCategoryId = String(child._id);
+  });
+
+  it("omits a size with no height data at all", async () => {
+    await BikeSizeTemplate.create({ value: "M", source: "manual", order: 0 });
+
+    const response = await request(app).get(`${PUBLIC}/bike-size-guide?categoryId=${rootCategoryId}`);
+    expect(response.status).toBe(200);
+    expect(response.body.data.sizeGuide).toEqual([]);
+  });
+
+  it("uses the base height range when there's no category override", async () => {
+    await BikeSizeTemplate.create({
+      value: "M",
+      source: "manual",
+      order: 0,
+      heightRange: { minHeightCm: 170, maxHeightCm: 178 },
+    });
+
+    const response = await request(app).get(`${PUBLIC}/bike-size-guide?categoryId=${rootCategoryId}`);
+    expect(response.status).toBe(200);
+    expect(response.body.data.sizeGuide).toEqual([{ value: "M", minHeightCm: 170, maxHeightCm: 178 }]);
+  });
+
+  it("prefers a category override over the base range, and a child category inherits its parent's override", async () => {
+    await BikeSizeTemplate.create({
+      value: "M",
+      source: "manual",
+      order: 0,
+      heightRange: { minHeightCm: 170, maxHeightCm: 178 },
+      categoryOverrides: [{ categoryId: rootCategoryId, minHeightCm: 165, maxHeightCm: 172 }],
+    });
+
+    const rootGuide = await request(app).get(`${PUBLIC}/bike-size-guide?categoryId=${rootCategoryId}`);
+    expect(rootGuide.body.data.sizeGuide).toEqual([{ value: "M", minHeightCm: 165, maxHeightCm: 172 }]);
+
+    // "Ruta Endurance" has no override of its own, but its parent ("Ruta") does.
+    const childGuide = await request(app).get(`${PUBLIC}/bike-size-guide?categoryId=${childCategoryId}`);
+    expect(childGuide.body.data.sizeGuide).toEqual([{ value: "M", minHeightCm: 165, maxHeightCm: 172 }]);
+  });
+
+  it("excludes an inactive size even when it has a height range", async () => {
+    await BikeSizeTemplate.create({
+      value: "S",
+      source: "manual",
+      order: 0,
+      isActive: false,
+      heightRange: { minHeightCm: 160, maxHeightCm: 168 },
+    });
+
+    const response = await request(app).get(`${PUBLIC}/bike-size-guide?categoryId=${rootCategoryId}`);
+    expect(response.body.data.sizeGuide).toEqual([]);
+  });
+
+  it("404s for a category that doesn't exist", async () => {
+    const response = await request(app).get(`${PUBLIC}/bike-size-guide?categoryId=000000000000000000000000`);
+    expect(response.status).toBe(404);
+  });
+
+  it("400s without a categoryId", async () => {
+    const response = await request(app).get(`${PUBLIC}/bike-size-guide`);
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects a height range where max isn't greater than min", async () => {
+    const response = await request(app)
+      .post(`${ADMIN}/bike-size-templates`)
+      .set("Cookie", adminCookie)
+      .send({ value: "M", heightRange: { minHeightCm: 178, maxHeightCm: 178 } });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects an incomplete height range (only one bound sent)", async () => {
+    const response = await request(app)
+      .post(`${ADMIN}/bike-size-templates`)
+      .set("Cookie", adminCookie)
+      .send({ value: "M", heightRange: { minHeightCm: 170 } });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects two category overrides for the same category", async () => {
+    const response = await request(app)
+      .post(`${ADMIN}/bike-size-templates`)
+      .set("Cookie", adminCookie)
+      .send({
+        value: "M",
+        categoryOverrides: [
+          { categoryId: rootCategoryId, minHeightCm: 165, maxHeightCm: 172 },
+          { categoryId: rootCategoryId, minHeightCm: 168, maxHeightCm: 175 },
+        ],
+      });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("persists a height range and a category override end to end through the admin CRUD", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/bike-size-templates`)
+      .set("Cookie", adminCookie)
+      .send({
+        value: "M",
+        heightRange: { minHeightCm: 170, maxHeightCm: 178 },
+        categoryOverrides: [{ categoryId: rootCategoryId, minHeightCm: 165, maxHeightCm: 172 }],
+      });
+
+    expect(created.status).toBe(201);
+    expect(created.body.data.sizeTemplate.heightRange).toEqual({ minHeightCm: 170, maxHeightCm: 178 });
+    expect(created.body.data.sizeTemplate.categoryOverrides).toEqual([
+      { categoryId: rootCategoryId, minHeightCm: 165, maxHeightCm: 172 },
+    ]);
+
+    const id = created.body.data.sizeTemplate.id as string;
+    const read = await request(app).get(`${ADMIN}/bike-size-templates/${id}`).set("Cookie", adminCookie);
+    expect(read.body.data.sizeTemplate.heightRange).toEqual({ minHeightCm: 170, maxHeightCm: 178 });
+  });
+
+  /**
+   * Regression: `categoryOverrides` postdates every size template already in
+   * the database, so a size saved before this migration has no such field on
+   * its raw Mongo document — `insertOne` on the native collection, bypassing
+   * Mongoose entirely, is what actually reproduces that (an `insertMany`
+   * through the model would apply the schema's own `default: []` and hide
+   * the bug). `list()`'s `.lean()` reads skip Mongoose's hydration too, so it
+   * never backfills the default either — `toSizeTemplateDto` used to call
+   * `.map()` straight on the missing field and 500 the entire admin bike
+   * editor, which loads this list alongside the bike itself.
+   */
+  it("lists a pre-existing size template that predates categoryOverrides without 500ing", async () => {
+    await BikeSizeTemplate.collection.insertOne({
+      value: "M",
+      source: "manual",
+      order: 0,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const response = await request(app).get(`${ADMIN}/bike-size-templates`).set("Cookie", adminCookie);
+    expect(response.status).toBe(200);
+    expect(response.body.data.sizeTemplates).toEqual([
+      expect.objectContaining({ value: "M", categoryOverrides: [] }),
+    ]);
+  });
+
+  it("resolves the bike size guide for a pre-existing size template that predates categoryOverrides", async () => {
+    await BikeSizeTemplate.collection.insertOne({
+      value: "M",
+      source: "manual",
+      order: 0,
+      isActive: true,
+      heightRange: { minHeightCm: 170, maxHeightCm: 178 },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const response = await request(app).get(`${PUBLIC}/bike-size-guide?categoryId=${rootCategoryId}`);
+    expect(response.status).toBe(200);
+    expect(response.body.data.sizeGuide).toEqual([{ value: "M", minHeightCm: 170, maxHeightCm: 178 }]);
   });
 });

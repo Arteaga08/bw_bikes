@@ -1,5 +1,8 @@
 import type { Request, Response } from "express";
+import { BikeSizeTemplate, type ISizeTemplate } from "../models/index.js";
+import { bikeCategoryService } from "../services/bike-category.service.js";
 import { bikeService, toAdminBike, toPublicBike } from "../services/bike.service.js";
+import { buildSizeGuide } from "../services/size-template.service.js";
 import { uploadImages } from "../services/storage/storage.service.js";
 import { AppError, asyncHandler, routeParam, sendResponse } from "../utils/index.js";
 import { requireActor } from "./category.controller.js";
@@ -17,6 +20,27 @@ export const listPublicBikes = asyncHandler(async (req: Request, res: Response) 
 export const getBikeFilterOptions = asyncHandler(async (_req: Request, res: Response) => {
   const options = await bikeService.getFilterOptions();
   sendResponse(res, 200, "Opciones de filtro obtenidas.", options);
+});
+
+/**
+ * The PDP's "¿Cuál es mi talla?" / "Guía de tallas" — every active bike size
+ * with a height range that resolves for the given category, category
+ * overrides already applied. `categoryId` is required: the guide is
+ * meaningless without knowing which product it's for (an override on
+ * "Montaña" shouldn't leak into a "Ruta" PDP).
+ */
+export const getBikeSizeGuide = asyncHandler(async (req: Request, res: Response) => {
+  const categoryId = String(req.query["categoryId"]);
+  const category = await bikeCategoryService.findByIdOrFail(categoryId);
+
+  // `.lean()`: `buildSizeGuide` only reads plain fields, same reasoning as
+  // `size-template.service.ts`'s own `list()`.
+  const templates = (await BikeSizeTemplate.find({ isActive: true })
+    .lean()
+    .exec()) as unknown as ISizeTemplate[];
+
+  const sizeGuide = buildSizeGuide(templates, category.id, category.parent);
+  sendResponse(res, 200, "Guía de tallas obtenida.", { sizeGuide });
 });
 
 export const getPublicBikeBySlug = asyncHandler(async (req: Request, res: Response) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ProductVariant, PublicAccessory, PublicBike } from "@bw-bikes/shared";
+import type { ProductVariant, PublicAccessory, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
@@ -18,6 +18,8 @@ export interface ProductInfoProps {
   product: PublicBike | PublicAccessory;
   /** Product `color` names → their template's hex, built once per page — same map `CatalogProductCard` reads. */
   colorSwatchIndex: Map<string, PublicColorSwatch>;
+  /** Bikes only — see `ProductDetailProps.sizeGuide`. */
+  sizeGuide?: PublicSizeGuideEntry[];
 }
 
 function normalizeColorKey(value: string): string {
@@ -78,7 +80,7 @@ function findMatchingVariant(
  * carrito para agregar un SKU específico todavía), así que no vive en la
  * URL como los filtros del catálogo.
  */
-export function ProductInfo({ product, colorSwatchIndex }: ProductInfoProps) {
+export function ProductInfo({ product, colorSwatchIndex, sizeGuide = [] }: ProductInfoProps) {
   const activeVariants = useMemo(() => product.variants.filter((variant) => variant.isActive), [product.variants]);
   const colors = useMemo(() => extractColors(activeVariants), [activeVariants]);
   const usesSizes = product.category.usesSizes;
@@ -118,13 +120,13 @@ export function ProductInfo({ product, colorSwatchIndex }: ProductInfoProps) {
         <p className="font-body text-eyebrow uppercase text-grafito">{product.brand.name}</p>
       </div>
 
-      <h1 className="mt-xs font-display text-h2 text-negro">{stripBrandFromName(product.name, product.brand.name)}</h1>
+      <h1 className="mt-xs font-display text-h2 font-extrabold text-negro">{stripBrandFromName(product.name, product.brand.name)}</h1>
 
       <div className="mt-sm">
         <ProductPrice basePrice={product.price} compareAtPrice={product.compareAtPrice} selectedVariant={selectedVariant} />
       </div>
 
-      <div className="mt-lg border-t border-borde pt-lg">
+      <div className="mt-lg">
         <ProductDescriptionTeaser
           shortDescription={"shortDescription" in product ? product.shortDescription : undefined}
           description={product.description}
@@ -138,8 +140,8 @@ export function ProductInfo({ product, colorSwatchIndex }: ProductInfoProps) {
       ) : null}
 
       {sizeOptions.length > 0 ? (
-        <div className="mt-xl">
-          <SizeSelector sizes={sizeOptions} selected={selectedSize} onSelect={setSelectedSize} />
+        <div className="mt-lg">
+          <SizeSelector sizes={sizeOptions} selected={selectedSize} onSelect={setSelectedSize} sizeGuide={sizeGuide} />
         </div>
       ) : null}
 

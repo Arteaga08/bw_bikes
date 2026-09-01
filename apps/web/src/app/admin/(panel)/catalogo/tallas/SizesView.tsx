@@ -53,6 +53,11 @@ function sourceBadge(source: SizeTemplate["source"]) {
   return source === "auto" ? <Badge variant="neutral">Automática</Badge> : <Badge variant="exito">Manual</Badge>;
 }
 
+/** `undefined` reads as "sin capturar" rather than an empty cell, so a scanning admin can tell "not set" apart from a loading glitch. */
+function formatHeightRange(heightRange: SizeTemplate["heightRange"]): string {
+  return heightRange ? `${heightRange.minHeightCm}–${heightRange.maxHeightCm} cm` : "Sin capturar";
+}
+
 export interface SizesViewProps {
   kind: SizesKind;
 }
@@ -166,6 +171,16 @@ export function SizesView({ kind }: SizesViewProps) {
 
   const columns: DataTableColumn<SizeTemplate>[] = [
     { key: "value", header: "Talla", kind: "text", render: (row) => row.value },
+    ...(kind === "bike"
+      ? ([
+          {
+            key: "heightRange",
+            header: "Estatura",
+            kind: "text",
+            render: (row) => formatHeightRange(row.heightRange),
+          },
+        ] satisfies DataTableColumn<SizeTemplate>[])
+      : []),
     { key: "source", header: "Origen", kind: "status", render: (row) => sourceBadge(row.source) },
     { key: "status", header: "Estatus", kind: "status", render: (row) => statusBadge(row.isActive) },
     {
@@ -267,6 +282,7 @@ export function SizesView({ kind }: SizesViewProps) {
         <SizeFormModal
           key={formDialog.template?.id ?? "create"}
           api={api}
+          kind={kind}
           initial={formDialog.template}
           onClose={() => setFormDialog(null)}
           onSaved={() => refetch()}

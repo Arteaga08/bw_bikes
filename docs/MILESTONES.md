@@ -18,7 +18,7 @@ verificación de cada milestone vive en `~/.claude/plans/nuevo-proyecto-black-an
 | M10 — Catálogo en admin | 2 | ✅ Funcionalmente hecho; ⚠️ verificación Stripe en curso | `feat/m10-catalogo-admin` (en `main`, commit directo sin `merge:` propio) | Ver detalle abajo |
 | M11 — Inventario, solicitudes, settings, analítica, auditoría | 2 | ✅ Hecho (mergeado); cierra la fase 2 | `feat/m11-inventario-settings` (mergeado, rama borrada) | Ver detalle abajo y `docs/DESIGN_REFERENCES.md` |
 | M12 — Catálogo público | 3 | 🚧 En progreso — home sección por sección, entrega 2/10 (hero) | — | Ver detalle abajo |
-| M13 — Carrito, checkout y cuenta | 3 | ⏳ Pendiente | — | |
+| M13 — Carrito, checkout y cuenta | 3 | ⏳ Pendiente — plan de entregas escrito | — | Ver `docs/m13/00-CONTEXTO.md` (entregas A1–A6 de cuenta, luego B de carrito; checkout es fase 2, sin documentar aún) |
 | M14 — Embajadores, patrocinios y SEO | 3 | ⏳ Pendiente | — | |
 | M15 — Correos y alertas logísticas | 4 | ⏳ Pendiente | — | |
 | M16 — Bot Instagram/Facebook DM | 4 | ⏳ Pendiente | — | Requiere trámite Meta iniciado en fase 3 |

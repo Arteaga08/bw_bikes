@@ -12,6 +12,7 @@ import { type ActorContext, createProductService } from "./product.service.js";
 import { accessorySizeTemplateService } from "./accessory-size-template.service.js";
 import { learnColorTemplates } from "./color-template.service.js";
 import { learnSpecTemplates } from "./spec-template.service.js";
+import { toPublicSpecGroups } from "./spec-groups.js";
 
 const MODULE_NAME = "catalog.accessories";
 
@@ -60,7 +61,9 @@ export function toPublicAccessory(accessory: IAccessory): PublicAccessory {
     ...(accessory.compareAtPrice !== undefined ? { compareAtPrice: accessory.compareAtPrice } : {}),
     currency: CURRENCY,
     variants: accessory.variants.filter((variant) => variant.isActive),
-    specGroups: [...accessory.specGroups].sort((a, b) => a.order - b.order),
+    // `toPublicSpecGroups`, not a bare sort — a hidden group/row or a blank
+    // value must not reach the PDP any more than it does on `toPublicBike`.
+    specGroups: toPublicSpecGroups(accessory.specGroups),
     gallery: [...accessory.gallery].sort((a, b) => a.order - b.order),
     // `isNewArrival`/`isCustomerFavorite` omitted, `createdAt` shipped — see `toPublicBike` for why.
     createdAt: accessory.createdAt.toISOString(),

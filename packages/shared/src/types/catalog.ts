@@ -231,6 +231,17 @@ export interface SpecTemplate {
   isActive: boolean;
 }
 
+/** Rider height a size fits, in centimeters. Shared shape between `SizeTemplate.heightRange` and each entry of `SizeTemplate.categoryOverrides`. */
+export interface SizeHeightRange {
+  minHeightCm: number;
+  maxHeightCm: number;
+}
+
+/** A `heightRange` that only applies to one bike category (or its children, via the resolver — see `resolveHeightRange` in `apps/api/src/services/size-template.service.ts`), overriding the template's base `heightRange` for that category's products. */
+export interface SizeCategoryOverride extends SizeHeightRange {
+  categoryId: string;
+}
+
 /**
  * A saved size an admin can offer again on a variant's "Talla" — the
  * single-value sibling of `SpecTemplate`, same admin-only reasoning. See
@@ -243,6 +254,30 @@ export interface SizeTemplate {
   source: "manual" | "auto";
   order: number;
   isActive: boolean;
+  /**
+   * Rider height this size fits — bikes only in practice. Optional: most of
+   * the catalog has never captured this, and a size left un-annotated is
+   * simply omitted from the storefront size guide.
+   */
+  heightRange?: SizeHeightRange;
+  /** Per-category exceptions to `heightRange` — e.g. a mountain-bike "M" fits a different height range than a road "M". Empty when the template has none. */
+  categoryOverrides: SizeCategoryOverride[];
+}
+
+/**
+ * One row of the storefront's "Guía de tallas" / "¿Cuál es mi talla?" —
+ * `GET /catalog/bike-size-guide`. Already resolved server-side against the
+ * product's category (see `buildSizeGuide`), so the storefront never has to
+ * know about the category tree or override precedence — just a size and the
+ * height range it fits. Deliberately excludes `id`, `source`, and
+ * `categoryOverrides`: the storefront renders none of that, and shipping a
+ * field the UI never paints is a data leak, not a convenience (same rule
+ * `PublicBike`'s own doc comment states).
+ */
+export interface PublicSizeGuideEntry {
+  value: string;
+  minHeightCm: number;
+  maxHeightCm: number;
 }
 
 /** Unlike `SizeTemplate`, one shared collection across both catalogs — a color name means the same thing on a bike as on a helmet. */

@@ -1,6 +1,10 @@
 "use client";
 
+import type { PublicSizeGuideEntry } from "@bw-bikes/shared";
+import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
+import { SizeGuideModal, type SizeGuideTab } from "./SizeGuideModal";
 
 export interface SizeOption {
   value: string;
@@ -11,6 +15,8 @@ export interface SizeSelectorProps {
   sizes: SizeOption[];
   selected: string | undefined;
   onSelect: (size: string) => void;
+  /** Bikes only — empty on an accessory PDP, or on a bike whose sizes haven't been given a height range yet. Gates whether the "¿Cuál es mi talla?"/"Guía de tallas" links render at all: two links opening onto an empty modal would be worse than no links. */
+  sizeGuide?: PublicSizeGuideEntry[];
 }
 
 /**
@@ -24,17 +30,39 @@ export interface SizeSelectorProps {
  * `role="radiogroup"`/`role="radio"`, same native-semantics reasoning as
  * `ColorSwatchSelector`.
  *
- * "¿Cuál es mi talla?" / guía de tallas is a deliberately later step — its
- * anchor is the label row below, nothing built behind it yet.
+ * "¿Cuál es mi talla?" / guía de tallas — both links open the same
+ * `SizeGuideModal`, one per tab. `onSelect` (this component's own prop) is
+ * reused as the modal's confirm action, so picking a size from the wizard's
+ * result step lands on this exact radiogroup with no extra state to sync.
  */
-export function SizeSelector({ sizes, selected, onSelect }: SizeSelectorProps) {
+export function SizeSelector({ sizes, selected, onSelect, sizeGuide = [] }: SizeSelectorProps) {
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideTab, setGuideTab] = useState<SizeGuideTab>("finder");
+
   if (sizes.length === 0) return null;
+
+  function openGuide(tab: SizeGuideTab): void {
+    setGuideTab(tab);
+    setGuideOpen(true);
+  }
 
   return (
     <div>
       <div className="flex items-center justify-between">
         <span className="font-ui text-ui text-grafito">Talla</span>
-        {/* "¿Cuál es mi talla?" / guía de tallas slots in here — later step. */}
+        {sizeGuide.length > 0 ? (
+          <div className="flex items-center gap-xs">
+            <Button variant="text" tone="neutral" size="sm" onClick={() => openGuide("finder")}>
+              ¿Cuál es mi talla?
+            </Button>
+            <span aria-hidden="true" className="text-grafito">
+              ·
+            </span>
+            <Button variant="text" tone="neutral" size="sm" onClick={() => openGuide("guide")}>
+              Guía de tallas
+            </Button>
+          </div>
+        ) : null}
       </div>
       <div role="radiogroup" aria-label="Talla" className="mt-xs flex flex-wrap gap-sm">
         {sizes.map((size) => {
@@ -58,6 +86,16 @@ export function SizeSelector({ sizes, selected, onSelect }: SizeSelectorProps) {
           );
         })}
       </div>
+
+      <SizeGuideModal
+        open={guideOpen}
+        tab={guideTab}
+        onTabChange={setGuideTab}
+        sizeGuide={sizeGuide}
+        sizeOptions={sizes}
+        onClose={() => setGuideOpen(false)}
+        onSelectSize={onSelect}
+      />
     </div>
   );
 }

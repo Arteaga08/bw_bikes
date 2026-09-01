@@ -30,7 +30,11 @@ export function ColorSwatch({ hex, secondaryHex, className }: ColorSwatchProps) 
   return (
     <span
       aria-hidden="true"
-      className={cn("inline-block shrink-0 rounded-full border", hex ? "border-borde" : "border-dashed border-grafito", className)}
+      className={cn(
+        "inline-block shrink-0 align-middle rounded-full border",
+        hex ? "border-borde" : "border-dashed border-grafito",
+        className,
+      )}
       style={style}
     />
   );
