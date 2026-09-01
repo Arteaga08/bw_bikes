@@ -1,7 +1,12 @@
 import { Router } from "express";
-import { createOrder, getMyOrder, listMyOrders } from "../controllers/order.controller.js";
+import { createOrder, getMyOrder, getMyOrderByNumber, listMyOrders } from "../controllers/order.controller.js";
 import { checkoutRateLimiter, protect, validate } from "../middlewares/index.js";
-import { createOrderSchema, idParamSchema, orderListQuerySchema } from "../validators/index.js";
+import {
+  createOrderSchema,
+  idParamSchema,
+  orderListQuerySchema,
+  orderNumberParamSchema,
+} from "../validators/index.js";
 
 /**
  * The customer's own orders.
@@ -19,6 +24,7 @@ router.use(protect);
 
 router.post("/", checkoutRateLimiter, validate(createOrderSchema), createOrder);
 router.get("/", validate(orderListQuerySchema, "query"), listMyOrders);
+router.get("/number/:orderNumber", validate(orderNumberParamSchema, "params"), getMyOrderByNumber);
 router.get("/:id", validate(idParamSchema, "params"), getMyOrder);
 
 export { router as orderRouter };

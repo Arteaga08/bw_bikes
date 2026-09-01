@@ -45,6 +45,12 @@ export const getMyOrder = asyncHandler(async (req: Request, res: Response) => {
   sendResponse(res, 200, "Orden obtenida.", { order });
 });
 
+/** Same anti-IDOR contract as `getMyOrder`, keyed by `orderNumber` — the key the transactional emails link with. */
+export const getMyOrderByNumber = asyncHandler(async (req: Request, res: Response) => {
+  const order = await orderService.getForUserByNumber(requireUserId(req), routeParam(req, "orderNumber"));
+  sendResponse(res, 200, "Orden obtenida.", { order });
+});
+
 export const listOrdersForAdmin = asyncHandler(async (req: Request, res: Response) => {
   const { orders, meta } = await orderService.listForAdmin(req.query);
   sendResponse(res, 200, "Órdenes obtenidas.", { orders }, meta);

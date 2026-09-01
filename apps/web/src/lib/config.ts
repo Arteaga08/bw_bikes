@@ -21,6 +21,22 @@ export function apiInternalUrl(): string {
   return url;
 }
 
+/**
+ * Server-only: the Cloudinary cloud name, needed to turn an order line
+ * snapshot's `imagePublicId` (`packages/shared`'s `buildImageUrl`) into a
+ * displayable URL. Every other image the storefront renders already arrives
+ * as a full URL from the API — this is the one place a `publicId` reaches
+ * `apps/web` bare, because `OrderLineSnapshot` freezes only the id so order
+ * history keeps rendering after a product is edited or archived.
+ */
+export function cloudinaryCloudName(): string {
+  const name = process.env["CLOUDINARY_CLOUD_NAME"];
+  if (!name) {
+    throw new Error("Missing required environment variable: CLOUDINARY_CLOUD_NAME");
+  }
+  return name;
+}
+
 // Mirrors apps/api/src/utils/cookies.ts — names only, never values.
 export const ACCESS_TOKEN_COOKIE = "bw_access";
 

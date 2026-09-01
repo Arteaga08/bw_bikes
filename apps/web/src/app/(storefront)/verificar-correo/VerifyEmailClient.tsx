@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckCircle, WarningCircle } from "@phosphor-icons/react";
 import { useSearchParams } from "next/navigation";
 import type { FormEvent } from "react";
 import { Suspense, useEffect, useState } from "react";
@@ -64,8 +65,11 @@ function VerifyEmailContent() {
 
   if (status === "verified") {
     return (
-      <div className="flex flex-col gap-md">
-        <p className="font-body text-body text-grafito">Correo verificado. Ya puedes iniciar sesión.</p>
+      <div className="flex flex-col items-start gap-md">
+        <p className="flex items-center gap-xs font-body text-body text-estado-exito">
+          <CheckCircle size={18} weight="regular" aria-hidden="true" className="shrink-0" />
+          Correo verificado. Ya puedes iniciar sesión.
+        </p>
         <ButtonLink href="/ingresar" variant="primary">
           Iniciar sesión
         </ButtonLink>
@@ -74,22 +78,32 @@ function VerifyEmailContent() {
   }
 
   return (
-    <div className="flex flex-col gap-md">
-      {error ? <p className="font-body text-caption text-estado-error">{error}</p> : null}
-      <form onSubmit={handleResend} className="flex flex-col gap-md" noValidate>
-        <Input
-          label="Correo"
-          type="email"
-          autoComplete="username"
-          required
-          value={resendEmail}
-          onChange={(event) => setResendEmail(event.target.value)}
-        />
-        <Button type="submit" variant="secondary" loading={resending}>
-          Reenviar correo
-        </Button>
-      </form>
-      {resendMessage ? <p className="font-body text-caption text-grafito">{resendMessage}</p> : null}
+    <div className="flex flex-col gap-lg">
+      {error ? (
+        <p className="flex items-center gap-xs font-body text-body text-estado-error">
+          <WarningCircle size={18} weight="regular" aria-hidden="true" className="shrink-0" />
+          {error}
+        </p>
+      ) : null}
+      <div className="flex flex-col gap-md">
+        <h2 className="font-display text-h3 text-negro">¿No recibiste el correo?</h2>
+        <form onSubmit={handleResend} className="flex flex-col gap-md" noValidate>
+          <Input
+            label="Correo"
+            type="email"
+            autoComplete="username"
+            required
+            value={resendEmail}
+            onChange={(event) => setResendEmail(event.target.value)}
+          />
+          <Button type="submit" variant="secondary" loading={resending}>
+            Reenviar correo
+          </Button>
+        </form>
+        {resendMessage ? (
+          <p className="font-body text-caption text-grafito">{resendMessage}</p>
+        ) : null}
+      </div>
       <ButtonLink href="/ingresar" variant="text" tone="neutral">
         Ir a iniciar sesión
       </ButtonLink>

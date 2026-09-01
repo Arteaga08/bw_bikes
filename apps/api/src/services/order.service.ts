@@ -1369,6 +1369,19 @@ async function getForUser(userId: string, orderId: string): Promise<PublicOrder>
   return toPublicOrder(order);
 }
 
+/**
+ * Same anti-IDOR contract as `getForUser`, keyed by `orderNumber` instead of
+ * `_id` — the key the transactional emails link with (`/pedidos/BW-2026-XXXXXX`).
+ * Always uppercased before the query, matching how `generateOrderNumber` mints it.
+ */
+async function getForUserByNumber(userId: string, orderNumber: string): Promise<PublicOrder> {
+  const order = await Order.findOne({ orderNumber: orderNumber.toUpperCase(), userId }).exec();
+  if (!order) {
+    throw new AppError("La orden no existe.", 404);
+  }
+  return toPublicOrder(order);
+}
+
 async function listForUser(userId: string, query: Record<string, unknown>) {
   const { page, limit, skip, sort } = parseListQuery(query, {
     allowedSortFields: SORTABLE_FIELDS,
@@ -1516,6 +1529,7 @@ export const orderService = {
   updatePriority,
   addInternalNote,
   getForUser,
+  getForUserByNumber,
   listForUser,
   getForAdmin,
   listForAdmin,

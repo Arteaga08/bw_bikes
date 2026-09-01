@@ -34,7 +34,12 @@ export function PasswordStrengthMeter({ password, id }: PasswordStrengthMeterPro
         {PASSWORD_REQUIREMENTS.map((requirement, index) => (
           <span
             key={requirement.id}
-            className={cn("h-1 flex-1 rounded-full bg-inset transition-colors duration-150", index < metCount && tier.barColor)}
+            // Exactly one `bg-*` utility per segment — `cn()` here is plain
+            // clsx, not tailwind-merge, so two `bg-*` classes on one element
+            // fight by generated-CSS order rather than source order (same
+            // gotcha documented in Button.tsx's GHOST_TONE_CLASSES comment),
+            // and the base `bg-inset` silently wins regardless of state.
+            className={cn("h-1 flex-1 rounded-full transition-colors duration-150", index < metCount ? tier.barColor : "bg-inset")}
           />
         ))}
       </div>

@@ -29,6 +29,19 @@ const priority = Joi.string()
  */
 export const createOrderSchema = Joi.object({});
 
+/** Mirrors `generateOrderNumber`'s own alphabet in `order.service.ts` — no `I`, `O`, `0`, `1`. */
+export const orderNumberParamSchema = Joi.object({
+  orderNumber: Joi.string()
+    .trim()
+    .uppercase()
+    .pattern(/^BW-\d{4}-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/)
+    .required()
+    .messages({
+      "string.pattern.base": "El número de orden no es válido.",
+      "any.required": "El número de orden es obligatorio.",
+    }),
+});
+
 export const orderListQuerySchema = Joi.object({
   ...pagination,
   status: status.optional(),
