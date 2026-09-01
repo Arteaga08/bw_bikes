@@ -205,3 +205,14 @@ export async function removeBillingInfo(userId: string): Promise<void> {
   user.billingInfo = undefined;
   await user.save();
 }
+
+export async function setFit(userId: string, input: UpdateFitInput): Promise<CustomerFit> {
+  const user = await findAccountUser(userId);
+  user.fit = {
+    heightCm: input.heightCm,
+    rideStyle: input.rideStyle,
+    gearSizes: input.gearSizes ?? [],
+  };
+  await user.save();
+  return user.fit!;
+}

@@ -17,6 +17,8 @@ export interface SizeSelectorProps {
   onSelect: (size: string) => void;
   /** Bikes only — empty on an accessory PDP, or on a bike whose sizes haven't been given a height range yet. Gates whether the "¿Cuál es mi talla?"/"Guía de tallas" links render at all: two links opening onto an empty modal would be worse than no links. */
   sizeGuide?: PublicSizeGuideEntry[];
+  /** The customer's saved `fit.heightCm` (A4), passed through to `SizeGuideModal`. */
+  initialHeightCm?: number;
 }
 
 /**
@@ -35,7 +37,7 @@ export interface SizeSelectorProps {
  * reused as the modal's confirm action, so picking a size from the wizard's
  * result step lands on this exact radiogroup with no extra state to sync.
  */
-export function SizeSelector({ sizes, selected, onSelect, sizeGuide = [] }: SizeSelectorProps) {
+export function SizeSelector({ sizes, selected, onSelect, sizeGuide = [], initialHeightCm }: SizeSelectorProps) {
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideTab, setGuideTab] = useState<SizeGuideTab>("finder");
 
@@ -95,6 +97,7 @@ export function SizeSelector({ sizes, selected, onSelect, sizeGuide = [] }: Size
         sizeOptions={sizes}
         onClose={() => setGuideOpen(false)}
         onSelectSize={onSelect}
+        initialHeightCm={initialHeightCm}
       />
     </div>
   );

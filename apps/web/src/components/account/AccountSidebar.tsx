@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { href: "/mi-cuenta", label: "Perfil", icon: User },
   { href: "/mi-cuenta/direcciones", label: "Libreta de Direcciones", icon: MapPin },
   { href: "/mi-cuenta/pedidos", label: "Historial de pedidos", icon: Package },
-  { href: "/mi-cuenta/tallas", label: "Mis tallas", icon: Ruler },
+  { href: "/mi-cuenta/mis-tallas", label: "Mis tallas", icon: Ruler },
   { href: "/mi-cuenta/guardados", label: "Guardado para más tarde", icon: Heart },
 ] as const;
 

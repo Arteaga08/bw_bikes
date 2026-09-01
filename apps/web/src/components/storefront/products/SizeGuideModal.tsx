@@ -9,6 +9,7 @@ import { Tab, TabList } from "@/components/ui/Tabs";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/cn";
+import { RIDE_STYLES } from "@/lib/ride-styles";
 import { recommendSize, type RideStyle } from "@/lib/size-recommendation";
 import type { SizeOption } from "./SizeSelector";
 
@@ -22,25 +23,9 @@ export interface SizeGuideModalProps {
   sizeOptions: SizeOption[];
   onClose: () => void;
   onSelectSize: (size: string) => void;
+  /** The customer's saved `fit.heightCm` (A4), if any — the wizard starts from it instead of `DEFAULT_HEIGHT_CM`. */
+  initialHeightCm?: number;
 }
-
-const RIDE_STYLES: Array<{ value: RideStyle; label: string; description: string }> = [
-  {
-    value: "comfortable",
-    label: "Cómodo",
-    description: "Recorridos largos con la mayor comodidad posible. Postura erguida, menos tensión.",
-  },
-  {
-    value: "balanced",
-    label: "Equilibrado",
-    description: "Un punto medio entre comodidad y rendimiento — sirve tanto para trayectos cortos como largos.",
-  },
-  {
-    value: "performance",
-    label: "Deportivo",
-    description: "Velocidad y rendimiento máximos, para rutas exigentes.",
-  },
-];
 
 const MIN_HEIGHT_CM = 140;
 const MAX_HEIGHT_CM = 210;
@@ -82,6 +67,7 @@ export function SizeGuideModal({
   sizeOptions,
   onClose,
   onSelectSize,
+  initialHeightCm,
 }: SizeGuideModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -90,7 +76,7 @@ export function SizeGuideModal({
   const isBelowSm = useMediaQuery("(max-width: 639px)");
 
   const [step, setStep] = useState<FinderStep>(1);
-  const [heightCm, setHeightCm] = useState(DEFAULT_HEIGHT_CM);
+  const [heightCm, setHeightCm] = useState(initialHeightCm ?? DEFAULT_HEIGHT_CM);
   const [style, setStyle] = useState<RideStyle>("balanced");
   const [chosenSize, setChosenSize] = useState<string | undefined>(undefined);
 

@@ -1,7 +1,9 @@
-import type { PublicBike } from "@bw-bikes/shared";
+import type { AccountDTO, CustomerFit, PublicBike } from "@bw-bikes/shared";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ProductDetail } from "@/components/storefront/products/ProductDetail";
+import { serverApiFetch } from "@/lib/api/server";
 import { ApiError } from "@/lib/api/error";
 import {
   buildColorSwatchIndex,
@@ -11,6 +13,7 @@ import {
   getPublicBikeSizeGuide,
   getPublicColorSwatches,
 } from "@/lib/api/public-catalog";
+import { ACCESS_TOKEN_COOKIE } from "@/lib/config";
 
 interface BicicletaProductoPageProps {
   params: Promise<{ slug: string }>;
@@ -20,6 +23,28 @@ interface BicicletaProductoPageProps {
 async function loadBike(slug: string): Promise<PublicBike | undefined> {
   try {
     return await getPublicBikeBySlug(slug);
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error;
+    return undefined;
+  }
+}
+
+/**
+ * The signed-in customer's saved fit (A4), for the size preselection below.
+ * No session cookie at all → skip the call entirely (the common case, an
+ * anonymous visitor). A cookie present but rejected by the API degrades to
+ * `undefined` the same way the size guide/category tree already do — a
+ * stale or expired cookie on the storefront just means no preselection, not
+ * a broken PDP.
+ */
+async function loadCustomerFit(): Promise<CustomerFit | undefined> {
+  const cookieStore = await cookies();
+  if (!cookieStore.get(ACCESS_TOKEN_COOKIE)) return undefined;
+  try {
+    const { data } = await serverApiFetch<{ account: AccountDTO }>("/account", undefined, {
+      unauthorizedRedirectPath: null,
+    });
+    return data.account.fit;
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;
     return undefined;
@@ -39,7 +64,7 @@ export async function generateMetadata({ params }: BicicletaProductoPageProps): 
 
 export default async function BicicletaProductoPage({ params }: BicicletaProductoPageProps) {
   const { slug } = await params;
-  const [bike, bikeColorSwatches, accessoryColorSwatches] = await Promise.all([
+  const [bike, bikeColorSwatches, accessoryColorSwatches, fit] = await Promise.all([
     loadBike(slug),
     getPublicColorSwatches("bike").catch((error: unknown) => {
       if (!(error instanceof ApiError)) throw error;
@@ -53,6 +78,7 @@ export default async function BicicletaProductoPage({ params }: BicicletaProduct
       if (!(error instanceof ApiError)) throw error;
       return [];
     }),
+    loadCustomerFit(),
   ]);
   if (!bike) notFound();
 
@@ -85,6 +111,7 @@ export default async function BicicletaProductoPage({ params }: BicicletaProduct
       colorSwatchIndex={buildColorSwatchIndex([...bikeColorSwatches, ...accessoryColorSwatches])}
       sizeGuide={sizeGuide}
       breadcrumbs={breadcrumbs}
+      fit={fit}
     />
   );
 }

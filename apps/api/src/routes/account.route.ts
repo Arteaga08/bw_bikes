@@ -8,6 +8,7 @@ import {
   removeBillingInfoHandler,
   setBillingInfoHandler,
   setDefaultAddressHandler,
+  setFitHandler,
   updateAddressHandler,
   updateProfileHandler,
 } from "../controllers/account.controller.js";
@@ -17,6 +18,7 @@ import {
   addressIdParamSchema,
   changePasswordSchema,
   saveAddressSchema,
+  updateFitSchema,
   updateProfileSchema,
 } from "../validators/index.js";
 
@@ -54,5 +56,7 @@ router.post(
 
 router.put("/billing-info", validate(accountBillingInfoSchema), setBillingInfoHandler);
 router.delete("/billing-info", removeBillingInfoHandler);
+
+router.put("/fit", validate(updateFitSchema), setFitHandler);
 
 export { router as accountRouter };

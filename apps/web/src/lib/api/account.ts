@@ -1,4 +1,12 @@
-import type { AccountDTO, BillingInfo, SaveAddressInput, SavedAddress, UpdateAccountProfileInput } from "@bw-bikes/shared";
+import type {
+  AccountDTO,
+  BillingInfo,
+  CustomerFit,
+  SaveAddressInput,
+  SavedAddress,
+  UpdateAccountProfileInput,
+  UpdateFitInput,
+} from "@bw-bikes/shared";
 import { apiFetch } from "./client";
 
 export async function getAccount(): Promise<AccountDTO> {
@@ -61,4 +69,12 @@ export async function setAccountBillingInfo(input: BillingInfo): Promise<Billing
 
 export async function deleteAccountBillingInfo(): Promise<void> {
   await apiFetch("/account/billing-info", { method: "DELETE" });
+}
+
+export async function setAccountFit(input: UpdateFitInput): Promise<CustomerFit> {
+  const { data } = await apiFetch<{ fit: CustomerFit }>("/account/fit", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+  return data.fit;
 }

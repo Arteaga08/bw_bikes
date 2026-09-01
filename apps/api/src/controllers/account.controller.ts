@@ -1,4 +1,4 @@
-import type { BillingInfo, SaveAddressInput, UpdateAccountProfileInput } from "@bw-bikes/shared";
+import type { BillingInfo, SaveAddressInput, UpdateAccountProfileInput, UpdateFitInput } from "@bw-bikes/shared";
 import type { Request, Response } from "express";
 import {
   changePassword,
@@ -9,6 +9,7 @@ import {
   removeBillingInfo,
   setBillingInfo,
   setDefaultAddress,
+  setFit,
   updateAddress,
   updateProfile,
 } from "../services/account.service.js";
@@ -70,4 +71,9 @@ export const setBillingInfoHandler = asyncHandler(async (req: Request, res: Resp
 export const removeBillingInfoHandler = asyncHandler(async (req: Request, res: Response) => {
   await removeBillingInfo(requireUserId(req));
   sendResponse(res, 200, "Datos de facturación eliminados.");
+});
+
+export const setFitHandler = asyncHandler(async (req: Request, res: Response) => {
+  const fit = await setFit(requireUserId(req), req.body as UpdateFitInput);
+  sendResponse(res, 200, "Tus tallas se guardaron.", { fit });
 });

@@ -1,4 +1,4 @@
-import type { PublicBike } from "@bw-bikes/shared";
+import type { CustomerFit, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { PublicColorSwatch } from "@/lib/api/public-catalog";
@@ -104,5 +104,48 @@ describe("ProductInfo", () => {
     expect(screen.queryByRole("radio", { name: "Verde" })).not.toBeInTheDocument();
     // A single remaining active color still shows — it's product info, not a choice.
     expect(screen.getByRole("radio", { name: "Rojo" })).toBeInTheDocument();
+  });
+
+  describe("size preselection from a saved fit (A4)", () => {
+    const SIZE_GUIDE: PublicSizeGuideEntry[] = [
+      { value: "MD", minHeightCm: 160, maxHeightCm: 175 },
+      { value: "LG", minHeightCm: 176, maxHeightCm: 190 },
+    ];
+
+    function makeBikeWithSizes(variants: PublicBike["variants"]): PublicBike {
+      return makeBike({ variants });
+    }
+
+    it("preselects the recommended size and shows the suggestion note when it's available", () => {
+      const bike = makeBikeWithSizes([
+        { sku: "SKU-MD", size: "MD", fulfillmentMode: "in_stock", isActive: true },
+        { sku: "SKU-LG", size: "LG", fulfillmentMode: "in_stock", isActive: true },
+      ]);
+      const fit: CustomerFit = { heightCm: 170, rideStyle: "balanced", gearSizes: [] };
+
+      render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} fit={fit} />);
+
+      expect(screen.getByRole("radio", { name: "MD" })).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByText("Sugerida según tu perfil · cambiar")).toBeInTheDocument();
+    });
+
+    it("does not preselect anything when the recommended size is sold out", () => {
+      const bike = makeBikeWithSizes([{ sku: "SKU-LG", size: "LG", fulfillmentMode: "in_stock", isActive: true }]);
+      const fit: CustomerFit = { heightCm: 170, rideStyle: "balanced", gearSizes: [] };
+
+      render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} fit={fit} />);
+
+      expect(screen.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
+      expect(screen.queryByText("Sugerida según tu perfil · cambiar")).not.toBeInTheDocument();
+    });
+
+    it("does not preselect anything without a saved fit", () => {
+      const bike = makeBikeWithSizes([{ sku: "SKU-MD", size: "MD", fulfillmentMode: "in_stock", isActive: true }]);
+
+      render(<ProductInfo product={bike} colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} />);
+
+      expect(screen.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
+      expect(screen.queryByText("Sugerida según tu perfil · cambiar")).not.toBeInTheDocument();
+    });
   });
 });
