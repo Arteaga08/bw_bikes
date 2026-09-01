@@ -1,7 +1,18 @@
-import type { UpdateAccountProfileInput } from "@bw-bikes/shared";
+import type { BillingInfo, SaveAddressInput, UpdateAccountProfileInput } from "@bw-bikes/shared";
 import type { Request, Response } from "express";
-import { changePassword, getAccount, updateProfile } from "../services/account.service.js";
-import { AppError, asyncHandler, sendResponse } from "../utils/index.js";
+import {
+  changePassword,
+  createAddress,
+  getAccount,
+  listAddresses,
+  removeAddress,
+  removeBillingInfo,
+  setBillingInfo,
+  setDefaultAddress,
+  updateAddress,
+  updateProfile,
+} from "../services/account.service.js";
+import { AppError, asyncHandler, routeParam, sendResponse } from "../utils/index.js";
 
 function requireUserId(req: Request): string {
   if (!req.user) {
@@ -24,4 +35,39 @@ export const changePasswordHandler = asyncHandler(async (req: Request, res: Resp
   const { currentPassword, newPassword } = req.body as { currentPassword: string; newPassword: string };
   await changePassword(requireUserId(req), currentPassword, newPassword);
   sendResponse(res, 200, "Contraseña actualizada.");
+});
+
+export const listAddressesHandler = asyncHandler(async (req: Request, res: Response) => {
+  const addresses = await listAddresses(requireUserId(req));
+  sendResponse(res, 200, "Direcciones obtenidas.", { addresses });
+});
+
+export const createAddressHandler = asyncHandler(async (req: Request, res: Response) => {
+  const addresses = await createAddress(requireUserId(req), req.body as SaveAddressInput);
+  sendResponse(res, 201, "Dirección guardada.", { addresses });
+});
+
+export const updateAddressHandler = asyncHandler(async (req: Request, res: Response) => {
+  const addresses = await updateAddress(requireUserId(req), routeParam(req, "addressId"), req.body as SaveAddressInput);
+  sendResponse(res, 200, "Dirección actualizada.", { addresses });
+});
+
+export const removeAddressHandler = asyncHandler(async (req: Request, res: Response) => {
+  const addresses = await removeAddress(requireUserId(req), routeParam(req, "addressId"));
+  sendResponse(res, 200, "Dirección eliminada.", { addresses });
+});
+
+export const setDefaultAddressHandler = asyncHandler(async (req: Request, res: Response) => {
+  const addresses = await setDefaultAddress(requireUserId(req), routeParam(req, "addressId"));
+  sendResponse(res, 200, "Dirección marcada como predeterminada.", { addresses });
+});
+
+export const setBillingInfoHandler = asyncHandler(async (req: Request, res: Response) => {
+  const billingInfo = await setBillingInfo(requireUserId(req), req.body as BillingInfo);
+  sendResponse(res, 200, "Datos de facturación guardados.", { billingInfo });
+});
+
+export const removeBillingInfoHandler = asyncHandler(async (req: Request, res: Response) => {
+  await removeBillingInfo(requireUserId(req));
+  sendResponse(res, 200, "Datos de facturación eliminados.");
 });

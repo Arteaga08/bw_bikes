@@ -15,6 +15,7 @@ const INITIAL: AccountDTO = {
   phone: "5512345678",
   birthDate: "1990-05-10T00:00:00.000Z",
   city: "CDMX",
+  addresses: [],
 };
 
 describe("ProfileForm", () => {

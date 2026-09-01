@@ -30,6 +30,13 @@ export const CFDI_USES = [
 
 export type CfdiUse = (typeof CFDI_USES)[number];
 
+/** Spanish descriptions for `CFDI_USES`, for any UI that must show the customer a label instead of the raw SAT code. */
+export const CFDI_USE_LABELS: Record<CfdiUse, string> = {
+  G01: "Adquisición de mercancías",
+  G03: "Gastos en general",
+  P01: "Por definir",
+};
+
 /** SAT's "Régimen fiscal" catalog, the subset a retail customer (physical or moral) is likely to hold. */
 export const TAX_REGIMES = [
   "601", // General de Ley Personas Morales
@@ -41,3 +48,13 @@ export const TAX_REGIMES = [
 ] as const;
 
 export type TaxRegime = (typeof TAX_REGIMES)[number];
+
+/** Spanish descriptions for `TAX_REGIMES`, for any UI that must show the customer a label instead of the raw SAT code. */
+export const TAX_REGIME_LABELS: Record<TaxRegime, string> = {
+  "601": "General de Ley Personas Morales",
+  "603": "Personas Morales con Fines no Lucrativos",
+  "605": "Sueldos y Salarios e Ingresos Asimilados a Salarios",
+  "612": "Personas Físicas con Actividades Empresariales y Profesionales",
+  "621": "Incorporación Fiscal",
+  "626": "Régimen Simplificado de Confianza",
+};

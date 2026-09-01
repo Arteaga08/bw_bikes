@@ -1,7 +1,10 @@
-import type { UserRole } from "@bw-bikes/shared";
+import type { BillingInfo, CustomerFit, UserRole } from "@bw-bikes/shared";
 import bcrypt from "bcryptjs";
-import { type Document, model, Schema } from "mongoose";
+import { type Document, model, Schema, type Types } from "mongoose";
 import { BCRYPT_SALT_ROUNDS } from "../config/auth.js";
+import { billingInfoSchema } from "./schemas/billing-info.schema.js";
+import { fitSchema } from "./schemas/fit.schema.js";
+import { type ISavedAddress, MAX_SAVED_ADDRESSES, savedAddressSchema } from "./schemas/saved-address.schema.js";
 
 export interface IUser extends Document {
   email: string;
@@ -22,6 +25,9 @@ export interface IUser extends Document {
   phone?: string;
   birthDate?: Date;
   city?: string;
+  addresses: Types.DocumentArray<ISavedAddress>;
+  billingInfo?: BillingInfo;
+  fit?: CustomerFit;
   twoFactor: {
     enabled: boolean;
     secret?: string; // AES-256-GCM encrypted, never plaintext at rest
@@ -69,6 +75,19 @@ const userSchema = new Schema<IUser>(
     phone: { type: String, trim: true, maxlength: 10 },
     birthDate: { type: Date },
     city: { type: String, trim: true, maxlength: 80 },
+    // At most one entry with `isDefault: true` is a service-layer invariant
+    // (`account.service.ts`), enforced every time an address is created,
+    // updated, deleted or promoted — not a schema-level hook.
+    addresses: {
+      type: [savedAddressSchema],
+      default: [],
+      validate: {
+        validator: (addresses: unknown[]) => addresses.length <= MAX_SAVED_ADDRESSES,
+        message: `No puedes guardar más de ${MAX_SAVED_ADDRESSES} direcciones.`,
+      },
+    },
+    billingInfo: { type: billingInfoSchema },
+    fit: { type: fitSchema },
     twoFactor: {
       enabled: { type: Boolean, default: false },
       secret: { type: String, select: false },
