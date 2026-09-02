@@ -37,6 +37,20 @@ export function cloudinaryCloudName(): string {
   return name;
 }
 
+/**
+ * Browser-side: Stripe.js needs the publishable key in the client to
+ * tokenize card details without the card ever reaching our server (PCI
+ * SAQ-A). Unlike `apiInternalUrl()`, this one **must** be `NEXT_PUBLIC_*` —
+ * it is a browser value by definition, not a topology leak.
+ */
+export function stripePublishableKey(): string {
+  const key = process.env["NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"];
+  if (!key) {
+    throw new Error("Missing required environment variable: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY");
+  }
+  return key;
+}
+
 // Mirrors apps/api/src/utils/cookies.ts — names only, never values.
 export const ACCESS_TOKEN_COOKIE = "bw_access";
 
