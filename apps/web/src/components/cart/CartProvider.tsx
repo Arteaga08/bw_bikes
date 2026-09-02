@@ -1,14 +1,17 @@
 "use client";
 
-import type { ItemType, PublicCart } from "@bw-bikes/shared";
+import type { BillingInfo, ItemType, PublicCart, ShippingAddress } from "@bw-bikes/shared";
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from "react";
 import { useToast } from "@/hooks/use-toast";
 import {
   addCartLine,
   applyCartCoupon,
   getCart,
+  removeCartBillingInfo,
   removeCartCoupon,
   removeCartLine,
+  setCartBillingInfo,
+  setCartShippingAddress,
   updateCartLine,
 } from "@/lib/api/cart";
 import { ApiError } from "@/lib/api/error";
@@ -79,6 +82,9 @@ interface CartContextValue {
   removeLine: (itemType: ItemType, sku: string) => Promise<void>;
   applyCoupon: (code: string) => Promise<void>;
   removeCoupon: () => Promise<void>;
+  setShippingAddress: (address: ShippingAddress) => Promise<void>;
+  setBillingInfo: (billingInfo: BillingInfo) => Promise<void>;
+  removeBillingInfo: () => Promise<void>;
   isPending: (itemType: ItemType, sku: string) => boolean;
 }
 
@@ -160,6 +166,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const removeCoupon = useCallback(() => runMutation("coupon", () => removeCartCoupon()), [runMutation]);
 
+  const setShippingAddress = useCallback(
+    (address: ShippingAddress) => runMutation("shipping-address", () => setCartShippingAddress(address)),
+    [runMutation],
+  );
+
+  const setBillingInfo = useCallback(
+    (billingInfo: BillingInfo) => runMutation("billing-info", () => setCartBillingInfo(billingInfo)),
+    [runMutation],
+  );
+
+  const removeBillingInfo = useCallback(() => runMutation("billing-info", () => removeCartBillingInfo()), [runMutation]);
+
   const openDrawer = useCallback(() => dispatch({ type: "open-drawer" }), []);
   const closeDrawer = useCallback(() => dispatch({ type: "close-drawer" }), []);
 
@@ -180,6 +198,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       removeLine,
       applyCoupon,
       removeCoupon,
+      setShippingAddress,
+      setBillingInfo,
+      removeBillingInfo,
       isPending,
     }),
     [
@@ -194,6 +215,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       removeLine,
       applyCoupon,
       removeCoupon,
+      setShippingAddress,
+      setBillingInfo,
+      removeBillingInfo,
       isPending,
     ],
   );
