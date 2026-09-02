@@ -51,7 +51,7 @@ const FIXTURE_BILLING: BillingInfo = {
 };
 
 function Harness() {
-  const { status, lineCount, addLine, setShippingAddress, setBillingInfo, removeBillingInfo } = useCart();
+  const { status, lineCount, addLine, setShippingAddress, setBillingInfo, removeBillingInfo, refresh } = useCart();
   return (
     <div>
       <p>status:{status}</p>
@@ -60,6 +60,7 @@ function Harness() {
       <button onClick={() => void setShippingAddress(FIXTURE_ADDRESS)}>set-address</button>
       <button onClick={() => void setBillingInfo(FIXTURE_BILLING)}>set-billing</button>
       <button onClick={() => void removeBillingInfo()}>remove-billing</button>
+      <button onClick={() => void refresh()}>refresh</button>
     </div>
   );
 }
@@ -169,5 +170,21 @@ describe("CartProvider", () => {
     await user.click(screen.getByRole("button", { name: "remove-billing" }));
 
     await waitFor(() => expect(removeCartBillingInfoMock).toHaveBeenCalled());
+  });
+
+  it("refresh() re-runs GET /cart and replaces the cart", async () => {
+    getCartMock.mockClear();
+    getCartMock.mockResolvedValueOnce(CART).mockResolvedValueOnce({ ...CART, lines: [] });
+    render(
+      <CartProvider>
+        <Harness />
+      </CartProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("lineCount:2")).toBeInTheDocument());
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "refresh" }));
+
+    await waitFor(() => expect(screen.getByText("lineCount:0")).toBeInTheDocument());
+    expect(getCartMock).toHaveBeenCalledTimes(2);
   });
 });

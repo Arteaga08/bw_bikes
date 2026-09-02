@@ -85,6 +85,7 @@ interface CartContextValue {
   setShippingAddress: (address: ShippingAddress) => Promise<void>;
   setBillingInfo: (billingInfo: BillingInfo) => Promise<void>;
   removeBillingInfo: () => Promise<void>;
+  refresh: () => Promise<void>;
   isPending: (itemType: ItemType, sku: string) => boolean;
 }
 
@@ -107,18 +108,32 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const requestId = useRef(0);
 
-  useEffect(() => {
+  const hydrate = useCallback(async (): Promise<void> => {
     dispatch({ type: "loading" });
-    getCart()
-      .then((cart) => dispatch({ type: "hydrated", cart }))
-      .catch((error) => {
-        if (error instanceof ApiError && error.httpStatus === 401) {
-          dispatch({ type: "anonymous" });
-          return;
-        }
-        dispatch({ type: "error" });
-      });
+    try {
+      const cart = await getCart();
+      dispatch({ type: "hydrated", cart });
+    } catch (error) {
+      if (error instanceof ApiError && error.httpStatus === 401) {
+        dispatch({ type: "anonymous" });
+        return;
+      }
+      dispatch({ type: "error" });
+    }
   }, []);
+
+  useEffect(() => {
+    void hydrate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * Repeats the same GET /cart the mount effect runs. Needed because the
+   * Stripe webhook calls `emptyAfterCheckout` asynchronously — without this,
+   * the navbar badge would keep showing already-purchased lines until the
+   * next full page navigation (C2-checkout-pago.md §5).
+   */
+  const refresh = useCallback(() => hydrate(), [hydrate]);
 
   const runMutation = useCallback(
     async (key: string, mutate: () => Promise<PublicCart>): Promise<void> => {
@@ -201,6 +216,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setShippingAddress,
       setBillingInfo,
       removeBillingInfo,
+      refresh,
       isPending,
     }),
     [
@@ -218,6 +234,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setShippingAddress,
       setBillingInfo,
       removeBillingInfo,
+      refresh,
       isPending,
     ],
   );
