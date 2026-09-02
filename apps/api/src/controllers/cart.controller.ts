@@ -74,4 +74,9 @@ export const setCartBillingInfo = asyncHandler(async (req: Request, res: Respons
   sendResponse(res, 200, "Datos de facturación guardados.", { cart });
 });
 
+export const removeCartBillingInfo = asyncHandler(async (req: Request, res: Response) => {
+  const cart = await cartService.removeBillingInfo(requireUserId(req));
+  sendResponse(res, 200, "Datos de facturación eliminados.", { cart });
+});
+
 export { requireUserId };

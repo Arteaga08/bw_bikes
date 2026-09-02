@@ -1,4 +1,4 @@
-import type { ItemType, PublicCart } from "@bw-bikes/shared";
+import type { BillingInfo, ItemType, PublicCart, ShippingAddress } from "@bw-bikes/shared";
 import { apiFetch } from "./client";
 
 /**
@@ -53,5 +53,28 @@ export async function applyCartCoupon(code: string): Promise<PublicCart> {
 
 export async function removeCartCoupon(): Promise<PublicCart> {
   const { data } = await apiFetch<{ cart: PublicCart }>("/cart/coupon", { method: "DELETE" }, ANONYMOUS);
+  return data.cart;
+}
+
+export async function setCartShippingAddress(address: ShippingAddress): Promise<PublicCart> {
+  const { data } = await apiFetch<{ cart: PublicCart }>(
+    "/cart/shipping-address",
+    { method: "PUT", body: JSON.stringify(address) },
+    ANONYMOUS,
+  );
+  return data.cart;
+}
+
+export async function setCartBillingInfo(billingInfo: BillingInfo): Promise<PublicCart> {
+  const { data } = await apiFetch<{ cart: PublicCart }>(
+    "/cart/billing-info",
+    { method: "PUT", body: JSON.stringify(billingInfo) },
+    ANONYMOUS,
+  );
+  return data.cart;
+}
+
+export async function removeCartBillingInfo(): Promise<PublicCart> {
+  const { data } = await apiFetch<{ cart: PublicCart }>("/cart/billing-info", { method: "DELETE" }, ANONYMOUS);
   return data.cart;
 }

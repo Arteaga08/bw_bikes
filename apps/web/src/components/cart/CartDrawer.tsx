@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { SlideOver } from "@/components/ui/SlideOver";
 import { formatCurrencyCents } from "@/lib/format";
+import { CartDrawerCloseIcon } from "./CartDrawerCloseIcon";
 import { CartEmpty } from "./CartEmpty";
 import { CartLineItem } from "./CartLineItem";
 import { useCart } from "./CartProvider";
@@ -14,9 +15,10 @@ export interface CartDrawerProps {
 }
 
 /**
- * Mounted once in `(storefront)/layout.tsx`, never per page (`B-carrito.md`
- * §6). No CTA de pago aquí — el checkout es fase 2 de M13, y `CartSummary`
- * (que sí la trae, `disabled`) vive en `/carrito`, no en el drawer.
+ * Mounted once en `(storefront)/layout.tsx`, never per page (`B-carrito.md`
+ * §6). No CTA de pago aquí — la conversión completa vive en `/carrito` →
+ * `CartSummary`, y de ahí a `/checkout` (C1-checkout-datos.md), nunca en el
+ * drawer.
  */
 export function CartDrawer({ cloudName }: CartDrawerProps) {
   const { cart, status, drawerOpen, closeDrawer } = useCart();
@@ -28,6 +30,9 @@ export function CartDrawer({ cloudName }: CartDrawerProps) {
       open={drawerOpen}
       onClose={closeDrawer}
       title="Tu carrito"
+      closeButtonSize="icon-lg"
+      closeButtonClassName="hover:!text-dorado"
+      closeButtonIcon={<CartDrawerCloseIcon />}
       footer={
         lines.length > 0 ? (
           <div className="flex w-full flex-col gap-sm">
@@ -48,7 +53,7 @@ export function CartDrawer({ cloudName }: CartDrawerProps) {
       }
     >
       {status === "loading" ? null : lines.length === 0 ? (
-        <CartEmpty />
+        <CartEmpty onNavigate={closeDrawer} />
       ) : (
         <ul className="flex flex-col gap-lg">
           {lines.map((line) => (

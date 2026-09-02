@@ -1,6 +1,7 @@
 import type { PublicCart } from "@bw-bikes/shared";
 import { WarningCircle } from "@phosphor-icons/react/ssr";
 import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
 import { formatCurrencyCents } from "@/lib/format";
 
 export interface CartSummaryProps {
@@ -9,8 +10,9 @@ export interface CartSummaryProps {
 
 /**
  * Subtotal → descuento → IVA → envío → total, más los dos avisos que dependen
- * del contenido del carrito. El CTA de pago queda `disabled`: el checkout es
- * fase 2 de M13 (`B-carrito.md`, fuera de alcance).
+ * del contenido del carrito. El CTA lleva a `/checkout/envio`
+ * (C1-checkout-datos.md); solo queda deshabilitado cuando `hasBlockingLines`
+ * — no hay nada que pagar todavía.
  */
 export function CartSummary({ cart }: CartSummaryProps) {
   return (
@@ -60,9 +62,15 @@ export function CartSummary({ cart }: CartSummaryProps) {
         </p>
       ) : null}
 
-      <Button variant="primary" size="md" disabled title="Disponible próximamente" className="w-full">
-        Pagar
-      </Button>
+      {cart.hasBlockingLines ? (
+        <Button variant="primary" size="md" disabled title="Ajusta los productos marcados para poder continuar." className="w-full">
+          Pagar
+        </Button>
+      ) : (
+        <ButtonLink href="/checkout/envio" variant="primary" size="md" className="w-full">
+          Ir a pagar
+        </ButtonLink>
+      )}
     </div>
   );
 }
