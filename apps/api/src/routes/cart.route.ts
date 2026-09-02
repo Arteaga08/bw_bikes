@@ -4,6 +4,7 @@ import {
   applyCartCoupon,
   clearCart,
   getCart,
+  removeCartBillingInfo,
   removeCartCoupon,
   removeCartLine,
   setCartBillingInfo,
@@ -45,6 +46,7 @@ router.delete("/", clearCart);
 
 router.put("/shipping-address", validate(shippingAddressSchema), setCartShippingAddress);
 router.put("/billing-info", validate(billingInfoSchema), setCartBillingInfo);
+router.delete("/billing-info", removeCartBillingInfo);
 
 router.post("/coupon", couponRateLimiter, validate(applyCouponSchema), applyCartCoupon);
 router.delete("/coupon", removeCartCoupon);

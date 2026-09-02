@@ -328,6 +328,14 @@ async function getBillingInfo(userId: string): Promise<BillingInfo | undefined> 
   return cart?.billingInfo;
 }
 
+/** Clears the cart's CFDI data — the desmarcar-factura half of `setBillingInfo`, same idempotent shape as `removeCoupon`. */
+async function removeBillingInfo(userId: string): Promise<PublicCart> {
+  const cart = await findOrCreate(userId);
+  cart.billingInfo = undefined;
+  await cart.save();
+  return toPublicCart(cart);
+}
+
 /**
  * Stores a coupon code on the cart (M18).
  *
@@ -398,6 +406,7 @@ export const cartService = {
   getShippingAddress,
   setBillingInfo,
   getBillingInfo,
+  removeBillingInfo,
   applyCoupon,
   removeCoupon,
   getCheckoutCoupon,
