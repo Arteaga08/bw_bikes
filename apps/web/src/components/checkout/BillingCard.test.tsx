@@ -85,4 +85,21 @@ describe("BillingCard", () => {
 
     await waitFor(() => expect(removeBillingInfoMock).toHaveBeenCalled());
   });
+
+  it("rolls back to checked when removeBillingInfo fails, instead of showing a false unchecked state", async () => {
+    const { ApiError } = await import("@/lib/api/error");
+    removeBillingInfoMock.mockRejectedValue(new ApiError("No se pudo conectar con el servidor.", 500));
+    useCartMock.mockReturnValue({
+      cart: { billingInfo: SAVED_BILLING },
+      setBillingInfo: setBillingInfoMock,
+      removeBillingInfo: removeBillingInfoMock,
+    });
+    const user = userEvent.setup();
+    render(<BillingCard initialBillingInfo={SAVED_BILLING} />);
+
+    await user.click(screen.getByRole("checkbox", { name: "Necesito factura (CFDI)" }));
+
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "Necesito factura (CFDI)" })).toBeChecked());
+    expect(screen.getByText("No se pudo conectar con el servidor.")).toBeInTheDocument();
+  });
 });

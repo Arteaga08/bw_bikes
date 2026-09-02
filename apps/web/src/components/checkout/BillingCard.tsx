@@ -25,11 +25,11 @@ const emptyForm = (prefill?: BillingInfo): BillingInfo =>
  */
 export function BillingCard({ initialBillingInfo }: BillingCardProps) {
   const { cart, setBillingInfo, removeBillingInfo } = useCart();
-  const savedOnCart = (cart as { billingInfo?: BillingInfo } | null)?.billingInfo;
+  const savedOnCart = cart?.billingInfo;
 
   const [checked, setChecked] = useState(Boolean(savedOnCart));
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<BillingInfo>(emptyForm(savedOnCart ?? initialBillingInfo));
+  const [form, setForm] = useState<BillingInfo>(() => emptyForm(savedOnCart ?? initialBillingInfo));
   const [errors, setErrors] = useState<BillingFormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -53,6 +53,10 @@ export function BillingCard({ initialBillingInfo }: BillingCardProps) {
       try {
         await removeBillingInfo();
       } catch (err) {
+        // Roll back to the saved state — the DELETE failed, so the cart
+        // still has billingInfo, and the checkbox must not claim otherwise.
+        setChecked(true);
+        setEditing(false);
         setSubmitError(err instanceof ApiError ? err.message : "No se pudieron eliminar los datos fiscales.");
       }
     }
@@ -89,10 +93,11 @@ export function BillingCard({ initialBillingInfo }: BillingCardProps) {
         onChange={(event) => void handleToggle(event.target.checked)}
       />
 
+      {submitError ? <p className="font-body text-caption text-estado-error">{submitError}</p> : null}
+
       {checked && editing ? (
         <>
           <BillingFields form={form} errors={errors} onChange={set} />
-          {submitError ? <p className="font-body text-caption text-estado-error">{submitError}</p> : null}
           <Button variant="primary" size="md" loading={submitting} onClick={() => void handleSave()}>
             Guardar datos fiscales
           </Button>

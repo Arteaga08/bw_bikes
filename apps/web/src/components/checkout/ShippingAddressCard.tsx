@@ -69,7 +69,7 @@ function toShippingAddress(input: SavedAddress | SaveAddressInput): ShippingAddr
  */
 export function ShippingAddressCard({ addresses, onAddressesChange, profile }: ShippingAddressCardProps) {
   const { cart, setShippingAddress } = useCart();
-  const confirmedAddress = (cart as { shippingAddress?: ShippingAddress } | null)?.shippingAddress;
+  const confirmedAddress = cart?.shippingAddress;
   const defaultAddress = addresses.find((address) => address.isDefault) ?? addresses[0];
 
   const [mode, setMode] = useState<Mode>(() => {
@@ -78,11 +78,11 @@ export function ShippingAddressCard({ addresses, onAddressesChange, profile }: S
     return "choose";
   });
   const [selectedId, setSelectedId] = useState<string | undefined>(defaultAddress?.id);
-  const [form, setForm] = useState<SaveAddressInput>({
+  const [form, setForm] = useState<SaveAddressInput>(() => ({
     ...EMPTY_FORM,
     recipientName: `${profile.firstName} ${profile.lastName}`.trim(),
     phone: profile.phone ?? "",
-  });
+  }));
   const [errors, setErrors] = useState<AddressFormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
