@@ -1,3 +1,4 @@
+import type { BillingInfo, ShippingAddress } from "@bw-bikes/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -30,7 +31,7 @@ const { CartProvider, useCart } = await import("./CartProvider");
 
 const CART = { id: "cart-1", lines: [{ itemType: "bike", sku: "SKU-1", qty: 2 }], subtotalCents: 100 };
 
-const FIXTURE_ADDRESS = {
+const FIXTURE_ADDRESS: ShippingAddress = {
   recipientName: "Ana Pérez",
   phone: "5512345678",
   street: "Av. Reforma 123",
@@ -41,7 +42,7 @@ const FIXTURE_ADDRESS = {
   country: "MX",
 };
 
-const FIXTURE_BILLING = {
+const FIXTURE_BILLING: BillingInfo = {
   rfc: "XAXX010101000",
   legalName: "Ana Pérez",
   cfdiUse: "G03",

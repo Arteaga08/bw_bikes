@@ -1,3 +1,4 @@
+import type { BillingInfo, ShippingAddress } from "@bw-bikes/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addCartLine,
@@ -18,7 +19,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 const CART = { id: "cart-1", lines: [], subtotalCents: 0 };
 
-const SHIPPING_ADDRESS = {
+const SHIPPING_ADDRESS: ShippingAddress = {
   recipientName: "Ana Pérez",
   phone: "5512345678",
   street: "Av. Reforma 123",
@@ -29,7 +30,7 @@ const SHIPPING_ADDRESS = {
   country: "MX",
 };
 
-const BILLING_INFO = {
+const BILLING_INFO: BillingInfo = {
   rfc: "XAXX010101000",
   legalName: "Ana Pérez",
   cfdiUse: "G03",
