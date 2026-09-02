@@ -111,6 +111,19 @@ describe("OrderConfirmationView", () => {
     expect(screen.getByRole("link", { name: /carrito/i })).toHaveAttribute("href", "/carrito");
   });
 
+  it("shows the failure screen when status is authorization_expired, even though payment.state is 'canceled' not 'failed'", async () => {
+    getOrderByNumberMock.mockResolvedValue(
+      order({ status: "authorization_expired", payment: { provider: "stripe", state: "canceled", captureMethod: "manual" } }),
+    );
+
+    render(<OrderConfirmationView orderNumber="BW-0001" />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("No pudimos procesar tu pago")).toBeInTheDocument();
+  });
+
   it("shows the timeout screen after 15 attempts still pending, and stops polling", async () => {
     getOrderByNumberMock.mockResolvedValue(order({ payment: { provider: "stripe", state: "pending", captureMethod: "automatic" } }));
 

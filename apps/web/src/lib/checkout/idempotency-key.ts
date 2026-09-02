@@ -21,19 +21,27 @@ interface StoredKey {
  * visit to checkout, not something that should outlive it.
  */
 export function checkoutIdempotencyKey(cartUpdatedAt: string): string {
-  const raw = sessionStorage.getItem(STORAGE_KEY);
-  if (raw) {
-    try {
-      const stored = JSON.parse(raw) as StoredKey;
-      if (stored.cartUpdatedAt === cartUpdatedAt && stored.key) {
-        return stored.key;
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        const stored = JSON.parse(raw) as StoredKey;
+        if (stored.cartUpdatedAt === cartUpdatedAt && stored.key) {
+          return stored.key;
+        }
+      } catch {
+        // Malformed value — fall through and mint a fresh one.
       }
-    } catch {
-      // Malformed value — fall through and mint a fresh one.
     }
-  }
 
-  const key = crypto.randomUUID();
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ key, cartUpdatedAt } satisfies StoredKey));
-  return key;
+    const key = crypto.randomUUID();
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ key, cartUpdatedAt } satisfies StoredKey));
+    return key;
+  } catch {
+    // sessionStorage itself is inaccessible (a strict cookie/storage policy,
+    // older Safari private browsing) — fall back to an unpersisted key so
+    // checkout can still proceed. It just won't survive a remount, same as
+    // it wouldn't for a first-time visitor before any key existed.
+    return crypto.randomUUID();
+  }
 }

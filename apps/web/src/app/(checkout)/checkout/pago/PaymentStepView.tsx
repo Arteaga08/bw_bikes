@@ -61,10 +61,6 @@ export function PaymentStepView() {
       });
     } catch (error) {
       if (error instanceof ApiError) {
-        if (error.httpStatus === 400) {
-          router.replace("/checkout/envio");
-          return;
-        }
         if (error.httpStatus === 502) {
           setState({ phase: "error", message: error.message, kind: "retry" });
           return;
@@ -73,9 +69,13 @@ export function PaymentStepView() {
           setState({ phase: "error", message: error.message, kind: "maintenance" });
           return;
         }
-        // 409 (already processed) and 429 (rate limited) both mean "stop
-        // trying here" — send the customer back to the cart rather than
-        // offer a retry that will just repeat the same rejection.
+        // 400 (empty cart / invalid quantity — never "missing shipping
+        // address": that case is already caught above, before createOrder is
+        // ever called), 409 (already processed) and 429 (rate limited) all
+        // mean "stop trying here, this is a cart problem" — show the
+        // backend's own message and send the customer back to the cart
+        // rather than a silent redirect to the address step or a retry that
+        // would just repeat the same rejection.
         setState({ phase: "error", message: error.message, kind: "redirect-cart" });
         return;
       }

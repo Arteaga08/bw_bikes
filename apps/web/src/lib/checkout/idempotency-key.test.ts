@@ -38,4 +38,16 @@ describe("checkoutIdempotencyKey", () => {
     expect(randomUUIDSpy).toHaveBeenCalledTimes(1);
     randomUUIDSpy.mockRestore();
   });
+
+  it("falls back to an unpersisted key instead of throwing when sessionStorage is inaccessible", () => {
+    const getItemSpy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+
+    const key = checkoutIdempotencyKey("2026-09-01T00:00:00.000Z");
+
+    expect(key).toEqual(expect.any(String));
+    expect(key.length).toBeGreaterThan(0);
+    getItemSpy.mockRestore();
+  });
 });

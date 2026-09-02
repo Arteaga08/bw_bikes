@@ -213,6 +213,19 @@ describe("PaymentStepView", () => {
     expect(createOrderMock.mock.calls[0]![0]).toBe(createOrderMock.mock.calls[1]![0]);
   });
 
+  it("shows the backend message and a ButtonLink to /carrito on 400 (empty cart / invalid quantity), instead of silently redirecting to /checkout/envio", async () => {
+    const replace = vi.fn();
+    useRouterMock.mockReturnValue({ replace, push: vi.fn() });
+    useCartMock.mockReturnValue({ cart: PURCHASABLE_CART });
+    createOrderMock.mockRejectedValue(new ApiError("Tu carrito está vacío.", 400));
+
+    render(<PaymentStepView />);
+
+    await waitFor(() => expect(screen.getByText("Tu carrito está vacío.")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: /carrito/i })).toHaveAttribute("href", "/carrito");
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it("shows a maintenance block without the form on 503, and does not call confirmPayment", async () => {
     useCartMock.mockReturnValue({ cart: PURCHASABLE_CART });
     createOrderMock.mockRejectedValue(new ApiError("El pago con tarjeta no está disponible por ahora.", 503));

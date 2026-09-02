@@ -19,7 +19,14 @@ type Screen =
   | { kind: "timeout" };
 
 function screenFor(order: PublicOrder): Screen | null {
-  if (order.payment.state === "failed" || order.status === "cancelled") return { kind: "failed" };
+  // `markCanceled` (order.service.ts) writes status:"authorization_expired",
+  // not "cancelled", when a manual-capture hold lapses — that shape must
+  // read as "failed" too, or the order would poll for the full 15 attempts
+  // and land on the generic timeout screen instead of an immediate, honest
+  // failure message.
+  if (order.payment.state === "failed" || order.status === "cancelled" || order.status === "authorization_expired") {
+    return { kind: "failed" };
+  }
   if (order.status === "paid") return { kind: "paid", order };
   if (order.status === "awaiting_supplier_confirmation") return { kind: "authorized", order };
   return null;
