@@ -327,6 +327,8 @@ interface PublicProductBase {
  */
 export interface PublicBike extends PublicProductBase {
   shortDescription: string;
+  /** The model year printed on the sheet — bikes only, optional (not every product has one on file). Shown on the PDP eyebrow and in the comparator's "Ficha general" row. */
+  modelYear?: number;
   /** The "En pocas palabras" card, up to `MAX_SUMMARY_ROWS`. Bikes only — an accessory has no overview block. */
   summary: SummaryRow[];
   /** The geometry chart, a single image with no rows of its own. Bikes only. */
@@ -381,6 +383,8 @@ interface AdminProductBase extends PublicProductBase {
 /** The exact shape the admin panel receives for a bike, unfiltered variants included. */
 export interface AdminBike extends AdminProductBase {
   shortDescription: string;
+  /** The model year printed on the sheet — bikes only, optional. Same field as `PublicBike`'s. */
+  modelYear?: number;
   /** The "En pocas palabras" card, up to `MAX_SUMMARY_ROWS`. Bikes only, same as `PublicBike`'s. */
   summary: SummaryRow[];
   /** The geometry chart, a single image. Bikes only, same as `PublicBike`'s. */

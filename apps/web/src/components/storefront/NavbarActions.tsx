@@ -89,7 +89,7 @@ export function NavbarActions({ tone }: NavbarActionsProps) {
         size="icon-lg"
         aria-label="Cuenta"
         iconLeft={<User style={{ width: ICON_SIZE, height: ICON_SIZE }} />}
-        className="max-md:hidden hover:!text-dorado"
+        className="hover:!text-dorado"
       />
       <Button
         variant="bare"

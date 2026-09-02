@@ -26,6 +26,7 @@ import { ApiError } from "@/lib/api/error";
 import { findSpecSheetError, MAX_SPEC_GROUPS, pruneEmptyFields, type SpecSheetError } from "@/lib/catalog/spec-groups";
 import { MAX_SUMMARY_ROWS } from "@/lib/catalog/summary";
 import { centsToPriceInput, parsePriceToCents } from "@/lib/catalog/price";
+import { MAX_MODEL_YEAR, MIN_MODEL_YEAR } from "./catalog-limits";
 import { BadgesPicker, MAX_PRODUCT_BADGES } from "./BadgesPicker";
 import { BikeBasicsFields, type BikeBasicsValue } from "./BikeBasicsFields";
 import { CategoryImageField } from "./categorias/CategoryImageField";
@@ -114,6 +115,7 @@ const ERROR_TARGET_IDS: Partial<Record<keyof FormErrors, string>> = {
   priceInput: PRODUCT_FIELD_IDS.priceInput,
   compareAtPriceInput: PRODUCT_FIELD_IDS.compareAtPriceInput,
   shortDescription: PRODUCT_FIELD_IDS.shortDescription,
+  modelYear: PRODUCT_FIELD_IDS.modelYear,
   variants: "section-variants",
   specGroups: "section-specs",
 };
@@ -148,7 +150,10 @@ function basicsFromProduct(product?: AdminBike | AdminAccessory): ProductBasicsV
 }
 
 function bikeBasicsFromProduct(product?: AdminBike): BikeBasicsValue {
-  return { shortDescription: product?.shortDescription ?? "" };
+  return {
+    shortDescription: product?.shortDescription ?? "",
+    modelYear: product?.modelYear !== undefined ? String(product.modelYear) : "",
+  };
 }
 
 function variantsFromProduct(product?: AdminBike | AdminAccessory): VariantRow[] {
@@ -395,6 +400,16 @@ function ProductEditorContent({
 
     if (kind === "bike") {
       if (!bike.shortDescription.trim()) nextErrors.shortDescription = "La descripción corta es obligatoria.";
+
+      // Vacío es válido — el campo es opcional. Solo se valida cuando el
+      // admin escribió algo.
+      const modelYearRaw = bike.modelYear.trim();
+      if (modelYearRaw) {
+        const modelYearValue = Number(modelYearRaw);
+        if (!Number.isInteger(modelYearValue) || modelYearValue < MIN_MODEL_YEAR || modelYearValue > MAX_MODEL_YEAR) {
+          nextErrors.modelYear = `El año debe ser un número entero entre ${MIN_MODEL_YEAR} y ${MAX_MODEL_YEAR}.`;
+        }
+      }
     }
 
     if (findDuplicateSkuIndices(variants).size > 0) {
@@ -578,9 +593,11 @@ function ProductEditorContent({
     setSubmitting(true);
     try {
       if (kind === "bike") {
+        const modelYearRaw = bike.modelYear.trim();
         const payload: BikeInput = {
           ...sharedPayload,
           shortDescription: bike.shortDescription.trim(),
+          ...(modelYearRaw ? { modelYear: Number(modelYearRaw) } : {}),
           // Six bounded rows, so unlike the sheet this rides in the body on
           // create *and* on edit — no second write to fail on its own.
           summary,

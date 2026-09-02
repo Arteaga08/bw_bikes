@@ -50,7 +50,7 @@ export function CartPageClient({ cloudName }: CartPageClientProps) {
         ))}
       </ul>
 
-      <div className="flex flex-col gap-lg lg:sticky lg:top-16">
+      <div className="order-first flex flex-col gap-lg lg:order-0 lg:sticky lg:top-16">
         <CartSummary cart={cart} />
         <CouponForm coupon={cart.coupon} />
       </div>

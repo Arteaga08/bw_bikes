@@ -2,8 +2,9 @@
 
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useId, useRef } from "react";
-import { CloseButton } from "@/components/ui/CloseButton";
+import { CloseButton, type CloseButtonProps } from "@/components/ui/CloseButton";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
+import { cn } from "@/lib/cn";
 
 export interface SlideOverProps {
   open: boolean;
@@ -13,6 +14,12 @@ export interface SlideOverProps {
   subtitle?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** `icon` (admin default) or `icon-lg` — the storefront's cart drawer matches the 44px touch target the mobile nav's own toggle uses. */
+  closeButtonSize?: CloseButtonProps["size"];
+  /** Extra classes for the close button — the storefront's cart drawer adds the same `hover:!text-dorado` accent as the rest of the public nav. */
+  closeButtonClassName?: string;
+  /** Overrides the close button's glyph — the storefront's cart drawer passes its own animated icon; admin consumers leave this unset and keep the default Phosphor `X`. */
+  closeButtonIcon?: ReactNode;
 }
 
 /**
@@ -32,7 +39,17 @@ export interface SlideOverProps {
  * Flat by default (DESIGN_SYSTEM.md §4): the `base → surface` change plus the
  * left border carry the depth, never a `box-shadow`.
  */
-export function SlideOver({ open, onClose, title, subtitle, children, footer }: SlideOverProps) {
+export function SlideOver({
+  open,
+  onClose,
+  title,
+  subtitle,
+  children,
+  footer,
+  closeButtonSize,
+  closeButtonClassName,
+  closeButtonIcon,
+}: SlideOverProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -71,7 +88,13 @@ export function SlideOver({ open, onClose, title, subtitle, children, footer }: 
             </h2>
             {subtitle ? <p className="mt-xs font-body text-caption text-grafito">{subtitle}</p> : null}
           </div>
-          <CloseButton onClick={onClose} aria-label="Cerrar panel" className="-mr-sm shrink-0" />
+          <CloseButton
+            onClick={onClose}
+            aria-label="Cerrar panel"
+            size={closeButtonSize}
+            className={cn("-mr-sm shrink-0", closeButtonClassName)}
+            icon={closeButtonIcon}
+          />
         </header>
 
         <div className="flex-1 overflow-y-auto px-lg py-md font-body text-body text-negro">{children}</div>

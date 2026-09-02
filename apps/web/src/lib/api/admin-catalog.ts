@@ -114,6 +114,8 @@ interface ProductBasicsInput {
 
 export interface BikeInput extends ProductBasicsInput {
   shortDescription: string;
+  /** The model year printed on the sheet — bike-only, optional. */
+  modelYear?: number;
   /**
    * The "En pocas palabras" card. Unlike `specGroups`, it has no endpoint of
    * its own — six bounded rows ride in the product's own body, so this saves

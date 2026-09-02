@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ColorTemplate, FulfillmentMode } from "@bw-bikes/shared";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ColorSwatch } from "@/components/ui/ColorSwatch";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Toggle } from "@/components/ui/Toggle";
 import { buildSkuBase, ensureUniqueSku } from "@/lib/catalog/sku";
-import { ALL_FULFILLMENT_MODES, FULFILLMENT_MODE_LABELS } from "@/lib/catalog/labels";
+import { ALL_FULFILLMENT_MODES, FULFILLMENT_MODE_BADGE_VARIANTS, FULFILLMENT_MODE_LABELS } from "@/lib/catalog/labels";
 
 /** Mirrors `MAX_VARIANTS` in `apps/api/src/models/schemas/product-variant.schema.ts`. */
 export const MAX_VARIANTS = 40;
@@ -240,7 +241,14 @@ export function VariantsEditor({
               const currentColorHex = currentColorTemplate?.hex ?? null;
               const currentSecondaryHex = currentColorTemplate?.secondaryHex ?? null;
               return (
-                <div key={index} className="flex flex-col gap-sm py-sm first:pt-0 last:pb-0">
+                <div
+                  key={index}
+                  className={
+                    row.fulfillmentMode !== "in_stock"
+                      ? "flex flex-col gap-sm rounded-control bg-estado-advertencia-soft/40 px-sm py-sm first:mt-0 last:mb-0"
+                      : "flex flex-col gap-sm py-sm first:pt-0 last:pb-0"
+                  }
+                >
                   <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
                     <Input
                       label="SKU"
@@ -297,17 +305,25 @@ export function VariantsEditor({
                       value={row.priceInput}
                       onChange={(event) => updateRow(index, { priceInput: event.target.value })}
                     />
-                    <Select
-                      label="Disponibilidad"
-                      value={row.fulfillmentMode}
-                      onChange={(event) => updateRow(index, { fulfillmentMode: event.target.value as FulfillmentMode })}
-                    >
-                      {ALL_FULFILLMENT_MODES.map((mode) => (
-                        <option key={mode} value={mode}>
-                          {FULFILLMENT_MODE_LABELS[mode]}
-                        </option>
-                      ))}
-                    </Select>
+                    <div className="flex items-end gap-sm">
+                      <Select
+                        label="Disponibilidad"
+                        value={row.fulfillmentMode}
+                        onChange={(event) => updateRow(index, { fulfillmentMode: event.target.value as FulfillmentMode })}
+                        wrapperClassName="min-w-0 flex-1"
+                      >
+                        {ALL_FULFILLMENT_MODES.map((mode) => (
+                          <option key={mode} value={mode}>
+                            {FULFILLMENT_MODE_LABELS[mode]}
+                          </option>
+                        ))}
+                      </Select>
+                      {row.fulfillmentMode !== "in_stock" ? (
+                        <Badge variant={FULFILLMENT_MODE_BADGE_VARIANTS[row.fulfillmentMode]} className="mb-2.5 shrink-0">
+                          {FULFILLMENT_MODE_LABELS[row.fulfillmentMode]}
+                        </Badge>
+                      ) : null}
+                    </div>
                     {row.fulfillmentMode === "preorder" ? (
                       <Input
                         label="Fecha estimada"

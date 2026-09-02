@@ -15,6 +15,9 @@ export const MAX_DESCRIPTION_LENGTH = 5000;
 export const MAX_RELATED_ACCESSORIES = 12;
 /** More than one merchandising badge stops reading as "highlighted" and starts reading as noise. */
 export const MAX_PRODUCT_BADGES = 1;
+/** Bounds for `modelYear` — fixed years, not `new Date().getFullYear() + 1`: a limit computed at module load goes stale in a process that lives for weeks, and rejecting model year 2027 in December would be an invisible bug. */
+export const MIN_MODEL_YEAR = 1990;
+export const MAX_MODEL_YEAR = 2100;
 
 export interface IBike extends Document {
   name: string;
@@ -22,6 +25,8 @@ export interface IBike extends Document {
   brand: Types.ObjectId;
   category: Types.ObjectId;
   shortDescription: string;
+  /** The model year printed on the sheet — bikes only, optional (not every product needs one on file). */
+  modelYear?: number;
   description: string;
   price: number;
   compareAtPrice?: number;
@@ -51,6 +56,9 @@ const bikeSchema = new Schema<IBike>(
     category: { type: Schema.Types.ObjectId, ref: "BikeCategory", required: true },
 
     shortDescription: { type: String, required: true, trim: true, maxlength: MAX_SHORT_DESCRIPTION_LENGTH },
+    // Not indexed — the schema's own rule above: only fields the storefront
+    // filters on earn a typed index, and the model year isn't a filter yet.
+    modelYear: { type: Number, min: MIN_MODEL_YEAR, max: MAX_MODEL_YEAR },
     description: { type: String, required: true, trim: true, maxlength: MAX_DESCRIPTION_LENGTH },
 
     // Integer cents, never a float — see `PriceCents` in packages/shared.

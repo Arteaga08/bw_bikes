@@ -3,6 +3,7 @@ import Joi from "joi";
 import {
   MAX_COLOR_LENGTH,
   MAX_DESCRIPTION_LENGTH,
+  MAX_MODEL_YEAR,
   MAX_ON_HAND,
   MAX_PRODUCT_BADGES,
   MAX_PRODUCT_NAME_LENGTH,
@@ -13,6 +14,7 @@ import {
   MAX_SPEC_VALUE_LENGTH,
   MAX_SUMMARY_ROWS,
   MAX_VARIANTS,
+  MIN_MODEL_YEAR,
 } from "../models/index.js";
 import { objectId, priceCents, sku, slug } from "./common.validator.js";
 import { specGroupSchemaJoi } from "./spec-group.validator.js";
@@ -43,6 +45,14 @@ const shortDescription = Joi.string().trim().min(1).max(MAX_SHORT_DESCRIPTION_LE
   "string.empty": "La descripción corta es obligatoria.",
   "string.max": `La descripción corta no puede exceder ${MAX_SHORT_DESCRIPTION_LENGTH} caracteres.`,
   "any.required": "La descripción corta es obligatoria.",
+});
+
+/** The model year printed on the sheet — bike-only, optional. Attached to the bike schemas below, not `productBase`: that's what keeps accessories from accepting it, same reasoning as `shortDescription`. */
+const modelYear = Joi.number().integer().min(MIN_MODEL_YEAR).max(MAX_MODEL_YEAR).messages({
+  "number.base": "El año del modelo debe ser un número.",
+  "number.integer": "El año del modelo debe ser un número entero.",
+  "number.min": `El año del modelo no puede ser anterior a ${MIN_MODEL_YEAR}.`,
+  "number.max": `El año del modelo no puede ser posterior a ${MAX_MODEL_YEAR}.`,
 });
 
 const variant = Joi.object({
@@ -187,6 +197,7 @@ export const createBikeSchema = Joi.object({
   category: productBase.category.required(),
   description: description.required(),
   shortDescription: shortDescription.required(),
+  modelYear: modelYear.optional(),
   price: priceCents.required(),
   summary: summary.default([]),
   relatedAccessories: relatedAccessories.default([]),
@@ -196,6 +207,7 @@ export const createBikeSchema = Joi.object({
 export const updateBikeSchema = Joi.object({
   ...productBase,
   shortDescription: shortDescription.optional(),
+  modelYear: modelYear.optional(),
   summary: summary.optional(),
   relatedAccessories: relatedAccessories.optional(),
   variants: variantsWithInitialStock.optional(),

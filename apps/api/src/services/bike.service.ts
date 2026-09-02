@@ -31,6 +31,7 @@ export interface BikeInput {
   brand?: string;
   category?: string;
   shortDescription?: string;
+  modelYear?: number;
   description?: string;
   price?: number;
   compareAtPrice?: number;
@@ -83,6 +84,7 @@ export function toPublicBike(bike: IBike): PublicBike {
       ? (bike.badges as unknown as Parameters<typeof toPublicBadge>[0][]).map(toPublicBadge)
       : [],
     shortDescription: bike.shortDescription,
+    ...(bike.modelYear !== undefined ? { modelYear: bike.modelYear } : {}),
     description: bike.description,
     price: bike.price,
     ...(bike.compareAtPrice !== undefined ? { compareAtPrice: bike.compareAtPrice } : {}),
@@ -129,6 +131,7 @@ export function toAdminBike(bike: IBike): AdminBike {
       ? (bike.badges as unknown as Parameters<typeof toPublicBadge>[0][]).map(toPublicBadge)
       : [],
     shortDescription: bike.shortDescription,
+    ...(bike.modelYear !== undefined ? { modelYear: bike.modelYear } : {}),
     description: bike.description,
     price: bike.price,
     ...(bike.compareAtPrice !== undefined ? { compareAtPrice: bike.compareAtPrice } : {}),
@@ -188,6 +191,7 @@ async function create(input: BikeInput, actor: ActorContext): Promise<IBike> {
           brand: new Types.ObjectId(input.brand),
           category: new Types.ObjectId(input.category),
           shortDescription: input.shortDescription,
+          modelYear: input.modelYear,
           description: input.description,
           price: input.price,
           compareAtPrice: input.compareAtPrice,
@@ -278,6 +282,7 @@ async function update(id: string, input: BikeInput, actor: ActorContext): Promis
 
   if (input.name !== undefined) bike.name = input.name;
   if (input.shortDescription !== undefined) bike.shortDescription = input.shortDescription;
+  if (input.modelYear !== undefined) bike.modelYear = input.modelYear;
   if (input.description !== undefined) bike.description = input.description;
   if (input.price !== undefined) bike.price = input.price;
   if (input.compareAtPrice !== undefined) bike.compareAtPrice = input.compareAtPrice;

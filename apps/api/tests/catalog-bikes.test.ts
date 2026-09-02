@@ -85,6 +85,67 @@ describe("bike CRUD", () => {
     expect(response.body.message).toContain("centavos");
   });
 
+  it("accepts a bike with no modelYear and omits it from the public/admin DTOs", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId));
+
+    expect(created.status).toBe(201);
+    expect(created.body.data.bike.modelYear).toBeUndefined();
+  });
+
+  it("stores modelYear and serves it on both the admin and public DTOs", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId, { modelYear: 2026 }));
+
+    expect(created.status).toBe(201);
+    expect(created.body.data.bike.modelYear).toBe(2026);
+    const slug = created.body.data.bike.slug as string;
+
+    const publicRead = await request(app).get(`${PUBLIC}/bikes/${slug}`);
+    expect(publicRead.status).toBe(200);
+    expect(publicRead.body.data.bike.modelYear).toBe(2026);
+  });
+
+  it("rejects a modelYear outside the valid range", async () => {
+    const tooOld = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId, { modelYear: 1800 }));
+    expect(tooOld.status).toBe(400);
+
+    const tooFar = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId, { modelYear: 3000 }));
+    expect(tooFar.status).toBe(400);
+
+    const notInteger = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId, { modelYear: 2026.5 }));
+    expect(notInteger.status).toBe(400);
+  });
+
+  it("can update modelYear through a PATCH", async () => {
+    const created = await request(app)
+      .post(`${ADMIN}/bikes`)
+      .set("Cookie", adminCookie)
+      .send(bikePayload(categoryId, brandId, { modelYear: 2025 }));
+    const id = created.body.data.bike.id as string;
+
+    const updated = await request(app)
+      .patch(`${ADMIN}/bikes/${id}`)
+      .set("Cookie", adminCookie)
+      .send({ modelYear: 2026 });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.data.bike.modelYear).toBe(2026);
+  });
+
   it("rejects a duplicate slug with 409", async () => {
     await request(app).post(`${ADMIN}/bikes`).set("Cookie", adminCookie).send(bikePayload(categoryId, brandId));
 

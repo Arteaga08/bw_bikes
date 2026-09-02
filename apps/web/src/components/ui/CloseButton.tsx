@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "@phosphor-icons/react";
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { forwardRef } from "react";
 import { Button, type ButtonSize, type ButtonTone } from "@/components/ui/Button";
 
@@ -12,6 +12,8 @@ export interface CloseButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEl
   size?: Extract<ButtonSize, "icon-sm" | "icon" | "icon-lg">;
   /** `inverse` for a close control sitting on `overlay` (a dark modal or toast). */
   tone?: Extract<ButtonTone, "neutral" | "inverse">;
+  /** Overrides the default Phosphor `X` glyph — the storefront's cart drawer is the one deliberate exception, swapping in the mobile nav's animated `MenuToggleIcon` so both dismiss controls read as the same motion language. */
+  icon?: ReactNode;
 }
 
 /**
@@ -25,8 +27,10 @@ export interface CloseButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEl
  * louder than the content it's closing.
  */
 export const CloseButton = forwardRef<HTMLButtonElement, CloseButtonProps>(function CloseButton(
-  { "aria-label": ariaLabel = "Cerrar", size = "icon", tone = "neutral", ...props },
+  { "aria-label": ariaLabel = "Cerrar", size = "icon", tone = "neutral", icon, ...props },
   ref,
 ) {
-  return <Button ref={ref} variant="bare" size={size} tone={tone} aria-label={ariaLabel} iconLeft={<X />} {...props} />;
+  return (
+    <Button ref={ref} variant="bare" size={size} tone={tone} aria-label={ariaLabel} iconLeft={icon ?? <X />} {...props} />
+  );
 });

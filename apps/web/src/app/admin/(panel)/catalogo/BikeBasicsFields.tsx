@@ -1,11 +1,14 @@
 "use client";
 
+import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { PRODUCT_FIELD_IDS } from "./field-ids";
 import { SectionHelp } from "./SectionHelp";
 
 export interface BikeBasicsValue {
   shortDescription: string;
+  /** Raw input text, like `priceInput` — parsed to a number only at submit. Empty string is valid (the field is optional). */
+  modelYear: string;
 }
 
 export interface BikeBasicsFieldsProps {
@@ -33,6 +36,18 @@ export function BikeBasicsFields({ value, onChange, errors = {} }: BikeBasicsFie
         value={value.shortDescription}
         onChange={(event) => onChange({ ...value, shortDescription: event.target.value })}
         error={errors.shortDescription}
+      />
+
+      <Input
+        id={PRODUCT_FIELD_IDS.modelYear}
+        label="Año del modelo"
+        type="number"
+        inputMode="numeric"
+        placeholder="2026"
+        helper="Opcional. Se usa en el comparador y en la ficha."
+        value={value.modelYear}
+        onChange={(event) => onChange({ ...value, modelYear: event.target.value })}
+        error={errors.modelYear}
       />
     </div>
   );

@@ -13,4 +13,5 @@ export const PRODUCT_FIELD_IDS = {
   priceInput: "product-field-price",
   compareAtPriceInput: "product-field-compare-price",
   shortDescription: "product-field-short-description",
+  modelYear: "product-field-model-year",
 } as const;

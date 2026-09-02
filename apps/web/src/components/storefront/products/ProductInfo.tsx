@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { useVariantAvailability } from "@/hooks/use-variant-availability";
 import type { PublicColorSwatch } from "@/lib/api/public-catalog";
+import { FULFILLMENT_MODE_BADGE_VARIANTS, FULFILLMENT_MODE_LABELS } from "@/lib/catalog/labels";
 import { recommendSize } from "@/lib/size-recommendation";
 import { AddToCartButton } from "./AddToCartButton";
 import { ColorSwatchSelector } from "./ColorSwatchSelector";
@@ -154,7 +155,11 @@ export function ProductInfo({ product, itemType, colorSwatchIndex, sizeGuide = [
 
       <div className={product.badges.length > 0 ? "mt-md flex items-center gap-xs" : "flex items-center gap-xs"}>
         <RhinoMark />
-        <p className="font-body text-eyebrow uppercase text-grafito">{product.brand.name}</p>
+        <p className="font-body text-eyebrow uppercase text-grafito">
+          {product.brand.name}
+          {/* Bike-only, optional — `PublicAccessory` never carries it, so the `in` check doubles as the type guard. */}
+          {"modelYear" in product && product.modelYear ? <span> · {product.modelYear}</span> : null}
+        </p>
       </div>
 
       <h1 className="mt-xs font-display text-h2 font-extrabold text-negro">{stripBrandFromName(product.name, product.brand.name)}</h1>
@@ -191,7 +196,20 @@ export function ProductInfo({ product, itemType, colorSwatchIndex, sizeGuide = [
         </div>
       ) : null}
 
-      <div className="mt-lg flex items-center gap-sm">
+      {selectedVariant && selectedVariant.fulfillmentMode !== "in_stock" ? (
+        <div className="mt-lg flex items-center gap-xs">
+          <Badge variant={FULFILLMENT_MODE_BADGE_VARIANTS[selectedVariant.fulfillmentMode]}>
+            {FULFILLMENT_MODE_LABELS[selectedVariant.fulfillmentMode]}
+          </Badge>
+          {selectedVariant.fulfillmentMode === "preorder" && selectedVariant.preorderReleaseDate ? (
+            <p className="font-body text-caption text-grafito">
+              Disponible aprox. {new Date(selectedVariant.preorderReleaseDate).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className={selectedVariant && selectedVariant.fulfillmentMode !== "in_stock" ? "mt-sm flex items-center gap-sm" : "mt-lg flex items-center gap-sm"}>
         <AddToCartButton
           itemType={itemType}
           itemId={product.id}

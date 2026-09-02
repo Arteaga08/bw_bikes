@@ -71,18 +71,22 @@ export function SizeSelector({ sizes, selected, onSelect, sizeGuide = [], initia
       <div role="radiogroup" aria-label="Talla" className="mt-xs flex flex-wrap gap-sm">
         {sizes.map((size) => {
           const isSelected = size.value === selected;
+          // A stale `selected` value (from before a color change dropped this
+          // size) must never paint the solid "chosen" look on a now-disabled
+          // button — the disabled/struck-through state always wins.
+          const isSelectedAndAvailable = isSelected && size.available;
           return (
             <button
               key={size.value}
               type="button"
               role="radio"
-              aria-checked={isSelected}
+              aria-checked={isSelectedAndAvailable}
               disabled={!size.available}
               onClick={() => onSelect(size.value)}
               className={cn(
                 "flex h-11 min-w-11 items-center justify-center rounded-control border px-xs font-ui text-ui transition-colors duration-150",
-                "disabled:cursor-not-allowed disabled:text-grafito/40 disabled:line-through disabled:hover:border-borde",
-                isSelected ? "border-negro bg-negro text-blanco" : "border-borde text-negro hover:border-negro",
+                "disabled:cursor-not-allowed disabled:border-borde disabled:bg-transparent disabled:text-grafito/40 disabled:line-through disabled:hover:border-borde",
+                isSelectedAndAvailable ? "border-negro bg-negro text-blanco" : "border-borde text-negro hover:border-negro",
               )}
             >
               {size.value}
