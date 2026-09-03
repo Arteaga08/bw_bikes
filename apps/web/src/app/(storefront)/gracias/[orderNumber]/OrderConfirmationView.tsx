@@ -1,11 +1,14 @@
 "use client";
 
 import type { PublicOrder } from "@bw-bikes/shared";
+import { Clock } from "@phosphor-icons/react/ssr";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useCart } from "@/components/cart/CartProvider";
 import { RhinoMark } from "@/components/storefront/RhinoMark";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { getOrderByNumber } from "@/lib/api/checkout";
+import { cn } from "@/lib/cn";
 import { formatCurrencyCents } from "@/lib/format";
 
 const POLL_INTERVAL_MS = 2000;
@@ -34,6 +37,30 @@ function screenFor(order: PublicOrder): Screen | null {
 
 export interface OrderConfirmationViewProps {
   orderNumber: string;
+}
+
+/**
+ * The one card every screen below renders into (`bg-surface`/`rounded-card-lg`/
+ * `border-borde`, the same recipe `pedidos/[orderNumber]/page.tsx` uses) —
+ * chosen so the five states read as one component evolving, not five
+ * unrelated screens. `min-h-[calc(100dvh-4rem)]` (the `carrito/page.tsx`
+ * pattern, subtracting the fixed `h-16` navbar) centers it in the space
+ * above the footer instead of just padding it, so a one-line state no
+ * longer leaves the footer crowding the content.
+ */
+function ConfirmationCard({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center px-lg">
+      <div
+        className={cn(
+          "flex w-full max-w-card flex-col items-center gap-md rounded-card-lg border border-borde bg-surface p-2xl text-center",
+          className,
+        )}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -98,31 +125,37 @@ export function OrderConfirmationView({ orderNumber }: OrderConfirmationViewProp
 
   if (screen.kind === "pending") {
     return (
-      <div className="mx-auto flex max-w-lg flex-col items-center gap-md px-lg py-3xl text-center">
+      <ConfirmationCard>
+        <RhinoMark className="h-5 w-auto" />
         <p className="font-body text-body text-grafito">Estamos confirmando tu pago…</p>
-      </div>
+        <span className="skeleton h-1 w-40" aria-hidden="true" />
+      </ConfirmationCard>
     );
   }
 
   if (screen.kind === "paid") {
     return (
-      <div className="mx-auto flex max-w-lg flex-col items-center gap-md px-lg py-3xl text-center">
-        <p className="font-body text-eyebrow uppercase text-grafito">Pedido confirmado</p>
-        <RhinoMark className="h-16 w-auto" />
+      <ConfirmationCard className="motion-safe:animate-hero-in">
+        <p className="flex items-center gap-sm font-body text-eyebrow uppercase text-grafito">
+          <RhinoMark className="h-5 w-auto" />
+          Pedido confirmado
+        </p>
         <h1 className="font-display text-h3 text-negro">{screen.order.orderNumber}</h1>
         <p className="font-body text-body text-negro">{formatCurrencyCents(screen.order.totals.totalCents)}</p>
         <ButtonLink href={`/pedidos/${screen.order.orderNumber}`} variant="primary" size="md">
           Ver mi pedido
         </ButtonLink>
-      </div>
+      </ConfirmationCard>
     );
   }
 
   if (screen.kind === "authorized") {
     return (
-      <div className="mx-auto flex max-w-lg flex-col items-center gap-md px-lg py-3xl text-center">
-        <p className="font-body text-eyebrow uppercase text-grafito">Pago autorizado</p>
-        <RhinoMark className="h-16 w-auto" />
+      <ConfirmationCard className="motion-safe:animate-hero-in">
+        <p className="flex items-center gap-sm font-body text-eyebrow uppercase text-grafito">
+          <RhinoMark className="h-5 w-auto" />
+          Pago autorizado
+        </p>
         <h1 className="font-display text-h3 text-negro">{screen.order.orderNumber}</h1>
         <p className="font-body text-body text-negro">
           El cargo se autorizó y se confirma cuando el proveedor confirme el stock.
@@ -130,29 +163,33 @@ export function OrderConfirmationView({ orderNumber }: OrderConfirmationViewProp
         <ButtonLink href={`/pedidos/${screen.order.orderNumber}`} variant="primary" size="md">
           Ver mi pedido
         </ButtonLink>
-      </div>
+      </ConfirmationCard>
     );
   }
 
   if (screen.kind === "failed") {
     return (
-      <div className="mx-auto flex max-w-lg flex-col items-center gap-md px-lg py-3xl text-center">
+      <ConfirmationCard>
         <h1 className="font-display text-h3 text-negro">No pudimos procesar tu pago</h1>
         <p className="font-body text-body text-grafito">Tu carrito sigue disponible, puedes intentar de nuevo.</p>
         <ButtonLink href="/carrito" variant="primary" size="md">
           Volver al carrito
         </ButtonLink>
-      </div>
+      </ConfirmationCard>
     );
   }
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col items-center gap-md px-lg py-3xl text-center">
-      <h1 className="font-display text-h3 text-negro">Tu pago sigue procesándose</h1>
+    <ConfirmationCard>
+      <RhinoMark className="h-5 w-auto" />
+      <div className="flex items-center gap-sm">
+        <Clock size={20} className="text-grafito" aria-hidden="true" />
+        <h1 className="font-display text-h3 text-negro">Tu pago sigue procesándose</h1>
+      </div>
       <p className="font-body text-body text-grafito">Te avisamos por correo en cuanto se confirme.</p>
       <ButtonLink href="/mi-cuenta/pedidos" variant="primary" size="md">
         Ver mis pedidos
       </ButtonLink>
-    </div>
+    </ConfirmationCard>
   );
 }

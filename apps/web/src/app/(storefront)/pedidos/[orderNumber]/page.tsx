@@ -82,7 +82,7 @@ export default async function OrderDetailPage({ params }: OrderDetailPageProps) 
       <section className="rounded-card-lg border border-borde bg-surface p-lg">
         <h2 className="font-display text-h4 text-negro">Dirección de envío</h2>
         <p className="mt-md font-body text-body text-negro">
-          {order.shippingAddress.recipientName}
+          {order.shippingAddress.firstName} {order.shippingAddress.lastName}
           <br />
           {order.shippingAddress.street}
           {order.shippingAddress.interiorNumber ? ` int. ${order.shippingAddress.interiorNumber}` : ""},{" "}

@@ -20,7 +20,8 @@ function jsonResponse(body: unknown, status = 200): Response {
 const CART = { id: "cart-1", lines: [], subtotalCents: 0 };
 
 const SHIPPING_ADDRESS: ShippingAddress = {
-  recipientName: "Ana Pérez",
+  firstName: "Ana",
+  lastName: "Pérez",
   phone: "5512345678",
   street: "Av. Reforma 123",
   neighborhood: "Juárez",

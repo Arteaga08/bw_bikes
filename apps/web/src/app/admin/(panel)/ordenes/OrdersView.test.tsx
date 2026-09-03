@@ -53,7 +53,8 @@ function makeOrder(overrides: Partial<AdminOrder> = {}): AdminOrder {
       authorizedAt: new Date().toISOString(),
     },
     shippingAddress: {
-      recipientName: "Ana Pérez",
+      firstName: "Ana",
+      lastName: "Pérez",
       phone: "5512345678",
       street: "Av. Reforma 100",
       neighborhood: "Juárez",

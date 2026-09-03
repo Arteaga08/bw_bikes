@@ -56,8 +56,7 @@ export function CouponForm({ coupon }: CouponFormProps) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-sm rounded-card-lg border border-borde bg-surface p-lg">
       <div className="flex items-end gap-sm">
         <Input
-          label="Cupón de descuento"
-          labelHidden
+          label="¿Tienes un cupón?"
           placeholder="Código de cupón"
           value={code}
           onChange={(event) => setCode(event.target.value)}

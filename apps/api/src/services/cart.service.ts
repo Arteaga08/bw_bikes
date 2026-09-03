@@ -197,9 +197,21 @@ async function renderCart(cart: ICart): Promise<{ publicCart: PublicCart; coupon
 /**
  * The cart as the storefront sees it. Every caller but `applyCoupon` wants
  * this — the render, without the coupon post-mortem.
+ *
+ * A code that fails evaluation is dropped from the stored cart right here,
+ * not just from the response: a customer must never be stuck with a coupon
+ * they can't see and can't remove, quietly refusing every checkout with the
+ * same 409 until they guess to go delete it by hand.
  */
 async function toPublicCart(cart: ICart): Promise<PublicCart> {
-  return (await renderCart(cart)).publicCart;
+  const { publicCart, couponError } = await renderCart(cart);
+
+  if (couponError) {
+    cart.couponCode = undefined;
+    await cart.save();
+  }
+
+  return publicCart;
 }
 
 async function getCart(userId: string): Promise<PublicCart> {
@@ -285,9 +297,15 @@ async function removeLine(userId: string, itemType: ItemType, sku: string): Prom
   return toPublicCart(cart);
 }
 
+/**
+ * Emptied by the customer. The coupon goes with the lines: a code discounts a
+ * basket, and with the basket gone it has nothing to apply to — kept, it would
+ * silently reattach to whatever they add next and reach checkout unseen.
+ */
 async function clearCart(userId: string): Promise<PublicCart> {
   const cart = await findOrCreate(userId);
   cart.lines = [];
+  cart.couponCode = undefined;
   await cart.save();
   return toPublicCart(cart);
 }
@@ -391,9 +409,18 @@ async function getCheckoutLines(userId: string): Promise<CartLineInput[]> {
   return cart ? toCartLineInputs(cart) : [];
 }
 
-/** Emptied once the order that consumed it exists — not before, and never on payment. */
+/**
+ * Emptied once the order that consumed it is paid or authorized — not before,
+ * so an order that dies unpaid leaves the customer their cart back.
+ *
+ * The coupon goes with the lines. Its redemption was spent by the order that
+ * just succeeded, so leaving the code behind would make the customer's next
+ * checkout re-apply a coupon they never typed again and immediately hit
+ * `couponService.evaluate`'s "Ya usaste este cupón" — cleared eagerly here
+ * rather than left for the next `toPublicCart` render to drop.
+ */
 async function emptyAfterCheckout(userId: string): Promise<void> {
-  await Cart.updateOne({ userId }, { $set: { lines: [] } }).exec();
+  await Cart.updateOne({ userId }, { $set: { lines: [] }, $unset: { couponCode: "" } }).exec();
 }
 
 export const cartService = {

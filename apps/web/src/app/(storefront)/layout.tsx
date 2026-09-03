@@ -2,6 +2,8 @@ import type { PublicBrand, PublicCategoryTreeNode } from "@bw-bikes/shared";
 import type { ReactNode } from "react";
 import { Navbar } from "@/components/storefront/Navbar";
 import { WishlistProvider } from "@/components/storefront/WishlistProvider";
+import { ComparisonProvider } from "@/components/storefront/comparison/ComparisonProvider";
+import { ComparisonTray } from "@/components/storefront/comparison/ComparisonTray";
 import { Footer } from "@/components/storefront/footer/Footer";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { CartProvider } from "@/components/cart/CartProvider";
@@ -58,13 +60,16 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
     <ToastProvider>
       <CartProvider>
         <WishlistProvider>
-          <SkipLink targetId="contenido" />
-          <Navbar bikeCategories={bikeCategories} accessoryCategories={accessoryCategories} brands={brands} />
-          <main id="contenido" tabIndex={-1} className="focus:outline-none">
-            {children}
-          </main>
-          <Footer />
-          <CartDrawer cloudName={cloudinaryCloudName()} />
+          <ComparisonProvider>
+            <SkipLink targetId="contenido" />
+            <Navbar bikeCategories={bikeCategories} accessoryCategories={accessoryCategories} brands={brands} />
+            <main id="contenido" tabIndex={-1} className="focus:outline-none">
+              {children}
+            </main>
+            <Footer />
+            <CartDrawer cloudName={cloudinaryCloudName()} />
+            <ComparisonTray />
+          </ComparisonProvider>
         </WishlistProvider>
       </CartProvider>
     </ToastProvider>

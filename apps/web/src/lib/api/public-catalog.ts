@@ -384,21 +384,14 @@ export function buildColorSwatchIndex(swatches: PublicColorSwatch[]): Map<string
 }
 
 /**
- * How many spec groups ("apartados") the comparator shows per bike. The full
- * sheet can run to a dozen groups; three is what fits before the comparison
- * stops being scannable and turns into a spreadsheet — the PDP is where the
- * rest belongs.
- */
-const COMPARATOR_GROUP_LIMIT = 3;
-
-/**
- * A bike trimmed to exactly what the comparator renders. Declared here rather
+ * A bike trimmed to exactly what `/comparar` renders. Declared here rather
  * than in `packages/shared` for the same reason as `PublicProductSummary`
  * above: it's a view shape for one screen, not part of the API contract.
  *
- * `specGroups` keeps only the visible groups and fields, already sorted and
- * capped — the projection is what keeps a 100-bike catalog response from
- * reaching the browser in full.
+ * `specGroups` keeps only the visible groups and fields, already sorted —
+ * unlike the tray-selection era of this comparator, there's no group cap:
+ * this page *is* the full comparison, so it enfrenta whatever ficha técnica
+ * each bike actually has.
  */
 export interface ComparableBike {
   id: string;
@@ -406,15 +399,12 @@ export interface ComparableBike {
   name: string;
   brandName: string;
   price: PriceCents;
+  compareAtPrice?: PriceCents;
+  modelYear?: number;
+  /** Unique sizes across the bike's active variants, in first-appearance order — same shape `extractColors`/`PublicProductSummary.colors` already gives the catalog card. */
+  sizes: string[];
   image?: { url: string; alt?: string };
   specGroups: { title: string; fields: { label: string; value: string }[] }[];
-}
-
-/** One entry in the comparator's pickers — deliberately without the spec sheet. */
-export interface ComparatorOption {
-  slug: string;
-  name: string;
-  brandName: string;
 }
 
 /** The primary image is the one with the lowest `order`, not the first stored — same rule as the API's own `primaryImagePublicId`. */
@@ -422,10 +412,22 @@ function primaryImage(bike: PublicBike): ProductImage | undefined {
   return [...bike.gallery].sort((a, b) => a.order - b.order)[0];
 }
 
+/** Same shape as `extractColors` above, over `size` instead of `color` — kept separate rather than generalized into one helper: the day one of the two needs its own tie-breaking rule, a shared function would have to grow a parameter to tell them apart anyway. */
+function extractSizes(variants: PublicBike["variants"]): string[] {
+  const seen = new Set<string>();
+  const sizes: string[] = [];
+  for (const variant of variants) {
+    if (!variant.size || seen.has(variant.size)) continue;
+    seen.add(variant.size);
+    sizes.push(variant.size);
+  }
+  return sizes;
+}
+
 /**
  * `PublicBike` → `ComparableBike`. Drops anything the admin marked hidden:
  * `visible === false` on a group or a field means "not for the storefront",
- * and a comparator that leaked those would expose more than the PDP does.
+ * and a comparison that leaked those would expose more than the PDP does.
  */
 export function toComparableBike(bike: PublicBike): ComparableBike {
   const image = primaryImage(bike);
@@ -436,11 +438,13 @@ export function toComparableBike(bike: PublicBike): ComparableBike {
     name: bike.name,
     brandName: bike.brand.name,
     price: bike.price,
+    ...(bike.compareAtPrice !== undefined ? { compareAtPrice: bike.compareAtPrice } : {}),
+    ...(bike.modelYear !== undefined ? { modelYear: bike.modelYear } : {}),
+    sizes: extractSizes(bike.variants),
     ...(image ? { image: { url: image.url, ...(image.alt ? { alt: image.alt } : {}) } } : {}),
     specGroups: [...bike.specGroups]
       .filter((group) => group.visible)
       .sort((a, b) => a.order - b.order)
-      .slice(0, COMPARATOR_GROUP_LIMIT)
       .map((group) => ({
         title: group.title,
         fields: [...group.fields]
@@ -451,53 +455,6 @@ export function toComparableBike(bike: PublicBike): ComparableBike {
       // Un apartado sin campos visibles es un encabezado huérfano, no una fila vacía.
       .filter((group) => group.fields.length > 0),
   };
-}
-
-export interface ComparatorSeed {
-  options: ComparatorOption[];
-  initialPair: [ComparableBike, ComparableBike] | null;
-}
-
-/**
- * Everything the comparator page needs on first paint, from a **single**
- * upstream call: the picker list for every active bike plus the two bikes
- * shown before the visitor touches anything.
- *
- * `limit=100` is the maximum `list-query.ts` accepts, and the response
- * carries each bike's full `variants`/`gallery`/`specGroups`. That weight
- * stays on the server: only the light `options` list and two projected bikes
- * are serialized into the page, and every later change is fetched one bike at
- * a time through `app/api/catalog/bikes/[slug]`.
- *
- * `initialPair` is `null` when fewer than two bikes have a photo — the caller
- * renders nothing rather than a comparison with an empty column.
- */
-export async function getComparatorSeed(): Promise<ComparatorSeed> {
-  const res = await publicApiFetch<{ bikes: PublicBike[] }>("/catalog/bikes?sort=name&limit=100", {
-    revalidateSeconds: 300,
-  });
-  const bikes = res.data.bikes;
-
-  const options = bikes.map((bike) => ({
-    slug: bike.slug,
-    name: bike.name,
-    brandName: bike.brand.name,
-  }));
-
-  // Preferencia por bicis con ficha técnica publicada: el par por defecto es lo
-  // primero que ve el visitante, y dos bicis sin apartados visibles dejan la
-  // tabla en su estado vacío aunque el catálogo sí tenga qué comparar. Dentro
-  // de cada grupo se respeta el orden alfabético que ya trajo el API.
-  const comparable = bikes
-    .filter((bike) => bike.gallery.length > 0)
-    .map((bike) => ({ bike, hasSheet: toComparableBike(bike).specGroups.length > 0 }))
-    .sort((a, b) => Number(b.hasSheet) - Number(a.hasSheet))
-    .map((entry) => entry.bike);
-  const [first, second] = comparable;
-  const initialPair: ComparatorSeed["initialPair"] =
-    first && second ? [toComparableBike(first), toComparableBike(second)] : null;
-
-  return { options, initialPair };
 }
 
 /**

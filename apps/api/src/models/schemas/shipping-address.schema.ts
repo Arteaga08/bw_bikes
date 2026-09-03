@@ -2,7 +2,8 @@ import type { ShippingAddress } from "@bw-bikes/shared";
 import { MEXICAN_STATES } from "@bw-bikes/shared";
 import { Schema } from "mongoose";
 
-export const MAX_RECIPIENT_NAME_LENGTH = 120;
+/** Each half of the split name (see `firstName`/`lastName` below), not the combined "Nombre y Apellidos" `recipientName` this replaced. */
+export const MAX_NAME_PART_LENGTH = 60;
 export const MAX_ADDRESS_LINE_LENGTH = 150;
 export const MAX_REFERENCES_LENGTH = 300;
 export const PHONE_LENGTH = 10;
@@ -20,7 +21,8 @@ export const POSTAL_CODE_LENGTH = 5;
  */
 export const shippingAddressSchema = new Schema<ShippingAddress>(
   {
-    recipientName: { type: String, required: true, trim: true, maxlength: MAX_RECIPIENT_NAME_LENGTH },
+    firstName: { type: String, required: true, trim: true, maxlength: MAX_NAME_PART_LENGTH },
+    lastName: { type: String, required: true, trim: true, maxlength: MAX_NAME_PART_LENGTH },
     phone: { type: String, required: true, trim: true, maxlength: PHONE_LENGTH },
     street: { type: String, required: true, trim: true, maxlength: MAX_ADDRESS_LINE_LENGTH },
     interiorNumber: { type: String, trim: true, maxlength: 30 },

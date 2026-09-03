@@ -290,6 +290,11 @@ de fondo.**
   chica de marca, repetida una vez por ítem de una lista, el mismo criterio
   que ya cubre "junto a un eyebrow" abajo, aplicado a cada tarjeta de la
   grilla en vez de a una sola portada.
+  **Excepción, decidida el 2026-09-02:** el checkout (`ContactCard`,
+  `ShippingAddressCard`, `PaymentCard`) también queda fuera del límite —
+  revierte la regla de "cero apariciones" de la tabla de abajo. Manuel pidió
+  explícitamente el rinoceronte dorado junto al H2 de cada una de las tres
+  cards, así que una sola vista de `/checkout/envio` muestra 3.
 - Usos válidos: junto a un eyebrow, junto al nombre de producto (H3), junto a
   un label de footer, dentro de un modal de confirmación. **El separador
   centrado entre reglas horizontales queda descartado** — se probó en
@@ -322,10 +327,11 @@ específico de la pantalla ya suman dos, ahí se detiene.
 | **Catálogo** | Sí | Eyebrow de la portada ("Catálogo" / nombre de categoría) **+ uno por tarjeta en la grilla** | 2 en la portada + 1 por tarjeta | El catálogo tiene su propia portada editorial (`CatalogHero`) sobre la fila de categorías y la grilla de producto, igual grammar que el hero del home — esa sigue siendo la segunda aparición de la portada. **Actualizado 2026-08-28:** la grilla de tarjetas de producto (`CatalogProductCard`) sí lleva rinoceronte ahora, uno por tarjeta junto al eyebrow de marca — revierte la regla anterior ("la grilla sigue sin rinoceronte"), ver la excepción documentada en §5. |
 | **Ficha de producto** | Sí | Junto al nombre del producto (H3, ej. "Rhino Race") | 2 (límite) | Reemplaza el separador (descartado). Refuerza la marca justo donde ya aparece "Rhino" en el nombre del modelo — no es decoración añadida, es un eco del naming existente. El eyebrow de esta pantalla es breadcrumb de navegación, no lugar de marca — tampoco se usa ahí. |
 | **Carrito** | Sí | Ninguna | 1 | Pantalla de repaso transaccional: el foco son montos y el CTA "Ir a pagar", no decoración. |
-| **Checkout** | No (footer se oculta) | Ninguna | 0 | Pantalla de conversión de alto riesgo. Cero apariciones del rinoceronte mientras el usuario está pagando — ni siquiera el footer, que ya se retira en el mockup de referencia (nav reducida). La prioridad absoluta es que complete el pago sin fricción visual. |
+| **Checkout** | No (footer se oculta) | Junto al H2 de cada card — Contacto, Envío, Pago | 3 (excepción, ver §5) | **Revertido 2026-09-02** (decisión explícita de Manuel): la regla original de esta fila era cero apariciones, footer incluido — "pantalla de conversión de alto riesgo, prioridad absoluta es completar el pago sin fricción visual". Se mantiene la ausencia del footer (nav reducida sigue vigente), pero las tres cards del checkout de una sola página (`/checkout/envio`) sí llevan su propio rinoceronte dorado de 24px. |
 | **Confirmación de pedido / pantalla de éxito** | Sí | Eyebrow de confirmación ("Pedido confirmado") | 2 (límite) | Es el momento positivo del flujo (peak-end rule) — el lugar correcto para volver a mostrar marca, justo después de la ausencia total en checkout. |
 | **Error 404** | Sí | Un solo rinoceronte estático (16–24px) centrado sobre el mensaje "404" | 2 (límite) | **Corrige el mockup actual**, que lo usa como patrón diagonal repetido de fondo — contradice directamente la regla de "nunca marca de agua ni patrón repetido" señalada en la auditoría de `impeccable`. Un solo rinoceronte estático, no un patrón. |
 | **Páginas de contenido** (Nosotros, Compromiso, Distribuidores, Garantía, Envíos, Tallas, Contacto) | Sí | Junto al eyebrow del hero editorial, solo si la página tiene uno (ej. "Nosotros" con hero propio) | 1–2 | Páginas sin hero propio (ej. Garantía, Tallas, si son solo texto/tabla) se quedan en 1 aparición: footer únicamente. |
+| **Comparador** (`/comparar`) | Sí | Junto al eyebrow "Comparador", sobre el H1 | 2 (límite) | **Agregado 2026-09-02** (M-comparador): la barra inferior de selección (`ComparisonTray`, fija en toda página de catálogo) no cuenta contra ningún límite — es chrome global, como el footer, no una vista propia — y no lleva rinoceronte por esa misma razón: sumaría una tercera aparición en la portada de catálogo, que ya gasta las dos suyas (footer + eyebrow de `CatalogHero`). El encabezado sticky de la tabla y cada columna de bici tampoco llevan uno propio — un rinoceronte por columna se saldría del presupuesto en una comparación de 3. |
 | **Modal — "Agregado al carrito"** | No aplica (el modal es su propia vista) | Junto al mensaje de confirmación, dentro del modal | 1 | Aparece al agregar un producto desde catálogo o ficha; refuerza el mismo momento positivo que la confirmación de pedido, a menor escala. |
 | **Modal — confirmación de compra** (si existe un paso de confirmación antes de procesar el pago) | No aplica | Junto al mensaje de confirmación, dentro del modal | 1 | Único modal permitido dentro del flujo de checkout — es distinto del checkout mismo (que queda en 0): es una confirmación puntual, no decoración persistente durante el llenado del formulario. |
 
@@ -346,10 +352,14 @@ define la regla general.
 | Páginas de contenido — eyebrow de hero editorial | 16px | Según fondo del hero de esa página (dorado sobre oscuro, negro sobre claro) | Inline, antes del eyebrow de la página. |
 | Modal "Agregado al carrito" | 16px | `rhino-dorado.svg` | Inline, antes del mensaje de confirmación (ej. antes de "Agregado al carrito"). |
 | Modal de confirmación de compra | 16px | `rhino-dorado.svg` (mismo criterio que "Agregado al carrito" — consistencia entre los dos modales de confirmación) | Inline, antes del mensaje de confirmación. |
+| Checkout — Contacto / Envío / Pago | 24px | `rhino-dorado.svg` (sobre `bg-surface`, mismo criterio que la excepción del `TopBar` admin: acento de marca, no matching estricto de fondo) | Inline, antes del H2 de cada card (`ContactCard`, `ShippingAddressCard`, `PaymentCard`), mismo baseline que el H2 — 24px queda debajo de los 30px del H2 (`--text-h2`), nunca lo supera. |
 
-**Regla de checkout, explícita:** es la única pantalla del sitio con **cero**
-apariciones del rinoceronte, footer incluido. Todas las demás quedan en 1 o 2
-según la tabla — nunca 0, salvo checkout.
+**Regla de checkout, actualizada 2026-09-02:** hasta el 2026-09-02 esta era la
+única pantalla del sitio con **cero** apariciones del rinoceronte, footer
+incluido — explícitamente para no meter fricción visual mientras el usuario
+paga. Manuel revirtió esa decisión: ahora las tres cards del checkout de una
+sola página llevan su propio rinoceronte (ver fila de arriba), aunque el
+footer se sigue ocultando igual que antes.
 
 **Dashboard admin (registro *product*):** el rinoceronte **no** se usa como
 chrome genérico — no como separador de secciones, divisor de tablas, ni

@@ -5,7 +5,8 @@ import request from "supertest";
 /** A valid address, reused everywhere a checkout test needs one on the cart. */
 export function sampleShippingAddress(overrides: Partial<ShippingAddress> = {}): ShippingAddress {
   return {
-    recipientName: "Ana García",
+    firstName: "Ana",
+    lastName: "García",
     phone: "5512345678",
     street: "Av. Reforma 123",
     neighborhood: "Juárez",

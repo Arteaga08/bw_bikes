@@ -1,4 +1,4 @@
-import type { AdminAccessory, AdminBrand, ColorTemplate } from "@bw-bikes/shared";
+import type { AdminAccessory, AdminBike, AdminBrand, ColorTemplate } from "@bw-bikes/shared";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +15,8 @@ const {
   replaceSpecGroupsMock,
   uploadGalleryMock,
   updateGalleryImageColorMock,
+  updateBikeMock,
+  createBikeMock,
 } = vi.hoisted(() => ({
   replaceMock: vi.fn(),
   refreshMock: vi.fn(),
@@ -24,6 +26,8 @@ const {
   replaceSpecGroupsMock: vi.fn(),
   uploadGalleryMock: vi.fn(),
   updateGalleryImageColorMock: vi.fn(),
+  updateBikeMock: vi.fn(),
+  createBikeMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -44,8 +48,8 @@ vi.mock("@/lib/api/admin-catalog", () => ({
     list: vi.fn().mockResolvedValue({ data: [] }),
   },
   adminBikesApi: {
-    update: vi.fn(),
-    create: vi.fn(),
+    update: updateBikeMock,
+    create: createBikeMock,
     replaceSpecGroups: vi.fn(),
   },
 }));
@@ -147,6 +151,51 @@ function renderEditor(props: Partial<React.ComponentProps<typeof ProductEditor>>
         sizeTemplates={[]}
         colorTemplates={[colorTemplate]}
         listPath="/admin/catalogo/accesorios"
+        {...props}
+      />
+    </ToastProvider>,
+  );
+}
+
+const bike: AdminBike = {
+  id: "bike-1",
+  name: "Tarmac SL8",
+  slug: "tarmac-sl8",
+  brand: { id: "brand-1", name: "Canyon", slug: "canyon", order: 0 },
+  category: { id: "cat-1", name: "Ruta", slug: "ruta", parent: null, order: 0, usesSizes: true },
+  badges: [],
+  shortDescription: "Bici de ruta de alto rendimiento.",
+  description: "Cuadro de carbono, geometría Rider-First.",
+  price: 19_999_900,
+  currency: "MXN",
+  variants: [],
+  summary: [],
+  specGroups: [],
+  relatedAccessories: [],
+  gallery: [],
+  isNewArrival: false,
+  isCustomerFavorite: false,
+  isActive: true,
+  archivedAt: null,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
+
+function renderBikeEditor(props: Partial<React.ComponentProps<typeof ProductEditor>> = {}) {
+  return render(
+    <ToastProvider>
+      <ProductEditor
+        kind="bike"
+        mode="edit"
+        productId="bike-1"
+        initialProduct={bike}
+        categoryTree={categoryTree}
+        brands={[brand]}
+        availableBadges={[]}
+        specTemplates={[]}
+        sizeTemplates={[]}
+        colorTemplates={[colorTemplate]}
+        listPath="/admin/catalogo/bicicletas"
         {...props}
       />
     </ToastProvider>,
@@ -518,5 +567,61 @@ describe("ProductEditor — deferred gallery on create", () => {
     expect(await screen.findByText("Se guardó el producto, pero no las imágenes")).toBeInTheDocument();
     // The create itself still succeeded — the admin lands on the saved product.
     expect(replaceMock).toHaveBeenCalledWith("/admin/catalogo/accesorios/acc-new");
+  });
+});
+
+
+describe("ProductEditor — bike-only modelYear field", () => {
+  beforeEach(() => {
+    updateBikeMock.mockReset();
+    createBikeMock.mockReset();
+  });
+
+  it("hydrates the field from the persisted bike", () => {
+    renderBikeEditor({ initialProduct: { ...bike, modelYear: 2025 } });
+    expect((screen.getByLabelText("Año del modelo") as HTMLInputElement).value).toBe("2025");
+  });
+
+  it("leaves the field blank for a bike with no modelYear on file", () => {
+    renderBikeEditor();
+    expect((screen.getByLabelText("Año del modelo") as HTMLInputElement).value).toBe("");
+  });
+
+  it("saves a typed modelYear as a number on the update payload", async () => {
+    const user = userEvent.setup();
+    updateBikeMock.mockResolvedValue(bike);
+
+    renderBikeEditor();
+    await user.type(screen.getByLabelText("Año del modelo"), "2026");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => expect(updateBikeMock).toHaveBeenCalled());
+    expect(updateBikeMock).toHaveBeenCalledWith("bike-1", expect.objectContaining({ modelYear: 2026 }));
+  });
+
+  it("omits modelYear from the payload when the field is left blank", async () => {
+    const user = userEvent.setup();
+    updateBikeMock.mockResolvedValue(bike);
+
+    renderBikeEditor();
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => expect(updateBikeMock).toHaveBeenCalled());
+    const payload = updateBikeMock.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("modelYear");
+  });
+
+  it("rejects an out-of-range modelYear and never calls update", async () => {
+    const user = userEvent.setup();
+
+    renderBikeEditor();
+    await user.type(screen.getByLabelText("Año del modelo"), "1800");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    // The message shows up twice by design — inline under the field and again
+    // as a jump link in `ErrorSummary` — so this asserts on the inline copy
+    // specifically via its element type, the same `<p>` `Input` renders.
+    expect(await screen.findByText("El año debe ser un número entero entre 1990 y 2100.", { selector: "p" })).toBeInTheDocument();
+    expect(updateBikeMock).not.toHaveBeenCalled();
   });
 });

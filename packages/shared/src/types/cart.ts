@@ -72,8 +72,9 @@ export interface PublicCartLine {
  * `coupon` (M18) is the same pattern once more, with one difference: the cart
  * stores only the **code**, and the discount is re-evaluated on every render.
  * A coupon that expired, ran out, or stopped matching the cart's contents is
- * dropped silently from this response rather than failing it — a customer must
- * always be able to see their cart.
+ * dropped — from this response and from the stored cart alike — rather than
+ * failing it: a customer must always be able to see their cart, and must
+ * never be left holding a dead code that keeps refusing checkout.
  */
 export interface PublicCart {
   id: string;

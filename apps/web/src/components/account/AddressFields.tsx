@@ -7,7 +7,8 @@ import { Select } from "@/components/ui/Select";
 
 export interface AddressFormErrors {
   label?: string;
-  recipientName?: string;
+  firstName?: string;
+  lastName?: string;
   phone?: string;
   street?: string;
   neighborhood?: string;
@@ -23,7 +24,8 @@ export function validateAddress(
   const { requireLabel = true } = options;
   const next: AddressFormErrors = {};
   if (requireLabel && !form.label.trim()) next.label = "El nombre de la dirección es obligatorio.";
-  if (form.recipientName.trim().length < 3) next.recipientName = "El nombre de quien recibe es demasiado corto.";
+  if (!form.firstName.trim()) next.firstName = "Escribe el nombre de quien recibe.";
+  if (!form.lastName.trim()) next.lastName = "Escribe el apellido de quien recibe.";
   if (!/^\d{10}$/.test(form.phone.trim())) next.phone = "El teléfono debe tener 10 dígitos.";
   if (form.street.trim().length < 3) next.street = "La calle es obligatoria.";
   if (form.neighborhood.trim().length < 2) next.neighborhood = "La colonia es obligatoria.";
@@ -38,10 +40,28 @@ export interface AddressFieldsProps {
   onChange: <K extends keyof SaveAddressInput>(key: K, value: SaveAddressInput[K]) => void;
   /** Hidden in the checkout — see `validateAddress`'s `requireLabel`. Defaults to shown, for the account address book (A3). */
   showLabelField?: boolean;
+  /**
+   * Hidden in the checkout's Envío step (M13-checkout-redesign): the buyer's
+   * name/phone are already captured one step earlier, in Contacto, and
+   * `ShippingAddressCard` prefills these same fields from that profile
+   * before submitting — asking again here would be redundant. Defaults to
+   * shown, for the account address book (A3), where a saved address can
+   * legitimately have a different recipient (e.g. "Casa de mis papás").
+   */
+  showRecipientFields?: boolean;
+  /** Shown only in the checkout's Envío step, as a fixed read-only "México" field for visual parity with a full shipping form — the account address book has no use for it since every saved address is already implicitly Mexico-only. */
+  showCountryField?: boolean;
 }
 
 /** The field list shared by `AddressForm` (A3's modal) and the checkout's shipping step — presentation and validation only, no `Modal`, no `fetch`. */
-export function AddressFields({ form, errors, onChange, showLabelField = true }: AddressFieldsProps) {
+export function AddressFields({
+  form,
+  errors,
+  onChange,
+  showLabelField = true,
+  showRecipientFields = true,
+  showCountryField = false,
+}: AddressFieldsProps) {
   return (
     <div className="flex flex-col gap-md">
       {showLabelField ? (
@@ -53,20 +73,33 @@ export function AddressFields({ form, errors, onChange, showLabelField = true }:
           error={errors.label}
         />
       ) : null}
-      <Input
-        label="Nombre de quien recibe"
-        value={form.recipientName}
-        onChange={(event) => onChange("recipientName", event.target.value)}
-        error={errors.recipientName}
-      />
-      <Input
-        label="Teléfono"
-        type="tel"
-        value={form.phone}
-        onChange={(event) => onChange("phone", event.target.value)}
-        error={errors.phone}
-        helper="10 dígitos."
-      />
+      {showCountryField ? <Input label="País" value="México" disabled /> : null}
+      {showRecipientFields ? (
+        <>
+          <div className="grid gap-md sm:grid-cols-2">
+            <Input
+              label="Nombre"
+              value={form.firstName}
+              onChange={(event) => onChange("firstName", event.target.value)}
+              error={errors.firstName}
+            />
+            <Input
+              label="Apellido"
+              value={form.lastName}
+              onChange={(event) => onChange("lastName", event.target.value)}
+              error={errors.lastName}
+            />
+          </div>
+          <Input
+            label="Teléfono"
+            type="tel"
+            value={form.phone}
+            onChange={(event) => onChange("phone", event.target.value)}
+            error={errors.phone}
+            helper="10 dígitos."
+          />
+        </>
+      ) : null}
       <Input
         label="Calle"
         value={form.street}

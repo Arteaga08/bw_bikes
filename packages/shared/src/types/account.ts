@@ -49,7 +49,8 @@ export interface SavedAddress {
   id: string;
   label: string;
   isDefault: boolean;
-  recipientName: string;
+  firstName: string;
+  lastName: string;
   phone: string;
   street: string;
   interiorNumber?: string;

@@ -3,10 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import type { PublicColorSwatch, PublicProductSummary } from "@/lib/api/public-catalog";
 import { CatalogProductGrid } from "./CatalogProductGrid";
 
-// `SaveButton`, embedded in every `CatalogProductCard` (A5-guardados.md), needs a router and `WishlistProvider`.
+// `SaveButton` and `CompareCheckbox`, embedded in every `CatalogProductCard`
+// (A5-guardados.md, M-comparador), each need a provider that isn't mounted here.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/bicicletas" }));
 vi.mock("@/components/storefront/WishlistProvider", () => ({
   useWishlist: () => ({ isSignedIn: true, isSaved: () => false, toggle: vi.fn() }),
+}));
+vi.mock("@/components/storefront/comparison/ComparisonProvider", () => ({
+  useComparison: () => ({ entries: [], isSelected: () => false, toggle: vi.fn() }),
+  MAX_COMPARISON_ENTRIES: 3,
 }));
 
 function makeProduct(overrides: Partial<PublicProductSummary> = {}): PublicProductSummary {

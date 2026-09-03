@@ -43,7 +43,7 @@ describe("checkout", () => {
     stubStripe();
     await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku, qty: 2 });
 
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(res.status).toBe(201);
     expect(res.body.data.order.totals.totalCents).toBe(39_999_800);
@@ -61,7 +61,13 @@ describe("checkout", () => {
     await request(app)
       .post(ORDERS)
       .set("Cookie", cookie)
-      .send({ totalCents: 1, amount: 1, totals: { totalCents: 1 }, currency: "USD" });
+      .send({
+        totalCents: 1,
+        amount: 1,
+        totals: { totalCents: 1 },
+        currency: "USD",
+        termsAcceptedAt: new Date().toISOString(),
+      });
 
     expect(stripe.createPayment).toHaveBeenCalledTimes(1);
     expect(stripe.createPayment.mock.calls[0]![0]).toMatchObject({
@@ -74,7 +80,7 @@ describe("checkout", () => {
     const stripe = stubStripe();
     await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
 
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(res.status).toBe(201);
     expect(stripe.createPayment.mock.calls[0]![0]).toMatchObject({
@@ -87,7 +93,7 @@ describe("checkout", () => {
     stubStripe();
     await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku, qty: 2 });
 
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     const item = await InventoryItem.findOne({ sku: bike.sku }).exec();
     expect(item?.reserved).toBe(2);
@@ -104,7 +110,7 @@ describe("checkout", () => {
     stubStripe();
     await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku, qty: 1 });
 
-    await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     // Losing the cart the instant an order is created would punish every
     // customer whose card is then declined.
@@ -131,7 +137,7 @@ describe("checkout", () => {
       await addToCart(app, cookie, { itemType: "bike", itemId: onRequest.itemId, sku: onRequest.sku });
       await addToCart(app, cookie, { itemType: "accessory", itemId: helmet.itemId, sku: helmet.sku });
 
-      const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+      const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
       expect(res.status).toBe(201);
       // One order, not two — the purchase is never split into two payments.
@@ -153,7 +159,7 @@ describe("checkout", () => {
       await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
       await addToCart(app, cookie, { itemType: "bike", itemId: preorder.itemId, sku: preorder.sku });
 
-      await request(app).post(ORDERS).set("Cookie", cookie).send({});
+      await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
       expect(stripe.createPayment.mock.calls[0]![0]).toMatchObject({ captureMethod: "manual" });
     });
@@ -162,7 +168,7 @@ describe("checkout", () => {
       const stripe = stubStripe();
       await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
 
-      await request(app).post(ORDERS).set("Cookie", cookie).send({});
+      await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
       expect(stripe.createPayment.mock.calls[0]![0]).toMatchObject({ captureMethod: "automatic" });
     });
@@ -177,12 +183,12 @@ describe("checkout", () => {
         .post(ORDERS)
         .set("Cookie", cookie)
         .set("Idempotency-Key", "checkout-abc-123")
-        .send({});
+        .send({ termsAcceptedAt: new Date().toISOString() });
       const second = await request(app)
         .post(ORDERS)
         .set("Cookie", cookie)
         .set("Idempotency-Key", "checkout-abc-123")
-        .send({});
+        .send({ termsAcceptedAt: new Date().toISOString() });
 
       expect(second.body.data.order.id).toBe(first.body.data.order.id);
       expect(await Order.countDocuments()).toBe(1);
@@ -194,7 +200,7 @@ describe("checkout", () => {
       const stripe = stubStripe();
       await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
 
-      const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+      const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
       expect(stripe.createPayment.mock.calls[0]![0]).toMatchObject({
         idempotencyKey: `order_${res.body.data.order.id}`,
@@ -213,7 +219,7 @@ describe("checkout", () => {
         .post(ORDERS)
         .set("Cookie", cookie)
         .set("Idempotency-Key", "checkout-expired-key")
-        .send({});
+        .send({ termsAcceptedAt: new Date().toISOString() });
       const originalIntentId = (await Order.findById(first.body.data.order.id).exec())?.payment.intentId;
 
       // Simulate the key having expired at Stripe: the next call to
@@ -231,7 +237,7 @@ describe("checkout", () => {
         .post(ORDERS)
         .set("Cookie", cookie)
         .set("Idempotency-Key", "checkout-expired-key")
-        .send({});
+        .send({ termsAcceptedAt: new Date().toISOString() });
 
       expect(second.body.data.order.id).toBe(first.body.data.order.id);
       const updated = await Order.findById(first.body.data.order.id).exec();
@@ -247,8 +253,8 @@ describe("checkout", () => {
       await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
       await addToCart(app, other, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
 
-      const a = await request(app).post(ORDERS).set("Cookie", cookie).set("Idempotency-Key", "same").send({});
-      const b = await request(app).post(ORDERS).set("Cookie", other).set("Idempotency-Key", "same").send({});
+      const a = await request(app).post(ORDERS).set("Cookie", cookie).set("Idempotency-Key", "same").send({ termsAcceptedAt: new Date().toISOString() });
+      const b = await request(app).post(ORDERS).set("Cookie", other).set("Idempotency-Key", "same").send({ termsAcceptedAt: new Date().toISOString() });
 
       expect(a.status).toBe(201);
       expect(b.status).toBe(201);
@@ -262,7 +268,7 @@ describe("checkout", () => {
       await InventoryItem.updateOne({ sku: bike.sku }, { $set: { onHand: 1 } }).exec();
       await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku, qty: 3 });
 
-      const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+      const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
       expect(res.status).toBe(409);
       const item = await InventoryItem.findOne({ sku: bike.sku }).exec();
@@ -275,7 +281,7 @@ describe("checkout", () => {
       await InventoryItem.updateOne({ sku: bike.sku }, { $set: { onHand: 0 } }).exec();
       await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
 
-      await request(app).post(ORDERS).set("Cookie", cookie).send({});
+      await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
       const order = await Order.findOne({}).exec();
       expect(order?.status).toBe("cancelled");
@@ -292,8 +298,8 @@ describe("checkout", () => {
       await addToCart(app, other, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
 
       const [a, b] = await Promise.all([
-        request(app).post(ORDERS).set("Cookie", cookie).send({}),
-        request(app).post(ORDERS).set("Cookie", other).send({}),
+        request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() }),
+        request(app).post(ORDERS).set("Cookie", other).send({ termsAcceptedAt: new Date().toISOString() }),
       ]);
 
       const statuses = [a.status, b.status].sort();
@@ -312,8 +318,8 @@ describe("checkout", () => {
     stubStripe();
     await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
 
-    const first = await request(app).post(ORDERS).set("Cookie", cookie).send({});
-    const second = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const first = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
+    const second = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(second.status).toBe(201);
     expect(second.body.data.order.id).not.toBe(first.body.data.order.id);
@@ -334,9 +340,9 @@ describe("checkout", () => {
     const stripe = stubStripe();
     await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
 
-    const first = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const first = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
     await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
-    await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     const staleOrder = await Order.findById(first.body.data.order.id).exec();
     expect(stripe.cancelPayment).toHaveBeenCalledWith(
@@ -354,9 +360,9 @@ describe("checkout", () => {
     stripe.cancelPayment.mockRejectedValueOnce(new Error("already captured"));
     await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
 
-    const first = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const first = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
     await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
-    await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     const staleOrder = await Order.findById(first.body.data.order.id).exec();
     expect(staleOrder?.status).toBe("pending_payment");
@@ -364,7 +370,7 @@ describe("checkout", () => {
 
   it("refuses an empty cart", async () => {
     stubStripe();
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
     expect(res.status).toBe(400);
   });
 
@@ -373,14 +379,14 @@ describe("checkout", () => {
     await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
     await bike.bike.updateOne({ isActive: false, archivedAt: new Date() });
 
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(res.status).toBe(409);
     expect(res.body.message).toContain("BK-CO-M");
   });
 
   it("requires authentication", async () => {
-    const res = await request(app).post(ORDERS).send({});
+    const res = await request(app).post(ORDERS).send({ termsAcceptedAt: new Date().toISOString() });
     expect(res.status).toBe(401);
   });
 });

@@ -18,7 +18,8 @@ const EXISTING: SavedAddress = {
   id: "addr-1",
   label: "Casa",
   isDefault: true,
-  recipientName: "Ana Pérez",
+  firstName: "Ana",
+  lastName: "Pérez",
   phone: "5512345678",
   street: "Av. Reforma 123",
   neighborhood: "Juárez",
@@ -54,7 +55,8 @@ describe("AddressForm", () => {
     render(<AddressForm onClose={onClose} onSaved={onSaved} />);
 
     await user.type(screen.getByLabelText("Nombre de la dirección"), "Casa");
-    await user.type(screen.getByLabelText("Nombre de quien recibe"), "Ana Pérez");
+    await user.type(screen.getByLabelText("Nombre"), "Ana");
+    await user.type(screen.getByLabelText("Apellido"), "Pérez");
     await user.type(screen.getByLabelText("Teléfono"), "5512345678");
     await user.type(screen.getByLabelText("Calle"), "Av. Reforma 123");
     await user.type(screen.getByLabelText("Colonia"), "Juárez");
@@ -63,7 +65,13 @@ describe("AddressForm", () => {
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     expect(createAccountAddressMock).toHaveBeenCalledWith(
-      expect.objectContaining({ label: "Casa", recipientName: "Ana Pérez", phone: "5512345678", postalCode: "06600" }),
+      expect.objectContaining({
+        label: "Casa",
+        firstName: "Ana",
+        lastName: "Pérez",
+        phone: "5512345678",
+        postalCode: "06600",
+      }),
     );
     expect(onSaved).toHaveBeenCalledWith(saved);
     expect(onClose).toHaveBeenCalled();
@@ -76,7 +84,8 @@ describe("AddressForm", () => {
     render(<AddressForm initial={EXISTING} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     expect(screen.getByLabelText("Nombre de la dirección")).toHaveValue("Casa");
-    expect(screen.getByLabelText("Nombre de quien recibe")).toHaveValue("Ana Pérez");
+    expect(screen.getByLabelText("Nombre")).toHaveValue("Ana");
+    expect(screen.getByLabelText("Apellido")).toHaveValue("Pérez");
 
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 

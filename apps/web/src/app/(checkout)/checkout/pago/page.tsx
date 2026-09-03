@@ -1,12 +1,10 @@
-import type { Metadata } from "next";
-import { PaymentStepView } from "./PaymentStepView";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Pago",
-  robots: { index: false, follow: false },
-};
-
-/** The session guard and `CartProvider` already run in `(checkout)/layout.tsx`. */
+/**
+ * `/checkout/pago` used to be its own step; Pago is now the third accordion
+ * card on `/checkout/envio` (M-checkout-una-pagina). Kept as a redirect, not
+ * deleted, for whatever still links or bookmarks the old URL.
+ */
 export default function CheckoutPaymentPage() {
-  return <PaymentStepView />;
+  redirect("/checkout/envio");
 }

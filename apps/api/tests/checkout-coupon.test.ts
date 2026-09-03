@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { Coupon, CouponRedemption, Order } from "../src/models/index.js";
+import { Cart, Coupon, CouponRedemption, Order } from "../src/models/index.js";
 import { createCustomerSession } from "./helpers/admin-session.js";
 import { orderService } from "../src/services/order.service.js";
 import { createInventoryItemDoc, seedBikeWithVariant } from "./helpers/factories.js";
@@ -47,7 +47,7 @@ describe("checkout with a coupon", () => {
   it("asks the gateway for the discounted amount", async () => {
     const stripe = stubStripe();
 
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(res.status).toBe(201);
     expect(res.body.data.order.totals.discountCents).toBe(100_000);
@@ -58,7 +58,7 @@ describe("checkout with a coupon", () => {
   it("freezes the coupon onto the order", async () => {
     stubStripe();
 
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(res.body.data.order.coupon).toMatchObject({
       code: "PRUEBA10",
@@ -73,7 +73,7 @@ describe("checkout with a coupon", () => {
   it("derives the order's IVA from the discounted total", async () => {
     stubStripe();
 
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(res.body.data.order.totals.taxCents).toBe(Math.round((900_000 * 1_600) / 11_600));
   });
@@ -81,7 +81,7 @@ describe("checkout with a coupon", () => {
   it("records exactly one redemption", async () => {
     stubStripe();
 
-    await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(await CouponRedemption.countDocuments()).toBe(1);
     const coupon = await Coupon.findOne({ code: "PRUEBA10" }).exec();
@@ -97,8 +97,8 @@ describe("checkout with a coupon", () => {
     stubStripe();
     const key = "idem-coupon-1";
 
-    const first = await request(app).post(ORDERS).set("Cookie", cookie).set("Idempotency-Key", key).send({});
-    const second = await request(app).post(ORDERS).set("Cookie", cookie).set("Idempotency-Key", key).send({});
+    const first = await request(app).post(ORDERS).set("Cookie", cookie).set("Idempotency-Key", key).send({ termsAcceptedAt: new Date().toISOString() });
+    const second = await request(app).post(ORDERS).set("Cookie", cookie).set("Idempotency-Key", key).send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(second.body.data.order.id).toBe(first.body.data.order.id);
     expect(second.body.data.order.totals.totalCents).toBe(900_000);
@@ -111,7 +111,7 @@ describe("checkout with a coupon", () => {
   it("returns the redemption to the pool when the order is cancelled unpaid", async () => {
     stubStripe();
 
-    const created = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const created = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
     expect((await Coupon.findOne({ code: "PRUEBA10" }).exec())?.redemptionCount).toBe(1);
 
     const order = await Order.findById(created.body.data.order.id).exec();
@@ -130,13 +130,13 @@ describe("checkout with a coupon", () => {
   it("moves the redemption to the new order when a checkout supersedes an earlier one", async () => {
     stubStripe();
 
-    const first = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const first = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
     await request(app)
       .post(`${CART}/lines`)
       .set("Cookie", cookie)
       .send({ itemType: "bike", itemId: bike.itemId, sku: bike.sku, qty: 1 });
     await request(app).post(`${CART}/coupon`).set("Cookie", cookie).send({ code: "PRUEBA10" });
-    const second = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const second = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     const coupon = await Coupon.findOne({ code: "PRUEBA10" }).exec();
     expect(coupon?.redemptionCount).toBe(1);
@@ -151,7 +151,7 @@ describe("checkout with a coupon", () => {
     stubStripe();
     await request(app).delete(`${CART}/coupon`).set("Cookie", cookie);
 
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(res.body.data.order.totals.discountCents).toBe(0);
     expect(res.body.data.order.totals.totalCents).toBe(1_000_000);
@@ -168,9 +168,49 @@ describe("checkout with a coupon", () => {
     stubStripe();
     await Coupon.updateOne({ code: "PRUEBA10" }, { $set: { isActive: false } }).exec();
 
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(res.status).toBe(404);
     expect(await Order.countDocuments()).toBe(0);
+  });
+
+  /**
+   * The refusal above used to leave the customer stuck: the cart's own
+   * `GET` evaluates the same code quietly and showed no coupon at all, so
+   * there was nothing on screen to remove and every retry hit the same 409.
+   * Now that same quiet render drops the dead code from the stored cart, so
+   * a customer who just goes back and tries again — no manual cleanup —
+   * checks out fine, at full price.
+   */
+  it("recovers on its own from a coupon that a strict checkout just refused", async () => {
+    stubStripe();
+    await Coupon.updateOne({ code: "PRUEBA10" }, { $set: { isActive: false } }).exec();
+    await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
+
+    const cart = await request(app).get(CART).set("Cookie", cookie);
+    expect(cart.body.data.cart.coupon).toBeUndefined();
+    expect((await Cart.findOne({}).exec())?.couponCode).toBeUndefined();
+
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
+    expect(res.status).toBe(201);
+    expect(res.body.data.order.totals.discountCents).toBe(0);
+  });
+
+  /**
+   * The redemption is spent, so the code has to leave with the lines it paid
+   * for. Leaving it behind made the customer's *next* checkout re-apply a
+   * coupon they never typed again and get refused with "Ya usaste este cupón"
+   * — while the cart, which evaluates quietly, showed no coupon to remove.
+   */
+  it("clears the coupon from the cart once the order is paid", async () => {
+    stubStripe();
+
+    const created = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
+    const order = await Order.findById(created.body.data.order.id).exec();
+    await orderService.markPaid(order!, new Date());
+
+    const cart = await Cart.findOne({ userId: order!.userId }).exec();
+    expect(cart?.lines).toEqual([]);
+    expect(cart?.couponCode).toBeUndefined();
   });
 });

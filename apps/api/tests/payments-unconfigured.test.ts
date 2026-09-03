@@ -61,7 +61,10 @@ describe("Stripe not configured", () => {
       .set("Cookie", cookie)
       .send({ itemType: "bike", itemId: bike.itemId, sku: bike.sku, qty: 1 });
 
-    const res = await request(app).post("/api/v1/orders").set("Cookie", cookie).send({});
+    const res = await request(app)
+      .post("/api/v1/orders")
+      .set("Cookie", cookie)
+      .send({ termsAcceptedAt: new Date().toISOString() });
 
     expect(res.status).toBe(503);
     expect(res.body.message).toContain("pagos no están configurados");

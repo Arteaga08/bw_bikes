@@ -24,7 +24,8 @@ function order(overrides: Partial<PublicOrder>): PublicOrder {
     totals: { subtotalCents: 100000, discountCents: 0, taxCents: 16000, shippingCents: 0, totalCents: 116000 },
     payment: { provider: "stripe", state: "pending", captureMethod: "automatic" },
     shippingAddress: {
-      recipientName: "Ana Pérez",
+      firstName: "Ana",
+      lastName: "Pérez",
       phone: "5512345678",
       street: "Av. Reforma 123",
       neighborhood: "Juárez",

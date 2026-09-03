@@ -203,7 +203,7 @@ function extractMetadata(object: Record<string, unknown>): Record<string, string
 function toStripeShipping(address: CreatePaymentInput["shippingAddress"]): Stripe.PaymentIntentCreateParams.Shipping | undefined {
   if (!address) return undefined;
   return {
-    name: address.recipientName,
+    name: `${address.firstName} ${address.lastName}`.trim(),
     phone: address.phone,
     address: {
       line1: address.street,

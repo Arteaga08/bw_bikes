@@ -6,8 +6,9 @@ interface StoredKey {
 }
 
 /**
- * Reuses the same `Idempotency-Key` across remounts of `/checkout/pago` as
- * long as `cart.updatedAt` hasn't changed since the key was generated — a F5
+ * Reuses the same `Idempotency-Key` across remounts of the Pago card
+ * (`/checkout/envio`) as long as `cart.updatedAt` hasn't changed since the
+ * key was generated — a F5
  * or a component remount then recovers the **same** order and `clientSecret`
  * instead of `cancelStalePendingOrders` (order.service.ts) tumbling the
  * previous `pending_payment` order and creating a second one.

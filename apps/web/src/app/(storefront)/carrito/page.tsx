@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function CarritoPage() {
   return (
-    <div className="mx-auto max-w-5xl px-lg py-xl">
+    <div className="mx-auto min-h-[calc(100dvh-4rem)] max-w-[68rem] px-lg py-xl">
       <h1 className="font-display text-h2 text-negro">Tu carrito</h1>
       <div className="mt-lg">
         <CartPageClient cloudName={cloudinaryCloudName()} />

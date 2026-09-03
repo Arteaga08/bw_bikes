@@ -12,6 +12,14 @@ import { ApiError } from "@/lib/api/error";
 export interface BillingCardProps {
   /** The account's own saved CFDI data (A3), used only to pre-fill the form the first time the checkbox is checked. */
   initialBillingInfo?: BillingInfo;
+  /**
+   * Drops the outer card shell and "Facturación" heading — for when this is
+   * composed inside another card rather than rendered as its own accordion
+   * step (M13-checkout-redesign moved it into the "Envío" step; nesting its
+   * own bordered card inside that one would be a card-inside-a-card). The
+   * checkbox's own "Necesito factura (CFDI)" label still says what it's for.
+   */
+  bare?: boolean;
 }
 
 const emptyForm = (prefill?: BillingInfo): BillingInfo =>
@@ -23,7 +31,7 @@ const emptyForm = (prefill?: BillingInfo): BillingInfo =>
  * info; every write is `PUT`/`DELETE /cart/billing-info` via `useCart()`,
  * scoped to this cart the same way the shipping address is.
  */
-export function BillingCard({ initialBillingInfo }: BillingCardProps) {
+export function BillingCard({ initialBillingInfo, bare = false }: BillingCardProps) {
   const { cart, setBillingInfo, removeBillingInfo } = useCart();
   const savedOnCart = cart?.billingInfo;
 
@@ -84,9 +92,11 @@ export function BillingCard({ initialBillingInfo }: BillingCardProps) {
     }
   }
 
+  const Wrapper = bare ? "div" : "section";
+
   return (
-    <section className="flex flex-col gap-md rounded-card-lg border border-borde bg-surface p-xl">
-      <h2 className="font-display text-h4 text-negro">Facturación</h2>
+    <Wrapper className={bare ? "flex flex-col gap-md" : "flex flex-col gap-md rounded-card-lg border border-borde bg-surface p-xl"}>
+      {bare ? null : <h2 className="font-display text-h2 text-negro">Facturación</h2>}
       <Checkbox
         label="Necesito factura (CFDI)"
         checked={checked}
@@ -115,6 +125,6 @@ export function BillingCard({ initialBillingInfo }: BillingCardProps) {
           </Button>
         </div>
       ) : null}
-    </section>
+    </Wrapper>
   );
 }

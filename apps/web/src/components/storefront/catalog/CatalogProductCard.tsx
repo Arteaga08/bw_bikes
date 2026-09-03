@@ -7,6 +7,7 @@ import type { PublicColorSwatch, PublicProductSummary } from "@/lib/api/public-c
 import { formatCurrencyCents } from "@/lib/format";
 import { productHref } from "@/components/storefront/products/product-href";
 import { SaveButton } from "@/components/storefront/products/SaveButton";
+import { CompareCheckbox } from "@/components/storefront/comparison/CompareCheckbox";
 
 export interface CatalogProductCardProps {
   product: PublicProductSummary;
@@ -84,7 +85,7 @@ export function CatalogProductCard({ product, colorSwatchIndex }: CatalogProduct
 
   return (
     <Link href={productHref(product)} className="group/card block overflow-hidden rounded-card bg-overlay">
-      {/* `bg-blanco`, matching `ProductCard`/`ComparatorColumn`'s photo frame
+      {/* `bg-blanco`, matching `ProductCard`/`ComparisonHeader`'s photo frame
           and the studio backdrop baked into every gallery asset at upload
           (`whitenStudioBackground`, apps/api) — not `bg-surface`'s pure
           white, which is reserved for cards/inputs/modals. `contain`
@@ -195,6 +196,15 @@ export function CatalogProductCard({ product, colorSwatchIndex }: CatalogProduct
             </p>
           ) : null}
         </div>
+
+        {/* Bike-only — comparison isn't offered for accessories, and this
+            row must not reserve space (`mt-sm`) on a card that won't render
+            anything inside it. */}
+        {product.kind === "bike" ? (
+          <div className="mt-sm flex justify-end">
+            <CompareCheckbox product={product} />
+          </div>
+        ) : null}
       </div>
     </Link>
   );

@@ -54,6 +54,8 @@ const ORDER_NUMBER_LENGTH = 6;
 
 interface CreateOrderInput {
   idempotencyKey?: string | undefined;
+  /** ISO datetime the customer accepted Términos/Privacidad at checkout — required by `createOrderSchema`. */
+  termsAcceptedAt: string;
 }
 
 /** Who caused a status change. Jobs and the payment webhook have no human behind them. */
@@ -182,6 +184,7 @@ function toAdminOrder(order: IOrder, customer?: Pick<IUser, "_id" | "email" | "f
     ...(order.disputeStatus ? { disputeStatus: order.disputeStatus } : {}),
     ...(order.adminAlertedAt ? { adminAlertedAt: order.adminAlertedAt.toISOString() } : {}),
     ...(order.cancelReason !== undefined ? { cancelReason: order.cancelReason } : {}),
+    ...(order.termsAcceptedAt ? { termsAcceptedAt: order.termsAcceptedAt.toISOString() } : {}),
     internalNotes: (order.internalNotes ?? []).map((note) => ({
       body: note.body,
       authorId: String(note.authorId),
@@ -350,6 +353,7 @@ async function createFromCart(userId: string, input: CreateOrderInput, actor: Ac
     totals,
     captureMethod,
     shippingAddress,
+    termsAcceptedAt: new Date(input.termsAcceptedAt),
     ...(billingInfo !== undefined ? { billingInfo } : {}),
     ...(evaluation ? { coupon: evaluation.applied } : {}),
     ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
@@ -465,6 +469,7 @@ async function createOrderDocument(params: {
   totals: ReturnType<typeof calculateTotals>;
   captureMethod: "automatic" | "manual";
   shippingAddress: ShippingAddress;
+  termsAcceptedAt: Date;
   billingInfo?: BillingInfo;
   coupon?: AppliedCoupon;
   idempotencyKey?: string;
@@ -484,6 +489,7 @@ async function createOrderDocument(params: {
         currency: params.totals.currency,
         payment: { provider: "stripe", state: "pending", captureMethod: params.captureMethod },
         shippingAddress: params.shippingAddress,
+        termsAcceptedAt: params.termsAcceptedAt,
         ...(params.billingInfo !== undefined ? { billingInfo: params.billingInfo } : {}),
         ...(params.coupon !== undefined ? { coupon: params.coupon } : {}),
         ...(params.idempotencyKey !== undefined ? { idempotencyKey: params.idempotencyKey } : {}),
@@ -684,7 +690,7 @@ async function markPaid(order: IOrder, capturedAt: Date, card?: { brand: string;
     // one-line ping doesn't: who to ship it to and exactly what to pull off
     // the shelf, so whoever opens it can start preparing the order without
     // switching to the admin panel first.
-    const { recipientName, phone, city, state } = updated.shippingAddress;
+    const { firstName, lastName, phone, city, state } = updated.shippingAddress;
     const productLines = updated.lines
       .map((line) => {
         const variant = [line.size ? `talla ${line.size}` : undefined, line.color].filter(Boolean).join(" · ");
@@ -701,7 +707,7 @@ async function markPaid(order: IOrder, capturedAt: Date, card?: { brand: string;
         title: `Nueva venta — orden ${updated.orderNumber}`,
         bodyParagraphs: [
           summaryBody,
-          `<strong>Cliente:</strong> ${recipientName} — ${customer?.email ?? "sin correo en la cuenta"} · ${phone}`,
+          `<strong>Cliente:</strong> ${firstName} ${lastName} — ${customer?.email ?? "sin correo en la cuenta"} · ${phone}`,
           `<strong>Productos:</strong><br />${productLines}`,
           `<strong>Enviar a:</strong> ${city}, ${state}`,
         ],

@@ -3,7 +3,7 @@ import { MEXICAN_STATES } from "@bw-bikes/shared";
 import { Schema, type Types } from "mongoose";
 import {
   MAX_ADDRESS_LINE_LENGTH,
-  MAX_RECIPIENT_NAME_LENGTH,
+  MAX_NAME_PART_LENGTH,
   MAX_REFERENCES_LENGTH,
   PHONE_LENGTH,
   POSTAL_CODE_LENGTH,
@@ -32,7 +32,8 @@ export interface ISavedAddress extends Omit<SavedAddress, "id"> {
 export const savedAddressSchema = new Schema<ISavedAddress>({
   label: { type: String, required: true, trim: true, maxlength: MAX_LABEL_LENGTH },
   isDefault: { type: Boolean, default: false },
-  recipientName: { type: String, required: true, trim: true, maxlength: MAX_RECIPIENT_NAME_LENGTH },
+  firstName: { type: String, required: true, trim: true, maxlength: MAX_NAME_PART_LENGTH },
+  lastName: { type: String, required: true, trim: true, maxlength: MAX_NAME_PART_LENGTH },
   phone: { type: String, required: true, trim: true, maxlength: PHONE_LENGTH },
   street: { type: String, required: true, trim: true, maxlength: MAX_ADDRESS_LINE_LENGTH },
   interiorNumber: { type: String, trim: true, maxlength: 30 },

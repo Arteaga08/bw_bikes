@@ -4,7 +4,7 @@ import Joi from "joi";
 import { MAX_GEAR_SIZE_VALUE_LENGTH, MAX_HEIGHT_CM, MIN_HEIGHT_CM } from "../models/schemas/fit.schema.js";
 import { MAX_LABEL_LENGTH } from "../models/schemas/saved-address.schema.js";
 import { billingInfoSchema as cartBillingInfoSchema } from "./billing.validator.js";
-import { objectId } from "./common.validator.js";
+import { NO_HTML_MESSAGE, NO_HTML_PATTERN, objectId } from "./common.validator.js";
 import { shippingAddressSchema as cartShippingAddressSchema } from "./shipping.validator.js";
 
 const WISHLIST_ITEM_TYPES: ItemType[] = ["bike", "accessory"];
@@ -17,13 +17,15 @@ const wishlistItemType = Joi.string()
   });
 
 export const updateProfileSchema = Joi.object({
-  firstName: Joi.string().trim().min(2).max(60).messages({
+  firstName: Joi.string().trim().min(2).max(60).pattern(NO_HTML_PATTERN).messages({
     "string.min": "El nombre debe tener al menos 2 caracteres.",
     "string.max": "El nombre no puede exceder 60 caracteres.",
+    "string.pattern.base": NO_HTML_MESSAGE,
   }),
-  lastName: Joi.string().trim().min(2).max(60).messages({
+  lastName: Joi.string().trim().min(2).max(60).pattern(NO_HTML_PATTERN).messages({
     "string.min": "El apellido debe tener al menos 2 caracteres.",
     "string.max": "El apellido no puede exceder 60 caracteres.",
+    "string.pattern.base": NO_HTML_MESSAGE,
   }),
   phone: Joi.string()
     .trim()
@@ -34,8 +36,9 @@ export const updateProfileSchema = Joi.object({
   birthDate: Joi.date().messages({
     "date.base": "Ingresa una fecha de nacimiento válida.",
   }),
-  city: Joi.string().trim().max(80).messages({
+  city: Joi.string().trim().max(80).pattern(NO_HTML_PATTERN).messages({
     "string.max": "La ciudad no puede exceder 80 caracteres.",
+    "string.pattern.base": NO_HTML_MESSAGE,
   }),
 });
 

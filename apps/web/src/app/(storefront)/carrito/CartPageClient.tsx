@@ -9,6 +9,7 @@ import { CartSkeleton } from "@/components/cart/CartSkeleton";
 import { CartSummary } from "@/components/cart/CartSummary";
 import { CartUnauthenticated } from "@/components/cart/CartUnauthenticated";
 import { CouponForm } from "@/components/cart/CouponForm";
+import { FreeShippingBanner } from "@/components/cart/FreeShippingBanner";
 
 export interface CartPageClientProps {
   /** Read server-side (`cloudinaryCloudName()`) in `page.tsx` and threaded down — see `CartLineItem`. */
@@ -42,17 +43,27 @@ export function CartPageClient({ cloudName }: CartPageClientProps) {
     return <CartEmpty />;
   }
 
-  return (
-    <div className="grid grid-cols-1 gap-lg lg:grid-cols-[1fr_320px] lg:items-start">
-      <ul className="flex flex-col gap-lg">
-        {cart.lines.map((line) => (
-          <CartLineItem key={`${line.itemType}:${line.sku}`} line={line} cloudName={cloudName} />
-        ))}
-      </ul>
+  const lineCount = cart.lines.reduce((total, line) => total + line.qty, 0);
 
-      <div className="order-first flex flex-col gap-lg lg:order-0 lg:sticky lg:top-16">
-        <CartSummary cart={cart} />
-        <CouponForm coupon={cart.coupon} />
+  return (
+    <div className="flex flex-col gap-md">
+      <p className="font-body text-caption text-grafito">{lineCount === 1 ? "1 artículo" : `${lineCount} artículos`}</p>
+
+      <div className="grid grid-cols-1 gap-xl lg:grid-cols-[1fr_21rem] lg:items-start">
+        <div className="flex flex-col gap-lg">
+          {cart.shippingCents === 0 ? <FreeShippingBanner /> : null}
+
+          <ul className="flex flex-col gap-lg rounded-card-lg border border-borde bg-surface p-lg">
+            {cart.lines.map((line) => (
+              <CartLineItem key={`${line.itemType}:${line.sku}`} line={line} cloudName={cloudName} />
+            ))}
+          </ul>
+        </div>
+
+        <div className="flex flex-col gap-lg lg:sticky lg:top-[88px]">
+          <CartSummary cart={cart} />
+          <CouponForm coupon={cart.coupon} />
+        </div>
       </div>
     </div>
   );

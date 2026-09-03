@@ -11,7 +11,8 @@ const ADMIN = "/api/v1/admin";
 type App = ReturnType<typeof buildApp>;
 
 const SHIPPING_ADDRESS = {
-  recipientName: "Cliente de Prueba",
+  firstName: "Cliente",
+  lastName: "de Prueba",
   phone: "5512345678",
   street: "Calle Falsa 123",
   neighborhood: "Centro",

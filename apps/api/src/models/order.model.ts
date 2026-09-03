@@ -76,6 +76,15 @@ export interface IOrder extends Document {
   /** The coupon that produced `discountCents`, frozen at checkout (M18). */
   coupon?: AppliedCoupon;
   idempotencyKey?: string;
+  /**
+   * When the customer accepted the Términos de Uso / Política de Privacidad
+   * checkbox at checkout — admin-only (`AdminOrder`), never served on the
+   * customer's own route (M13-checkout-redesign). Optional at the schema
+   * level, the same as `idempotencyKey`: every order placed through the
+   * current checkout has one (the API requires it in the request body), but
+   * historical orders written before this field existed do not.
+   */
+  termsAcceptedAt?: Date;
   statusHistory: IOrderStatusHistoryEntry[];
   /** Staff-only, append-only. Never served on a customer route. */
   internalNotes: IOrderInternalNote[];
@@ -232,6 +241,7 @@ const orderSchema = new Schema<IOrder>(
     // (see the index below), never globally: two customers picking the same
     // key must not collide.
     idempotencyKey: { type: String, trim: true, maxlength: 120 },
+    termsAcceptedAt: { type: Date },
 
     statusHistory: {
       type: [statusHistorySchema],

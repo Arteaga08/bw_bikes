@@ -9,6 +9,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 const ORDER = { id: "order-1", orderNumber: "BW-0001" } as unknown as PublicOrder;
 const CHECKOUT_RESULT: CheckoutResult = { order: ORDER, clientSecret: "pi_123_secret_abc" };
+const TERMS_ACCEPTED_AT = "2026-01-01T00:00:00.000Z";
 
 describe("checkout api", () => {
   beforeEach(() => {
@@ -19,19 +20,20 @@ describe("checkout api", () => {
     const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({ status: "success", message: "OK", data: CHECKOUT_RESULT }, 201));
     vi.stubGlobal("fetch", fetchSpy);
 
-    await createOrder("idem-key-1");
+    await createOrder(TERMS_ACCEPTED_AT, "idem-key-1");
 
     const [url, init] = fetchSpy.mock.calls[0]!;
     expect(url).toBe("/api/v1/orders");
     expect(init.method).toBe("POST");
     expect(init.headers["Idempotency-Key"]).toBe("idem-key-1");
+    expect(JSON.parse(init.body as string)).toEqual({ termsAcceptedAt: TERMS_ACCEPTED_AT });
   });
 
   it("createOrder omits the header when no key is given", async () => {
     const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({ status: "success", message: "OK", data: CHECKOUT_RESULT }, 201));
     vi.stubGlobal("fetch", fetchSpy);
 
-    await createOrder();
+    await createOrder(TERMS_ACCEPTED_AT);
 
     const [, init] = fetchSpy.mock.calls[0]!;
     expect(init.headers["Idempotency-Key"]).toBeUndefined();
@@ -40,7 +42,7 @@ describe("checkout api", () => {
   it("createOrder returns the order and clientSecret", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ status: "success", message: "OK", data: CHECKOUT_RESULT }, 201)));
 
-    const result = await createOrder("idem-key-1");
+    const result = await createOrder(TERMS_ACCEPTED_AT, "idem-key-1");
 
     expect(result).toEqual(CHECKOUT_RESULT);
   });
@@ -51,7 +53,7 @@ describe("checkout api", () => {
       vi.fn().mockResolvedValue(jsonResponse({ status: "error", message: "La orden BW-0001 ya fue procesada." }, 409)),
     );
 
-    await expect(createOrder("idem-key-1")).rejects.toMatchObject({ httpStatus: 409, message: "La orden BW-0001 ya fue procesada." });
+    await expect(createOrder(TERMS_ACCEPTED_AT, "idem-key-1")).rejects.toMatchObject({ httpStatus: 409, message: "La orden BW-0001 ya fue procesada." });
   });
 
   it("createOrder rejects with an ApiError on 400", async () => {
@@ -60,7 +62,7 @@ describe("checkout api", () => {
       vi.fn().mockResolvedValue(jsonResponse({ status: "error", message: "Agrega una dirección de envío antes de continuar." }, 400)),
     );
 
-    await expect(createOrder("idem-key-1")).rejects.toMatchObject({ httpStatus: 400 });
+    await expect(createOrder(TERMS_ACCEPTED_AT, "idem-key-1")).rejects.toMatchObject({ httpStatus: 400 });
   });
 
   it("createOrder rejects with an ApiError on 429", async () => {
@@ -73,13 +75,13 @@ describe("checkout api", () => {
         ),
     );
 
-    await expect(createOrder("idem-key-1")).rejects.toMatchObject({ httpStatus: 429 });
+    await expect(createOrder(TERMS_ACCEPTED_AT, "idem-key-1")).rejects.toMatchObject({ httpStatus: 429 });
   });
 
   it("createOrder rejects with an ApiError on 502", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ status: "error", message: "Fallo del proveedor de pagos." }, 502)));
 
-    await expect(createOrder("idem-key-1")).rejects.toMatchObject({ httpStatus: 502 });
+    await expect(createOrder(TERMS_ACCEPTED_AT, "idem-key-1")).rejects.toMatchObject({ httpStatus: 502 });
   });
 
   it("createOrder rejects with an ApiError on 503", async () => {
@@ -88,7 +90,7 @@ describe("checkout api", () => {
       vi.fn().mockResolvedValue(jsonResponse({ status: "error", message: "El pago con tarjeta no está disponible por ahora." }, 503)),
     );
 
-    await expect(createOrder("idem-key-1")).rejects.toMatchObject({ httpStatus: 503 });
+    await expect(createOrder(TERMS_ACCEPTED_AT, "idem-key-1")).rejects.toMatchObject({ httpStatus: 503 });
   });
 
   it("getOrderByNumber GETs /orders/number/:orderNumber and returns the order", async () => {

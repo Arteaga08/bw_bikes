@@ -121,6 +121,24 @@ describe("cart coupons", () => {
     expect(res.body.data.cart.discountCents).toBe(0);
   });
 
+  /**
+   * `coupon` stays quiet so the total never breaks, but a code that stopped
+   * evaluating was still sent to checkout, which refuses it strictly — so a
+   * customer left holding one could never remove it without knowing it was
+   * there. Dropping it from the stored cart the moment a render notices is
+   * what keeps that from ever becoming a dead end: no manual step, no button
+   * to find, it's just gone the next time the cart is read.
+   */
+  it("drops a stored code from the cart the moment it stops evaluating, with no action from the customer", async () => {
+    await request(app).post(`${CART}/coupon`).set("Cookie", cookie).send({ code: "PRUEBA10" });
+    await Coupon.updateOne({ code: "PRUEBA10" }, { $set: { expiresAt: new Date(Date.now() - 1_000) } }).exec();
+
+    const res = await request(app).get(CART).set("Cookie", cookie);
+
+    expect(res.body.data.cart.coupon).toBeUndefined();
+    expect((await Cart.findOne({}).exec())?.couponCode).toBeUndefined();
+  });
+
   it("rejects a body that tries to dictate its own discount", async () => {
     const res = await request(app)
       .post(`${CART}/coupon`)
@@ -130,6 +148,22 @@ describe("cart coupons", () => {
     expect(res.status).toBe(200);
     // `stripUnknown` drops it before the service ever sees it.
     expect(res.body.data.cart.discountCents).toBe(100_000);
+  });
+
+  /**
+   * A coupon discounts a basket; with the basket gone there is nothing left
+   * for it to apply to. Keeping the code on an emptied cart made it reappear
+   * on whatever the customer added next — invisible in the cart (`getCart`
+   * evaluates quietly) but still sent to checkout, which refuses it.
+   */
+  it("drops the coupon when the customer empties the cart", async () => {
+    await request(app).post(`${CART}/coupon`).set("Cookie", cookie).send({ code: "PRUEBA10" });
+
+    const res = await request(app).delete(CART).set("Cookie", cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.cart.coupon).toBeUndefined();
+    expect((await Cart.findOne({}).exec())?.couponCode).toBeUndefined();
   });
 
   it("requires authentication", async () => {

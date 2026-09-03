@@ -20,7 +20,8 @@ export function ShippingAddressForm({ initial, onSubmit, submitting, onCancel }:
   const [form, setForm] = useState<ShippingAddress>(initial);
 
   const isValid =
-    form.recipientName.trim().length >= 3 &&
+    form.firstName.trim().length > 0 &&
+    form.lastName.trim().length > 0 &&
     PHONE_PATTERN.test(form.phone) &&
     form.street.trim().length >= 3 &&
     form.neighborhood.trim().length >= 2 &&
@@ -38,14 +39,22 @@ export function ShippingAddressForm({ initial, onSubmit, submitting, onCancel }:
 
   return (
     <div className="flex flex-col gap-md">
-      <Input
-        label="Nombre del destinatario"
-        value={form.recipientName}
-        onChange={(event) => set("recipientName", event.target.value)}
-        minLength={3}
-        maxLength={120}
-        required
-      />
+      <div className="grid gap-md sm:grid-cols-2">
+        <Input
+          label="Nombre del destinatario"
+          value={form.firstName}
+          onChange={(event) => set("firstName", event.target.value)}
+          maxLength={60}
+          required
+        />
+        <Input
+          label="Apellido del destinatario"
+          value={form.lastName}
+          onChange={(event) => set("lastName", event.target.value)}
+          maxLength={60}
+          required
+        />
+      </div>
       <Input
         label="Teléfono (10 dígitos)"
         value={form.phone}

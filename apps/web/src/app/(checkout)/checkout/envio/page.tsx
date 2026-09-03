@@ -1,6 +1,7 @@
 import type { AccountDTO } from "@bw-bikes/shared";
 import type { Metadata } from "next";
 import { serverApiFetch } from "@/lib/api/server";
+import { cloudinaryCloudName } from "@/lib/config";
 import { ShippingStepView } from "./ShippingStepView";
 
 export const metadata: Metadata = {
@@ -15,5 +16,5 @@ export const metadata: Metadata = {
  */
 export default async function CheckoutShippingPage() {
   const { data } = await serverApiFetch<{ account: AccountDTO }>("/account");
-  return <ShippingStepView account={data.account} />;
+  return <ShippingStepView account={data.account} cloudName={cloudinaryCloudName()} />;
 }

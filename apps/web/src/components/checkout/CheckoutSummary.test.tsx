@@ -32,7 +32,7 @@ const BASE_CART = {
 describe("CheckoutSummary", () => {
   it("renders the totals without any stock figure in the DOM", () => {
     useCartMock.mockReturnValue({ cart: BASE_CART });
-    render(<CheckoutSummary />);
+    render(<CheckoutSummary cloudName="demo" />);
     expect(screen.getAllByText("$25,000.00").length).toBeGreaterThan(0);
     expect(screen.queryByText(/available/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/onHand/i)).not.toBeInTheDocument();
@@ -40,29 +40,13 @@ describe("CheckoutSummary", () => {
 
   it("shows the manual-capture notice when captureMethod is not automatic", () => {
     useCartMock.mockReturnValue({ cart: { ...BASE_CART, captureMethod: "manual" } });
-    render(<CheckoutSummary />);
+    render(<CheckoutSummary cloudName="demo" />);
     expect(screen.getByText(/se autoriza ahora/)).toBeInTheDocument();
   });
 
   it("hides the manual-capture notice when captureMethod is automatic", () => {
     useCartMock.mockReturnValue({ cart: BASE_CART });
-    render(<CheckoutSummary />);
+    render(<CheckoutSummary cloudName="demo" />);
     expect(screen.queryByText(/se autoriza ahora/)).not.toBeInTheDocument();
-  });
-
-  it("the continue-to-payment link is disabled without a shipping address", () => {
-    useCartMock.mockReturnValue({ cart: { ...BASE_CART, shippingAddress: undefined } });
-    render(<CheckoutSummary />);
-    expect(screen.getByText("Continuar al pago").closest("a")).toHaveAttribute("aria-disabled", "true");
-  });
-
-  it("the continue-to-payment link is enabled with a shipping address and no blocking lines", () => {
-    useCartMock.mockReturnValue({
-      cart: { ...BASE_CART, shippingAddress: { recipientName: "Ana" } },
-    });
-    render(<CheckoutSummary />);
-    const link = screen.getByText("Continuar al pago").closest("a");
-    expect(link).toHaveAttribute("href", "/checkout/pago");
-    expect(link).not.toHaveAttribute("aria-disabled");
   });
 });

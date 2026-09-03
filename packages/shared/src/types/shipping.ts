@@ -48,7 +48,8 @@ export type MexicanState = (typeof MEXICAN_STATES)[number];
  * rewrite where an already-placed order was told to go.
  */
 export interface ShippingAddress {
-  recipientName: string;
+  firstName: string;
+  lastName: string;
   phone: string;
   street: string;
   interiorNumber?: string;

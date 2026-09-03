@@ -70,7 +70,8 @@ describe("stripeProvider.createPayment", () => {
       metadata: { orderId: "unit2", orderNumber: "BW-2026-UNIT02" },
       requestThreeDSecure: "automatic",
       shippingAddress: {
-        recipientName: "Ada Lovelace",
+        firstName: "Ada",
+        lastName: "Lovelace",
         phone: "5512345678",
         street: "Av. Siempre Viva 123",
         neighborhood: "Centro",

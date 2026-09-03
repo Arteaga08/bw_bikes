@@ -15,12 +15,16 @@ const CUSTOMER = { unauthorizedRedirectPath: null } as const;
  * `POST /orders` (C2-checkout-pago.md §2, §4). `idempotencyKey` is omitted
  * from the request entirely when absent — the backend treats a missing
  * header as "no idempotency", not as an empty string to match against.
+ * `termsAcceptedAt` is required by `createOrderSchema` — the terms checkbox
+ * in `PaymentCard` gates this call from firing at all (M13-checkout-redesign),
+ * but the server still validates it's present.
  */
-export async function createOrder(idempotencyKey?: string): Promise<CheckoutResult> {
+export async function createOrder(termsAcceptedAt: string, idempotencyKey?: string): Promise<CheckoutResult> {
   const { data } = await apiFetch<CheckoutResult>(
     "/orders",
     {
       method: "POST",
+      body: JSON.stringify({ termsAcceptedAt }),
       headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
     },
     CUSTOMER,

@@ -16,35 +16,37 @@ export interface CartSummaryProps {
  */
 export function CartSummary({ cart }: CartSummaryProps) {
   return (
-    <div className="flex flex-col gap-md rounded-card-lg border border-borde bg-surface p-lg">
-      <h2 className="font-display text-h4 text-negro">Resumen</h2>
+    <div className="flex flex-col gap-md rounded-card-lg bg-overlay p-xl text-blanco">
+      <h2 className="font-display text-h2">Resumen</h2>
 
-      <dl className="flex flex-col gap-xs font-body text-body text-negro">
+      <dl className="flex flex-col gap-xs font-body text-body">
         <div className="flex items-center justify-between">
-          <dt className="text-grafito">Subtotal</dt>
+          <dt className="text-blanco/60">Subtotal</dt>
           <dd>{formatCurrencyCents(cart.subtotalCents)}</dd>
         </div>
 
         {cart.discountCents > 0 ? (
           <div className="flex items-center justify-between">
-            <dt className="text-grafito">Descuento</dt>
+            <dt className="text-blanco/60">Descuento</dt>
             <dd>−{formatCurrencyCents(cart.discountCents)}</dd>
           </div>
         ) : null}
 
         <div className="flex items-center justify-between">
-          <dt className="text-grafito">IVA</dt>
+          <dt className="text-blanco/60">IVA</dt>
           <dd>{formatCurrencyCents(cart.taxCents)}</dd>
         </div>
 
         <div className="flex items-center justify-between">
-          <dt className="text-grafito">Envío</dt>
-          <dd>{cart.shippingCents === 0 ? "Gratis" : formatCurrencyCents(cart.shippingCents)}</dd>
+          <dt className="text-blanco/60">Envío</dt>
+          <dd className={cart.shippingCents === 0 ? "font-extrabold text-dorado" : undefined}>
+            {cart.shippingCents === 0 ? "Gratis" : formatCurrencyCents(cart.shippingCents)}
+          </dd>
         </div>
 
-        <div className="mt-xs flex items-center justify-between border-t border-borde pt-xs font-ui text-ui text-negro">
-          <dt>Total</dt>
-          <dd>{formatCurrencyCents(cart.totalCents)}</dd>
+        <div className="mt-xs flex items-center justify-between border-t border-blanco/10 pt-md">
+          <dt className="font-ui text-ui">Total</dt>
+          <dd className="font-display text-h3 font-extrabold text-dorado">{formatCurrencyCents(cart.totalCents)}</dd>
         </div>
       </dl>
 

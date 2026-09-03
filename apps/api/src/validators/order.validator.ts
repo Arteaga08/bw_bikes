@@ -17,17 +17,30 @@ const priority = Joi.string()
   .messages({ "any.only": "La prioridad de la orden no es válida." });
 
 /**
- * Checkout takes **no body at all**.
+ * Checkout's body carries **nothing about money** — not an amount, not a
+ * currency, not even the lines. The server reads the customer's own cart and
+ * prices it from the catalog, which is what makes the charged total
+ * impossible to influence from outside. Joi's `stripUnknown` means a client
+ * that tries to send `{ totalCents: 1 }` alongside `termsAcceptedAt` has that
+ * key removed before any code sees it — the guarantee is structural, not a
+ * check someone has to remember.
  *
- * The lines come from the customer's own cart and the amounts from the
- * catalog. An empty schema plus Joi's `stripUnknown` means a client that tries
- * to send `{ totalCents: 1 }` has that key removed before any code sees it —
- * the guarantee is structural, not a check someone has to remember.
+ * `termsAcceptedAt` is the one real field: the client's checkbox for
+ * Términos de Uso / Política de Privacidad gates the request from firing at
+ * all (M13-checkout-redesign), but the server never trusts that gate alone —
+ * it validates the timestamp is well-formed and requires it be present
+ * before an order can be created at all.
  *
  * The idempotency key travels in the `Idempotency-Key` header instead, the way
  * payment gateways themselves accept it.
  */
-export const createOrderSchema = Joi.object({});
+export const createOrderSchema = Joi.object({
+  termsAcceptedAt: Joi.date().iso().required().messages({
+    "date.base": "Acepta los términos para continuar.",
+    "date.format": "Acepta los términos para continuar.",
+    "any.required": "Acepta los términos para continuar.",
+  }),
+});
 
 /** Mirrors `generateOrderNumber`'s own alphabet in `order.service.ts` — no `I`, `O`, `0`, `1`. */
 export const orderNumberParamSchema = Joi.object({

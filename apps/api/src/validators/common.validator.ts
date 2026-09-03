@@ -75,6 +75,19 @@ export const sku = Joi.string()
     "any.required": "El SKU es obligatorio.",
   });
 
+/**
+ * Rejects `<` and `>` in a free-text field the customer types directly (name,
+ * address lines, delivery references) — a first, explicit layer against a
+ * stored-XSS payload disguised as one of those. It does not replace
+ * `sanitizeInput` (`middlewares/sanitize-input.ts`, which strips markup from
+ * every request body globally) or `stripUnknown`; it's the field-level rule
+ * whose Joi error message can name the offending field directly, and it fails
+ * closed even if a future code path ever bypassed the global middleware.
+ * Chain onto a field's own `.trim().max(n)` — never used standalone.
+ */
+export const NO_HTML_PATTERN = /^[^<>]*$/;
+export const NO_HTML_MESSAGE = "No se permiten los caracteres < o >.";
+
 /** `:id` path param, reused by every admin detail/update/delete route. */
 export const idParamSchema = Joi.object({ id: objectId.required() });
 

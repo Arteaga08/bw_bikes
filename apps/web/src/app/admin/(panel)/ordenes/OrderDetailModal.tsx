@@ -64,7 +64,8 @@ const SHIPMENT_NEVER_COPY = "Esta orden no se enviará.";
  * other edit uses.
  */
 const EMPTY_SHIPPING_ADDRESS: ShippingAddress = {
-  recipientName: "",
+  firstName: "",
+  lastName: "",
   phone: "",
   street: "",
   neighborhood: "",
@@ -328,7 +329,7 @@ export function OrderDetailModal({
                   />
                 ) : order.shippingAddress ? (
                   <p className="font-body text-body text-negro">
-                    {order.shippingAddress.recipientName}
+                    {order.shippingAddress.firstName} {order.shippingAddress.lastName}
                     <br />
                     {order.shippingAddress.street}
                     {order.shippingAddress.interiorNumber ? ` int. ${order.shippingAddress.interiorNumber}` : ""},{" "}

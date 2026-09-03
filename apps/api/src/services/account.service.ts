@@ -29,7 +29,8 @@ function toSavedAddressDTO(address: ISavedAddress): SavedAddress {
     id: String(address._id),
     label: address.label,
     isDefault: address.isDefault,
-    recipientName: address.recipientName,
+    firstName: address.firstName,
+    lastName: address.lastName,
     phone: address.phone,
     street: address.street,
     interiorNumber: address.interiorNumber,
@@ -156,7 +157,8 @@ export async function updateAddress(userId: string, addressId: string, input: Sa
   const address = findAddressOrFail(user, addressId);
 
   address.label = input.label;
-  address.recipientName = input.recipientName;
+  address.firstName = input.firstName;
+  address.lastName = input.lastName;
   address.phone = input.phone;
   address.street = input.street;
   address.interiorNumber = input.interiorNumber;

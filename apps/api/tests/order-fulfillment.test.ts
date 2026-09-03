@@ -40,7 +40,7 @@ describe("shipping address and fulfillment (M6)", () => {
       .post(`${CART}/lines`)
       .set("Cookie", cookie)
       .send({ itemType: "bike", itemId: bike.itemId, sku: bike.sku, qty: 1 });
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
     expect(res.status).toBe(201);
     return { orderId: res.body.data.order.id as string, intentId: stripe.lastIntentId() };
   }
@@ -121,7 +121,7 @@ describe("shipping address and fulfillment (M6)", () => {
         .set("Cookie", bare)
         .send({ itemType: "bike", itemId: bike.itemId, sku: bike.sku, qty: 1 });
 
-      const res = await request(app).post(ORDERS).set("Cookie", bare).send({});
+      const res = await request(app).post(ORDERS).set("Cookie", bare).send({ termsAcceptedAt: new Date().toISOString() });
 
       expect(res.status).toBe(400);
       expect(await Order.countDocuments()).toBe(0);

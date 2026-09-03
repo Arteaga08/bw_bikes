@@ -48,7 +48,7 @@ describe("payment webhook", () => {
         .set("Cookie", cookie)
         .send({ ...line, qty: line.qty ?? 1 });
     }
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
     expect(res.status).toBe(201);
     return { orderId: res.body.data.order.id as string, intentId: stripe.lastIntentId() };
   }

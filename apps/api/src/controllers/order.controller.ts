@@ -21,9 +21,10 @@ function idempotencyKey(req: Request): string | undefined {
  * impossible to influence from outside.
  */
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
+  const { termsAcceptedAt } = req.body as { termsAcceptedAt: string };
   const result = await orderService.createFromCart(
     requireUserId(req),
-    { idempotencyKey: idempotencyKey(req) },
+    { idempotencyKey: idempotencyKey(req), termsAcceptedAt },
     requireActor(req),
   );
 

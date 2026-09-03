@@ -18,7 +18,8 @@ export interface AddressFormProps {
 
 const EMPTY_FORM: SaveAddressInput = {
   label: "",
-  recipientName: "",
+  firstName: "",
+  lastName: "",
   phone: "",
   street: "",
   interiorNumber: "",
@@ -49,7 +50,8 @@ export function AddressForm({ initial, onClose, onSaved }: AddressFormProps) {
     const payload: SaveAddressInput = {
       ...form,
       label: form.label.trim(),
-      recipientName: form.recipientName.trim(),
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
       phone: form.phone.trim(),
       street: form.street.trim(),
       interiorNumber: form.interiorNumber?.trim() || undefined,

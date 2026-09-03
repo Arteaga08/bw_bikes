@@ -228,6 +228,12 @@ body {
   background: var(--color-base);
   color: var(--color-negro);
   font-family: var(--font-body);
+  /* Reserves room for `ComparisonTray`'s fixed bottom bar so it never covers
+     the last row of catalog cards. `ComparisonTray` writes the variable via
+     `ResizeObserver` while it's open and removes it while closed — one write
+     site here instead of every storefront page padding for a bar it may not
+     know exists. */
+  padding-bottom: var(--comparison-tray-height, 0px);
 }
 
 /* Hover de un botón `bare` dentro de un `ButtonGroup`.

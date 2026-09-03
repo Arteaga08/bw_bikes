@@ -69,7 +69,7 @@ describe("supplier confirmation and the authorization clock", () => {
       await request(app).post(`${CART}/lines`).set("Cookie", cookie).send({ ...line, qty: 1 });
     }
 
-    const created = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const created = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
     const orderId = created.body.data.order.id as string;
     const intentId = stripe.lastIntentId();
 
@@ -181,7 +181,7 @@ describe("supplier confirmation and the authorization clock", () => {
         .post(`${CART}/lines`)
         .set("Cookie", cookie)
         .send({ itemType: "bike", itemId: onRequest.itemId, sku: onRequest.sku, qty: 1 });
-      const created = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+      const created = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
       const res = await request(app)
         .post(`${ADMIN}/orders/${created.body.data.order.id}/confirm-supplier-stock`)
@@ -348,7 +348,7 @@ describe("supplier confirmation and the authorization clock", () => {
         .post(`${CART}/lines`)
         .set("Cookie", cookie)
         .send({ itemType: "bike", itemId: onRequest.itemId, sku: onRequest.sku, qty: 1 });
-      const created = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+      const created = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
       const orderId = created.body.data.order.id as string;
 
       // Old enough to be past the grace period. Written through the raw driver
@@ -401,7 +401,7 @@ describe("supplier confirmation and the authorization clock", () => {
         .post(`${CART}/lines`)
         .set("Cookie", cookie)
         .send({ itemType: "bike", itemId: onRequest.itemId, sku: onRequest.sku, qty: 1 });
-      const created = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+      const created = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
 
       const reconciled = await orderMaintenanceService.reconcilePendingPayments(new Date());
 

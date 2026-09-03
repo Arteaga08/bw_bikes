@@ -69,7 +69,8 @@ function pendingCustomerEmail(index: number): string {
 }
 
 const TEST_SHIPPING_ADDRESS = {
-  recipientName: "Cliente E2E",
+  firstName: "Cliente",
+  lastName: "E2E",
   phone: "5555555555",
   street: "Av. Insurgentes Sur 1234",
   neighborhood: "Del Valle",
@@ -226,7 +227,9 @@ async function purchaseOne(session: ApiSession, itemType: "bike" | "accessory", 
   await session.request("DELETE", "/cart");
   await session.request("PUT", "/cart/shipping-address", TEST_SHIPPING_ADDRESS);
   await session.request("POST", "/cart/lines", { itemType, itemId, sku, qty: 1 });
-  const result = await session.request<{ order: PublicOrderLite; clientSecret: string }>("POST", "/orders", {});
+  const result = await session.request<{ order: PublicOrderLite; clientSecret: string }>("POST", "/orders", {
+    termsAcceptedAt: new Date().toISOString(),
+  });
   return result.order;
 }
 

@@ -65,7 +65,8 @@ const TEST_CUSTOMER_EMAIL = "cliente.prueba@bwbikes-test.com";
 const TEST_CUSTOMER_PASSWORD = "PruebaBW2026!";
 
 const TEST_SHIPPING_ADDRESS = {
-  recipientName: "Cliente de Prueba",
+  firstName: "Cliente",
+  lastName: "de Prueba",
   phone: "5555555555",
   street: "Av. Insurgentes Sur 1234",
   neighborhood: "Del Valle",
@@ -223,7 +224,9 @@ async function purchaseOne(session: ApiSession, bikeId: string, sku: string): Pr
   await session.request("PUT", "/cart/shipping-address", TEST_SHIPPING_ADDRESS);
   await session.request("POST", "/cart/lines", { itemType: "bike", itemId: bikeId, sku, qty: 1 });
 
-  const result = await session.request<{ order: PublicOrderLite; clientSecret: string }>("POST", "/orders", {});
+  const result = await session.request<{ order: PublicOrderLite; clientSecret: string }>("POST", "/orders", {
+    termsAcceptedAt: new Date().toISOString(),
+  });
   return result.order;
 }
 

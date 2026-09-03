@@ -35,7 +35,7 @@ import { FooterLinkColumn } from "./FooterLinkColumn";
 export function Footer() {
   return (
     <footer className="bg-overlay">
-      <div className="px-md pt-xl text-center">
+      <div className="overflow-hidden px-md pt-xl text-center">
         <h2 className="whitespace-nowrap font-display text-[clamp(1.5rem,7.5vw,10rem)] font-extrabold uppercase leading-[1.05] text-blanco">
           Black and White Bikes
         </h2>

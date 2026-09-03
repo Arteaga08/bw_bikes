@@ -22,7 +22,9 @@ export function AddressCard({ address, onEdit, onDelete, onSetDefault, settingDe
       </div>
 
       <div className="font-body text-body text-negro">
-        <p>{address.recipientName}</p>
+        <p>
+          {address.firstName} {address.lastName}
+        </p>
         <p>
           {address.street}
           {address.interiorNumber ? ` int. ${address.interiorNumber}` : ""}, {address.neighborhood}

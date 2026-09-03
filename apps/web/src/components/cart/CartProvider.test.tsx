@@ -32,7 +32,8 @@ const { CartProvider, useCart } = await import("./CartProvider");
 const CART = { id: "cart-1", lines: [{ itemType: "bike", sku: "SKU-1", qty: 2 }], subtotalCents: 100 };
 
 const FIXTURE_ADDRESS: ShippingAddress = {
-  recipientName: "Ana Pérez",
+  firstName: "Ana",
+  lastName: "Pérez",
   phone: "5512345678",
   street: "Av. Reforma 123",
   neighborhood: "Juárez",

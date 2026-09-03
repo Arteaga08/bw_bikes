@@ -9,7 +9,8 @@ const ACCOUNT_BASE = "/api/v1/account";
 
 const VALID_ADDRESS = {
   label: "Casa",
-  recipientName: "Ana Pérez",
+  firstName: "Ana",
+  lastName: "Pérez",
   phone: "5512345678",
   street: "Av. Reforma 123",
   neighborhood: "Juárez",

@@ -244,6 +244,8 @@ export interface OrderActivityEntry {
 export interface AdminOrder extends Omit<PublicOrder, "statusHistory"> {
   customer: { id: string; email: string; firstName: string; lastName: string } | null;
   paymentIntentId?: string;
+  /** When the customer accepted Términos de Uso / Política de Privacidad at checkout (M13-checkout-redesign). Admin-only, for audit — a customer has no need to see their own consent timestamp reflected back. */
+  termsAcceptedAt?: string;
   disputedAt?: string;
   /** Present once a chargeback has been opened on this order; absent otherwise. */
   disputeStatus?: DisputeStatus;

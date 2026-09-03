@@ -36,7 +36,7 @@ describe("order security", () => {
       .post(`${CART}/lines`)
       .set("Cookie", cookie)
       .send({ itemType: "bike", itemId: bike.itemId, sku: bike.sku, qty: 1 });
-    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({});
+    const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
     expect(res.status).toBe(201);
     return res.body.data.order.id as string;
   }
@@ -166,7 +166,7 @@ describe("order security", () => {
       // exactly what a stolen-card script wants.
       const statuses: number[] = [];
       for (let i = 0; i < 12; i++) {
-        const res = await request(app).post(ORDERS).set("Cookie", alice).send({});
+        const res = await request(app).post(ORDERS).set("Cookie", alice).send({ termsAcceptedAt: new Date().toISOString() });
         statuses.push(res.status);
       }
 
