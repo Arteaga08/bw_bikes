@@ -3,10 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ComparisonProvider, type ComparisonEntry } from "./ComparisonProvider";
 
-const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+const { pushMock, pathnameMock } = vi.hoisted(() => ({ pushMock: vi.fn(), pathnameMock: { current: "/bicicletas" } }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+  usePathname: () => pathnameMock.current,
 }));
 
 const { ComparisonTray } = await import("./ComparisonTray");
@@ -38,11 +39,21 @@ const bikeC: ComparisonEntry = { slug: "bike-c", name: "Defy", brandName: "Giant
 describe("ComparisonTray", () => {
   beforeEach(() => {
     pushMock.mockReset();
+    pathnameMock.current = "/bicicletas";
     sessionStorage.clear();
   });
 
   it("starts inert and hidden with no selection", async () => {
     renderTray();
+    const region = await screen.findByRole("region", { name: "Comparación", hidden: true });
+    expect(region).toHaveAttribute("inert", "");
+    expect(region).toHaveClass("translate-y-full");
+  });
+
+  it("stays hidden on /comparar even with a selection, but reopens back on a catalog page", async () => {
+    pathnameMock.current = "/comparar";
+    renderTray([bikeA, bikeB]);
+
     const region = await screen.findByRole("region", { name: "Comparación", hidden: true });
     expect(region).toHaveAttribute("inert", "");
     expect(region).toHaveClass("translate-y-full");

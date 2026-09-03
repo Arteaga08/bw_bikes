@@ -10,6 +10,7 @@ function makeBike(specGroups: ComparableBike["specGroups"], overrides: Partial<C
     brandName: "Specialized",
     price: 3_890_000,
     sizes: [],
+    colors: [],
     specGroups,
     ...overrides,
   };

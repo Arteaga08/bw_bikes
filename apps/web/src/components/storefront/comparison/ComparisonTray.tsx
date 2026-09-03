@@ -2,7 +2,7 @@
 
 import { CaretUp } from "@phosphor-icons/react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { CloseButton } from "@/components/ui/CloseButton";
@@ -61,14 +61,22 @@ function EmptySlot() {
  * has something to animate from — same mechanic `CatalogFilterDrawer` uses
  * for its bottom sheet, minus that one's modal semantics. `inert` while
  * closed keeps its (empty, off-screen) contents out of the tab order.
+ *
+ * Hidden (not unmounted, not cleared) on `/comparar` itself: the shopper just
+ * landed on the side-by-side spec sheet the tray's own "Comparar" button
+ * sent them to, so the tray re-showing its own selection there is noise, not
+ * help. The selection stays in `sessionStorage` — `ComparisonProvider` never
+ * hears about the route — so it's back the moment they return to a catalog
+ * page, still checked in `CompareCheckbox`.
  */
 export function ComparisonTray() {
   const { entries, remove, clear, ready } = useComparison();
   const router = useRouter();
+  const pathname = usePathname();
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const trayRef = useRef<HTMLDivElement>(null);
 
-  const isOpen = ready && entries.length > 0;
+  const isOpen = ready && entries.length > 0 && pathname !== "/comparar";
   const canCompare = entries.length >= MIN_COMPARISON_ENTRIES;
 
   // Collapse the mobile panel whenever the tray closes (selection cleared) —

@@ -16,6 +16,8 @@ export interface CategoryCardProps {
   size?: CategoryCardSize;
   /** Marks the category whose page is currently open. */
   isActive?: boolean;
+  /** Overrides the default `${basePath}/${category.slug}` link — the rail's synthetic "Todos" tile points at `basePath` itself, not a real category slug. */
+  href?: string;
 }
 
 const SIZE_CLASSNAMES: Record<CategoryCardSize, { tile: string; frame: string; name: string; sizes: string }> = {
@@ -50,6 +52,7 @@ export function CategoryCard({
   basePath = "/bicicletas",
   size = "default",
   isActive = false,
+  href,
 }: CategoryCardProps) {
   const image = category.image;
   if (!image) return null;
@@ -58,7 +61,7 @@ export function CategoryCard({
 
   return (
     <Link
-      href={`${basePath}/${category.slug}`}
+      href={href ?? `${basePath}/${category.slug}`}
       aria-current={isActive ? "page" : undefined}
       className={`group/card shrink-0 snap-start ${style.tile}`}
     >

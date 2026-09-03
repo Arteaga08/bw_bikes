@@ -373,8 +373,8 @@ export async function getPublicBikeSizeGuide(categoryId: string): Promise<Public
   return res.data.sizeGuide;
 }
 
-/** Same normalization the API's own `getFilterOptions` matches templates by — a color template's `value` is looked up case-insensitively, trimmed. */
-function normalizeColorKey(value: string): string {
+/** Same normalization the API's own `getFilterOptions` matches templates by — a color template's `value` is looked up case-insensitively, trimmed. Exported for `ComparisonColorsRow`, which resolves the same names → swatch by hand instead of carrying yet another private copy of this. */
+export function normalizeColorKey(value: string): string {
   return value.trim().toLocaleLowerCase("es");
 }
 
@@ -403,6 +403,8 @@ export interface ComparableBike {
   modelYear?: number;
   /** Unique sizes across the bike's active variants, in first-appearance order — same shape `extractColors`/`PublicProductSummary.colors` already gives the catalog card. */
   sizes: string[];
+  /** Unique color names across the bike's active variants, same shape and origin as `PublicProductSummary.colors` — `ComparisonColorsRow` turns each into a swatch through `buildColorSwatchIndex`. */
+  colors: string[];
   image?: { url: string; alt?: string };
   specGroups: { title: string; fields: { label: string; value: string }[] }[];
 }
@@ -441,6 +443,7 @@ export function toComparableBike(bike: PublicBike): ComparableBike {
     ...(bike.compareAtPrice !== undefined ? { compareAtPrice: bike.compareAtPrice } : {}),
     ...(bike.modelYear !== undefined ? { modelYear: bike.modelYear } : {}),
     sizes: extractSizes(bike.variants),
+    colors: extractColors(bike.variants),
     ...(image ? { image: { url: image.url, ...(image.alt ? { alt: image.alt } : {}) } } : {}),
     specGroups: [...bike.specGroups]
       .filter((group) => group.visible)

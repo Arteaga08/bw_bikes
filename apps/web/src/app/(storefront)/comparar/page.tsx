@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { ButtonLink } from "@/components/ui/ButtonLink";
+import { ComparisonEmptyState } from "@/components/storefront/comparator/ComparisonEmptyState";
 import { ComparisonTable } from "@/components/storefront/comparator/ComparisonTable";
 import { MAX_COMPARISON_ENTRIES, MIN_COMPARISON_ENTRIES } from "@/components/storefront/comparison/comparison-limits";
 import { ApiError } from "@/lib/api/error";
-import { getPublicBikeBySlug, toComparableBike, type ComparableBike } from "@/lib/api/public-catalog";
+import {
+  buildColorSwatchIndex,
+  getPublicBikeBySlug,
+  getPublicColorSwatches,
+  toComparableBike,
+  type ComparableBike,
+  type PublicColorSwatch,
+} from "@/lib/api/public-catalog";
 import type { NextSearchParams } from "@/lib/storefront-catalog-filters";
 
 interface CompararPageProps {
@@ -52,6 +59,21 @@ async function loadBikes(slugs: string[]): Promise<ComparableBike[]> {
   return results.filter((bike): bike is ComparableBike => bike !== null);
 }
 
+/**
+ * Bike color names → swatch, for `ComparisonColorsRow`. Same degrade as
+ * `loadBikes`: a failed catalog-filter-options read shouldn't take the whole
+ * comparator down — it just means every swatch falls back to `ColorSwatch`'s
+ * own `hex: null` placeholder ring instead of a real color.
+ */
+async function loadColorSwatchIndex(): Promise<Map<string, PublicColorSwatch>> {
+  try {
+    return buildColorSwatchIndex(await getPublicColorSwatches("bike"));
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error;
+    return new Map();
+  }
+}
+
 export async function generateMetadata({ searchParams }: CompararPageProps): Promise<Metadata> {
   const bikes = await loadBikes(parseSlugs((await searchParams).bicis));
   if (bikes.length < MIN_COMPARISON_ENTRIES) return { title: "Comparar bicicletas" };
@@ -78,11 +100,12 @@ function RhinoMark() {
  * or a comparison with an empty column.
  */
 export default async function CompararPage({ searchParams }: CompararPageProps) {
-  const bikes = await loadBikes(parseSlugs((await searchParams).bicis));
+  const slugs = parseSlugs((await searchParams).bicis);
+  const [bikes, colorSwatchIndex] = await Promise.all([loadBikes(slugs), loadColorSwatchIndex()]);
 
   return (
-    <section className="bg-blanco py-3xl">
-      <div className="mx-auto w-full max-w-[72rem] px-lg">
+    <section className="flex min-h-[calc(100dvh-4rem)] flex-col bg-blanco py-3xl">
+      <div className="mx-auto flex w-full max-w-[72rem] flex-1 flex-col px-lg">
         <div className="flex items-center gap-xs">
           <RhinoMark />
           <p className="font-body text-eyebrow uppercase text-grafito">Comparador</p>
@@ -95,16 +118,9 @@ export default async function CompararPage({ searchParams }: CompararPageProps) 
         </p>
 
         {bikes.length >= MIN_COMPARISON_ENTRIES ? (
-          <ComparisonTable bikes={bikes} />
+          <ComparisonTable bikes={bikes} colorSwatchIndex={colorSwatchIndex} />
         ) : (
-          <div className="mt-2xl">
-            <p className="font-body text-body text-grafito">
-              Elige al menos dos bicicletas desde el catálogo para compararlas aquí.
-            </p>
-            <ButtonLink href="/bicicletas" variant="primary" className="mt-md">
-              Ir al catálogo
-            </ButtonLink>
-          </div>
+          <ComparisonEmptyState />
         )}
       </div>
     </section>

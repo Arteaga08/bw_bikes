@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import type { ComparableBike } from "@/lib/api/public-catalog";
 import { formatCurrencyCents } from "@/lib/format";
@@ -11,11 +10,14 @@ export interface ComparisonHeaderProps {
 }
 
 /**
- * The comparison's first row: photo, brand, name, price, and the way through
- * to each bike's PDP. Rendered by `ComparisonTable` as the first row of the
- * *same* grid the spec rows use — not a separate element positioned on top —
- * so a `lg:sticky` on this row pins it under the navbar without drifting out
- * of column alignment as the table scrolls.
+ * The comparison's first row: brand, name, price, and the way through to
+ * each bike's PDP — deliberately without the photo, which lives in its own
+ * `ComparisonImageRow` further down. Rendered by `ComparisonTable` as the
+ * first row of the *same* grid the spec rows use — not a separate element
+ * positioned on top — so a `lg:sticky` on this row pins it under the navbar
+ * without drifting out of column alignment as the table scrolls. Keeping it
+ * to text and a button (no image) is what lets the pinned strip stay thin
+ * instead of eating the viewport while the shopper scrolls the photo away.
  */
 export function ComparisonHeader({
   bikes,
@@ -30,18 +32,7 @@ export function ComparisonHeader({
       <div aria-hidden="true" />
       {bikes.map((bike) => (
         <div key={bike.slug}>
-          <div className="relative aspect-[4/3] overflow-hidden rounded-card bg-blanco">
-            {bike.image ? (
-              <Image
-                src={bike.image.url}
-                alt={bike.image.alt ?? bike.name}
-                fill
-                sizes="(max-width: 1023px) 60vw, 20vw"
-                className="object-contain"
-              />
-            ) : null}
-          </div>
-          <p className="mt-sm font-body text-caption uppercase text-grafito">
+          <p className="font-body text-caption uppercase text-grafito">
             {bike.brandName}
           </p>
           <p className="mt-xs font-display text-h3 text-negro">{bike.name}</p>

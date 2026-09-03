@@ -1,19 +1,19 @@
-import type { ComparableBike } from "@/lib/api/public-catalog";
+import type { ComparableBike, PublicColorSwatch } from "@/lib/api/public-catalog";
 import { ComparisonHeader } from "./ComparisonHeader";
+import { ComparisonColorsRow, ComparisonImageRow } from "./ComparisonOverviewRows";
+import { ComparisonTextRow } from "./ComparisonRow";
 import { buildComparison, buildOverviewGroup } from "./comparison-rows";
 
 export interface ComparisonTableProps {
   bikes: ComparableBike[];
+  colorSwatchIndex: Map<string, PublicColorSwatch>;
 }
 
-/** Pinta cuando ni siquiera hay algo que comparar. Rows always includes `Precio` (`buildOverviewGroup`) once at least one bike is passed in, so this only fires from `ComparisonPage`'s own empty state, never here — kept as a defensive fallback rather than an assumption the caller always holds. */
-const MISSING = "—";
-
 /**
- * The full comparison table: `ComparisonHeader` (photo/name/price/CTA) as
- * its first row, then "Ficha general" (año, precio, tallas — the facts every
- * bike carries) followed by whatever free-form ficha técnica each bike
- * actually has (`buildComparison`).
+ * The full comparison table: `ComparisonHeader` (name/price/CTA, sticky) as
+ * its first row, then "Ficha general" — photo, colors, año, precio, tallas,
+ * the facts every bike carries — followed by whatever free-form ficha
+ * técnica each bike actually has (`buildComparison`).
  *
  * Every "row" here is its own `display: grid` sharing one literal
  * `gridTemplateColumns` string (not one giant grid spanning the whole
@@ -39,9 +39,12 @@ const MISSING = "—";
  * minmax(15rem, 1fr)`) shrink below their floor instead of triggering the
  * scrollbar.
  */
-export function ComparisonTable({ bikes }: ComparisonTableProps) {
+export function ComparisonTable({ bikes, colorSwatchIndex }: ComparisonTableProps) {
   const gridTemplateColumns = `10rem repeat(${bikes.length}, minmax(15rem, 1fr))`;
-  const groups = [buildOverviewGroup(bikes), ...buildComparison(bikes)].filter((group) => group.rows.length > 0);
+  const overviewGroup = buildOverviewGroup(bikes);
+  const specGroups = buildComparison(bikes).filter((group) => group.rows.length > 0);
+  // Same "nobody has a value" rule the rest of `buildOverviewGroup`'s own rows follow — dropped instead of a row of nothing but dashes.
+  const showColorsRow = bikes.some((bike) => bike.colors.length > 0);
 
   return (
     <div className="mt-xl overflow-x-auto overflow-y-hidden lg:overflow-visible">
@@ -49,24 +52,25 @@ export function ComparisonTable({ bikes }: ComparisonTableProps) {
         <ComparisonHeader bikes={bikes} gridTemplateColumns={gridTemplateColumns} />
 
         <div className="flex flex-col gap-xl py-lg">
-          {groups.map((group) => (
+          <section>
+            <h2 className="px-lg font-ui text-eyebrow uppercase text-grafito">{overviewGroup.title}</h2>
+            <dl className="mt-md flex flex-col">
+              <ComparisonImageRow bikes={bikes} gridTemplateColumns={gridTemplateColumns} />
+              {showColorsRow ? (
+                <ComparisonColorsRow bikes={bikes} gridTemplateColumns={gridTemplateColumns} colorSwatchIndex={colorSwatchIndex} />
+              ) : null}
+              {overviewGroup.rows.map((row) => (
+                <ComparisonTextRow key={row.label} row={row} bikes={bikes} gridTemplateColumns={gridTemplateColumns} />
+              ))}
+            </dl>
+          </section>
+
+          {specGroups.map((group) => (
             <section key={group.title}>
               <h2 className="px-lg font-ui text-eyebrow uppercase text-grafito">{group.title}</h2>
               <dl className="mt-md flex flex-col">
                 {group.rows.map((row) => (
-                  <div
-                    key={row.label}
-                    className="grid gap-lg border-t border-borde px-lg py-md"
-                    style={{ gridTemplateColumns }}
-                  >
-                    <dt className="sticky left-0 bg-blanco font-body text-caption uppercase text-grafito">{row.label}</dt>
-                    {row.values.map((value, index) => (
-                      <dd key={bikes[index]!.slug} className="font-body text-body text-negro">
-                        <span className="sr-only">{bikes[index]!.name}: </span>
-                        {value ?? MISSING}
-                      </dd>
-                    ))}
-                  </div>
+                  <ComparisonTextRow key={row.label} row={row} bikes={bikes} gridTemplateColumns={gridTemplateColumns} />
                 ))}
               </dl>
             </section>

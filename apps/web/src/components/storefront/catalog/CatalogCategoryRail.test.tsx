@@ -69,4 +69,24 @@ describe("CatalogCategoryRail", () => {
     expect(screen.getByRole("link", { name: /Ruta/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: /Montaña/ })).not.toHaveAttribute("aria-current");
   });
+
+  it("always leads with a 'Todos' tile linking to the catalog root", () => {
+    stubLayout();
+    render(
+      <CatalogCategoryRail
+        catalog="bike"
+        categories={[makeCategory({ name: "Montaña", slug: "montana" })]}
+        activeSlug="montana"
+      />,
+    );
+    const allLink = screen.getByRole("link", { name: /Todos/ });
+    expect(allLink).toHaveAttribute("href", "/bicicletas");
+    expect(allLink).not.toHaveAttribute("aria-current");
+  });
+
+  it("marks 'Todos' as current when no category is active", () => {
+    stubLayout();
+    render(<CatalogCategoryRail catalog="bike" categories={[makeCategory()]} />);
+    expect(screen.getByRole("link", { name: /Todos/ })).toHaveAttribute("aria-current", "page");
+  });
 });
