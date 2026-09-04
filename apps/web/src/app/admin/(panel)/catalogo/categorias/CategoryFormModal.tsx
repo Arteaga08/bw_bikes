@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { CategoryInput } from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
 import { slugify } from "@/lib/catalog/slugify";
-import { CategoryImageField } from "./CategoryImageField";
+import { ImageField } from "@/components/ui/ImageField";
 
 export interface CategoryFormModalProps {
   onClose: () => void;
@@ -39,7 +39,7 @@ export interface CategoryFormModalProps {
  * Image upload needs an id (Cloudinary attaches to an existing document, same
  * constraint as the product gallery). Rather than making the admin save
  * twice, the create flow lets them pick the file up front: before the
- * category exists, `CategoryImageField` runs in `"deferred"` mode and just
+ * category exists, `ImageField` runs in `"deferred"` mode and just
  * hands the picked `File` back via `onSelect` (previewed locally with
  * `URL.createObjectURL`, never uploaded). The first "Guardar" then creates
  * the category and, if a file was staged, uploads it immediately after —
@@ -161,7 +161,7 @@ export function CategoryFormModal({
     }
   }
 
-  // `CategoryImageField` owns its own success/error toasts — these just
+  // `ImageField` owns its own success/error toasts — these just
   // forward the network call and update local + background state.
   async function handleUploadImage(file: File): Promise<void> {
     if (!category) return;
@@ -215,9 +215,9 @@ export function CategoryFormModal({
         </div>
 
         {category ? (
-          <CategoryImageField mode="immediate" image={category.image} onUpload={handleUploadImage} onRemove={handleRemoveImage} />
+          <ImageField mode="immediate" image={category.image} onUpload={handleUploadImage} onRemove={handleRemoveImage} />
         ) : (
-          <CategoryImageField
+          <ImageField
             mode="deferred"
             previewUrl={pendingPreviewUrl}
             onSelect={handleSelectPendingImage}

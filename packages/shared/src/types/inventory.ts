@@ -67,17 +67,7 @@ export interface AdminInventoryItem extends InventoryAvailability {
   updatedAt: string;
 }
 
-/** One root category's rollup, for the inventory panel's category bands — sized to avoid fetching every row just to paint a header. */
-export interface InventorySummaryGroup {
-  itemType: ItemType;
-  categoryId: string;
-  categoryName: string;
-  totalSkus: number;
-  outOfStockSkus: number;
-  lowStockSkus: number;
-}
-
-/** Store-wide rollup, independent of category — feeds the alert cards atop `/admin/inventario`. */
+/** Store-wide rollup, independent of category. */
 export interface InventorySummaryTotals {
   totalSkus: number;
   outOfStockSkus: number;
@@ -87,8 +77,89 @@ export interface InventorySummaryTotals {
 }
 
 export interface InventorySummary {
-  groups: InventorySummaryGroup[];
   totals: InventorySummaryTotals;
+}
+
+/**
+ * The worst state any of a product's stock-holding variants is in — what the
+ * product row's badge paints. `on_request` means the product declares no
+ * `in_stock` variant at all, so it holds no physical stock and can never be
+ * "agotado".
+ *
+ * A variant with no `InventoryItem` row yet is deliberately *not* counted as
+ * out of stock: "sin registro" and "agotado" are different problems with
+ * different fixes, and collapsing them would hide every newly created product
+ * behind a red badge.
+ */
+export type InventoryProductStatus = "out" | "low" | "ok" | "on_request";
+
+/** What both the product row and its detail carry — the product itself, resolved through the catalog. */
+export interface AdminInventoryProductBase {
+  itemType: ItemType;
+  /** The `Bike`/`Accessory` `_id`. Every variant of the product shares it as `InventoryItem.itemId`, which is why grouping by product needs no schema change. */
+  itemId: string;
+  name: string;
+  brand: string;
+  categoryName: string;
+  /** The primary gallery image's delivery URL (lowest `order`) — already a full Cloudinary URL, same as `AdminInventoryProductInfo.imageUrl`. */
+  imageUrl?: string;
+}
+
+/**
+ * One row of `GET /admin/inventory/products` — a **product**, never a SKU.
+ * The list is driven off the catalog collections rather than `InventoryItem`
+ * so that a row is always exactly one document: pagination stays exact, and
+ * products that have no inventory rows at all are still visible.
+ */
+export interface AdminInventoryProductRow extends AdminInventoryProductBase {
+  /** Active variants, whatever their `fulfillmentMode`. */
+  variantCount: number;
+  /** Active `in_stock` variants that still have no `InventoryItem` row. */
+  untrackedVariantCount: number;
+  /** Sum of `available` across the tracked `in_stock` variants. `on_request`/`preorder` variants hold no stock and contribute nothing. */
+  totalAvailable: number;
+  totalOnHand: number;
+  totalReserved: number;
+  outOfStockVariants: number;
+  lowStockVariants: number;
+  status: InventoryProductStatus;
+}
+
+/**
+ * Chip-row counts, computed over the same filtered set as the rows but
+ * *before* the `stock` filter is applied — so "Agotados 5" stays readable
+ * while the list is already narrowed to "Bajos". Products are partitioned by
+ * worst status, so `out + low + ok + onRequest === all`.
+ */
+export interface AdminInventoryProductCounts {
+  all: number;
+  out: number;
+  low: number;
+  ok: number;
+  onRequest: number;
+}
+
+/** One variant inside the product detail modal. */
+export interface AdminInventoryVariantRow {
+  /** `InventoryItem._id`, or `null` when this variant has no row yet — the panel creates one on the first entry. */
+  inventoryItemId: string | null;
+  sku: string;
+  size?: string;
+  color?: string;
+  fulfillmentMode: FulfillmentMode;
+  /** All zero when `inventoryItemId` is `null`: there is nothing counted yet, which is not the same as counting zero. */
+  onHand: number;
+  reserved: number;
+  available: number;
+  /** The **effective** threshold: the row's own override, otherwise `Settings.inventory.lowStockThresholdUnits`. */
+  lowStockThresholdUnits: number;
+  lastRestockedAt?: string;
+}
+
+/** What `GET /admin/inventory/products/:id` returns — every active variant, including the ones with no inventory row. */
+export interface AdminInventoryProductDetail extends AdminInventoryProductBase {
+  /** In the order the product declares them; the panel groups by `color` for display. */
+  variants: AdminInventoryVariantRow[];
 }
 
 /** One SKU's public availability signal — no counts, just whether it can be sold right now. */

@@ -116,7 +116,7 @@ function cardsFor(props: GallerySectionProps): GalleryCard[] {
 }
 
 /**
- * Two modes, same discriminated shape as `CategoryImageFieldProps`:
+ * Two modes, same discriminated shape as `ImageFieldProps`:
  *
  * - `immediate` (the product exists): every action hits its own endpoint
  *   right away and refreshes from the response — the gallery is never part

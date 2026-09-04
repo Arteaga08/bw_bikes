@@ -31,6 +31,34 @@ export const objectIdList = Joi.string()
     "string.pattern.base": "Identificador inválido.",
   });
 
+/**
+ * A comma-separated list drawn from a closed set — the "one filter, several
+ * values" shape (`?status=paid,processing`) that a grouped filter chip needs
+ * and a single `Joi.valid(...)` can't express.
+ *
+ * Returns the **parsed array**, so the service reads `string[]` and never
+ * re-splits the raw string itself (the ad-hoc `splitList` in
+ * `product.service.ts` is what this replaces for new callers). Duplicates
+ * collapse and order is irrelevant — the value feeds a Mongo `$in`. `allowed`
+ * doubles as the length ceiling, so repeating a valid member can't force an
+ * oversized `$in`.
+ *
+ * Chain `.messages({ "any.invalid": "..." })` at the call site to name the
+ * field in the error the way every other schema here does.
+ */
+export function commaListOf<T extends string>(allowed: readonly T[]): Joi.StringSchema {
+  const permitted: readonly string[] = allowed;
+  return Joi.string()
+    .trim()
+    .custom((value: string, helpers) => {
+      const parts = [...new Set(value.split(",").map((part) => part.trim()).filter((part) => part !== ""))];
+      if (parts.length === 0 || parts.length > permitted.length) return helpers.error("any.invalid");
+      if (parts.some((part) => !permitted.includes(part))) return helpers.error("any.invalid");
+      return parts;
+    })
+    .messages({ "any.invalid": "El valor del filtro no es válido." });
+}
+
 /** Lowercase, hyphen-separated, no leading/trailing/double hyphens. Matches `slugify()`'s output. */
 export const slug = Joi.string()
   .trim()

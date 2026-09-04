@@ -20,7 +20,7 @@ import { logger } from "../config/logger.js";
 import { MAX_INTERNAL_NOTES } from "../models/schemas/internal-note.schema.js";
 import type { IOrder, IUser } from "../models/index.js";
 import { Order, User } from "../models/index.js";
-import { AppError, buildMeta, parseListQuery } from "../utils/index.js";
+import { AppError, buildMeta, escapeRegex, parseListQuery } from "../utils/index.js";
 import { listForTarget, recordAuditLog } from "./audit-log.service.js";
 import { cartService } from "./cart.service.js";
 import { couponService } from "./coupon.service.js";
@@ -1406,22 +1406,54 @@ async function listForUser(userId: string, query: Record<string, unknown>) {
   return { orders: documents.map(toPublicOrder), meta: buildMeta(total, page, limit) };
 }
 
+/**
+ * How many `User` matches a name/phone/email search resolves before it feeds
+ * the order `$in` — a search term is an operator triaging one customer's
+ * problem, never a mailing-list export, so this is a safety ceiling, not a
+ * page size.
+ */
+const SEARCH_USER_MATCH_LIMIT = 50;
+
 /** Named filters only — the client's query object never becomes a Mongo filter. */
 async function listForAdmin(query: Record<string, unknown>) {
-  const { page, limit, skip, sort } = parseListQuery(query, {
+  const { page, limit, skip, sort, search } = parseListQuery(query, {
     allowedSortFields: SORTABLE_FIELDS,
     defaultSort: "-createdAt",
   });
 
   const filter: Record<string, unknown> = {};
   const status = query["status"];
-  if (typeof status === "string") filter["status"] = status;
+  if (Array.isArray(status)) filter["status"] = { $in: status };
+  else if (typeof status === "string") filter["status"] = status;
 
   const priority = query["priority"];
   if (typeof priority === "string") filter["priority"] = priority;
 
   const orderNumber = query["orderNumber"];
   if (typeof orderNumber === "string") filter["orderNumber"] = orderNumber.toUpperCase();
+
+  // A free-text operator search — name/phone off the order's own frozen
+  // `shippingAddress` (no join), email off `User` (the one field the order
+  // doesn't carry a copy of). `escapeRegex` is load-bearing: `search` is
+  // client-supplied and lands in a `RegExp`, so an unescaped term is both a
+  // ReDoS vector and a way to widen the match past what the operator typed
+  // (BACKEND_SECURITY_GUIDELINES.md §4).
+  if (search) {
+    const pattern = new RegExp(escapeRegex(search), "i");
+    const matchingUsers = await User.find({ email: pattern })
+      .select("_id")
+      .limit(SEARCH_USER_MATCH_LIMIT)
+      .lean()
+      .exec();
+
+    filter["$or"] = [
+      { orderNumber: new RegExp(`^${escapeRegex(search.toUpperCase())}`) },
+      { "shippingAddress.firstName": pattern },
+      { "shippingAddress.lastName": pattern },
+      { "shippingAddress.phone": pattern },
+      ...(matchingUsers.length > 0 ? [{ userId: { $in: matchingUsers.map((user) => user._id) } }] : []),
+    ];
+  }
 
   const [documents, total] = await Promise.all([
     Order.find(filter).sort(sort).skip(skip).limit(limit).populate("userId", "email firstName lastName").exec(),

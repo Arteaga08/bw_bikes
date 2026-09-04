@@ -7,6 +7,7 @@
  */
 export const PRODUCT_FIELD_IDS = {
   name: "product-field-name",
+  model: "product-field-model",
   brand: "product-field-brand",
   category: "product-field-category",
   description: "product-field-description",

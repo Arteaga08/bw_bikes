@@ -247,8 +247,7 @@ describe("inventory admin list — legacy Settings document missing lowStockThre
 
     const summary = await request(app).get(`${ADMIN}/inventory/summary`).set("Cookie", adminCookie);
     expect(summary.status).toBe(200);
-    const groups = summary.body.data.summary.groups as { lowStockSkus: number }[];
-    expect(groups.some((group) => group.lowStockSkus > 0)).toBe(true);
+    expect(summary.body.data.summary.totals.lowStockSkus as number).toBeGreaterThan(0);
   });
 });
 

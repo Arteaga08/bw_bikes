@@ -3,6 +3,7 @@
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { slugify } from "@/lib/catalog/slugify";
+import { MAX_MODEL_LENGTH } from "./catalog-limits";
 import { PRODUCT_FIELD_IDS } from "./field-ids";
 import { SectionHelp } from "./SectionHelp";
 
@@ -15,6 +16,8 @@ export interface ProductBasicsValue {
    * fixed even if the name changes afterward.
    */
   slug: string;
+  /** The trim/version name, e.g. "SL 5" — optional, shared by both catalogs. */
+  model: string;
   brand: string;
   category: string;
   description: string;
@@ -66,6 +69,17 @@ export function ProductBasicsSection({ value, onChange, errors = {} }: ProductBa
           error={errors.slug}
         />
       </div>
+
+      <Input
+        id={PRODUCT_FIELD_IDS.model}
+        label="Modelo (opcional)"
+        placeholder="p. ej. SL 5"
+        helper="La versión o el modelo del producto, si aplica."
+        maxLength={MAX_MODEL_LENGTH}
+        value={value.model}
+        onChange={(event) => set("model", event.target.value)}
+        error={errors.model}
+      />
 
       <div className="flex flex-col gap-xs">
         <div className="flex items-center gap-xs">

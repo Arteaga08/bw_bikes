@@ -26,6 +26,53 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 export const ALL_ORDER_STATUSES = Object.keys(ORDER_STATUS_LABELS) as OrderStatus[];
 
 /**
+ * The four buckets an operator actually thinks in — same grouping
+ * `OrdersSummaryCards`'s tiles count by, now the single source of truth both
+ * the tiles and `OrderFilters`'s grouped status options read, so a tile's
+ * count and the list it navigates to can never drift apart again (the bug
+ * this existed to fix: "Pagos" used to count `paid + processing` but filter
+ * to `status=paid` alone). Values are comma-joined for the `?status=` query
+ * param `adminOrderListQuerySchema` now accepts as a list.
+ *
+ * Exhaustive by type for the same reason as the labels above — every
+ * `OrderStatus` belongs to exactly one bucket, `satisfies` fails the build if
+ * a new status is added without deciding where it goes.
+ */
+export const ORDER_STATUS_GROUPS = {
+  action: ["pending_payment", "authorized", "awaiting_supplier_confirmation"],
+  progress: ["paid", "processing"],
+  shipping: ["shipped", "delivered"],
+  problems: ["cancelled", "authorization_expired", "refunded"],
+} as const satisfies Record<string, readonly OrderStatus[]>;
+
+export type OrderStatusGroup = keyof typeof ORDER_STATUS_GROUPS;
+
+export const ORDER_STATUS_GROUP_LABELS: Record<OrderStatusGroup, string> = {
+  action: "Requieren acción",
+  progress: "Pagadas / en preparación",
+  shipping: "Enviadas / entregadas",
+  problems: "Canceladas / con problema",
+};
+
+/**
+ * The `?status=` filter's csv value → the group it exactly matches, if any —
+ * order-insensitive, so `OrdersSummaryCards` (which builds the value from
+ * `ORDER_STATUS_GROUPS` directly) and a value restored from elsewhere agree.
+ * Returns `null` for `""`, a single individual status, or any set that isn't
+ * exactly one whole group — the caller reads that as "no tile is the active
+ * one right now", not an error.
+ */
+export function matchStatusGroup(value: string): OrderStatusGroup | null {
+  const parts = new Set(value.split(",").filter(Boolean));
+  if (parts.size === 0) return null;
+  for (const group of Object.keys(ORDER_STATUS_GROUPS) as OrderStatusGroup[]) {
+    const statuses = ORDER_STATUS_GROUPS[group];
+    if (parts.size === statuses.length && statuses.every((status) => parts.has(status))) return group;
+  }
+  return null;
+}
+
+/**
  * Semantic grouping for the status `Badge` in every order table/detail:
  * money-safe-and-moving states read `exito`, anything mid-flight or waiting
  * on a clock reads `advertencia`, and anything that ended without a sale (or
@@ -77,7 +124,7 @@ export function paymentStateBadgeVariant(state: PaymentState): BadgeVariant {
 
 /**
  * Spanish labels for `DisputeStatus` — the outcome row in the "Pago" section
- * of `OrderDetailModal`, only rendered when `order.disputeStatus` is set.
+ * of `OrderDetailPanel`, only rendered when `order.disputeStatus` is set.
  */
 export const DISPUTE_STATUS_LABELS: Record<DisputeStatus, string> = {
   open: "en curso",

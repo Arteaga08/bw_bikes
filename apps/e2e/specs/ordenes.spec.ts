@@ -12,6 +12,12 @@ import { expectToast } from "../helpers/toast.js";
  * "take the first row of tab X" deterministic instead of a race against a
  * sibling test in another worker.
  *
+ * Post-redesign: "Todas" is the default tab (not "Cola de proveedor"), the
+ * detail panel is a right-hand `SlideOver` opened by clicking a row's own
+ * folio button (there is no more "Ver detalle" button), and
+ * Confirmar/Rechazar render inline on any row whose *order* is
+ * `awaiting_supplier_confirmation`, regardless of which tab is showing it.
+ *
  * Labels/toasts below are read verbatim from source, not guessed:
  *  - `apps/web/src/lib/orders/status.ts` (ORDER_STATUS_LABELS, DISPUTE_STATUS_LABELS)
  *  - `apps/web/src/app/admin/(panel)/ordenes/OrdersView.tsx` (every toast title)
@@ -27,13 +33,21 @@ test.describe.serial("Órdenes", () => {
     return page.locator("table tbody tr").first();
   }
 
+  /** A row's folio — `OrderNumberCell` renders it as a `<button>` whose accessible name *is* the order number, and clicking it opens the detail panel (the redesign's replacement for the old "Ver detalle" button). */
+  function orderButton(row: Locator): Locator {
+    return row.getByRole("button", { name: /^BW-/ });
+  }
+
   async function rowOrderNumber(row: Locator): Promise<string> {
-    const text = await row.locator("td").first().locator("p").first().innerText();
-    return text.trim();
+    return (await orderButton(row).innerText()).trim();
   }
 
   async function switchToTodasTab(page: Page): Promise<void> {
     await page.getByRole("tab", { name: "Todas" }).click();
+  }
+
+  async function switchToQueueTab(page: Page): Promise<void> {
+    await page.getByRole("tab", { name: /Cola de proveedor/ }).click();
   }
 
   async function filterByStatus(page: Page, label: string): Promise<void> {
@@ -44,27 +58,12 @@ test.describe.serial("Órdenes", () => {
     await page.getByLabel("Número de orden").fill(orderNumber);
   }
 
-  test("filtra por tabs/estatus: la cola de proveedor y cada filtro de 'Todas' muestran solo su propio estatus", async ({
+  test("filtra por tabs/estatus: 'Todas' abre por defecto, cada filtro muestra solo su propio estatus, y la cola agrupa solo awaiting_supplier_confirmation", async ({
     page,
   }) => {
-    // Default tab: "Cola de proveedor", fixed to awaiting_supplier_confirmation.
-    // The queue's own columns don't render an OrderStatusBadge (OrdersView.tsx's
-    // `queueColumns`), so "Confirmar"/"Rechazar" being present is this tab's own
-    // proof of membership — `OrderRowActions` only renders them when `showSupplierActions` is true.
-    await expect(page.getByRole("tab", { name: "Cola de proveedor" })).toHaveAttribute("aria-selected", "true");
-    const queueRows = page.locator("table tbody tr");
-    await expect(queueRows.first().getByRole("button", { name: "Confirmar" })).toBeVisible();
-    const queueCount = await queueRows.count();
-    expect(queueCount).toBeGreaterThan(0);
-    for (let i = 0; i < queueCount; i++) {
-      await expect(queueRows.nth(i).getByRole("button", { name: "Confirmar" })).toBeVisible();
-      await expect(queueRows.nth(i).getByRole("button", { name: "Rechazar" })).toBeVisible();
-    }
-
-    // "Todas" tab: every status the seed script actually produced shows only
-    // that status's badge; `authorized` was never seeded, so it's the one
-    // case that must resolve to the empty state instead of rows.
-    await switchToTodasTab(page);
+    // Default tab: "Todas" — the whole point of the redesign is landing on
+    // the full operation, not the exception queue.
+    await expect(page.getByRole("tab", { name: "Todas" })).toHaveAttribute("aria-selected", "true");
 
     const seededStatusLabels: Record<string, string> = {
       "pendiente de pago": "pending_payment",
@@ -92,18 +91,34 @@ test.describe.serial("Órdenes", () => {
     // Not seeded — must show the "no results" empty state, not stray rows.
     await filterByStatus(page, "autorizada");
     await expect(page.getByText("No hay órdenes con estos filtros")).toBeVisible();
+
+    // The queue tab pins `status=awaiting_supplier_confirmation` — every row
+    // in it shows Confirmar/Rechazar inline, the same `OrderRowActions` any
+    // "Todas" row with that status renders (there's no separate "queue
+    // columns" set anymore).
+    await switchToQueueTab(page);
+    await expect(page.getByRole("tab", { name: /Cola de proveedor/ })).toHaveAttribute("aria-selected", "true");
+    const queueRows = page.locator("table tbody tr");
+    const queueCount = await queueRows.count();
+    expect(queueCount).toBeGreaterThan(0);
+    for (let i = 0; i < queueCount; i++) {
+      await expect(queueRows.nth(i).getByRole("button", { name: "Confirmar" })).toBeVisible();
+      await expect(queueRows.nth(i).getByRole("button", { name: "Rechazar" })).toBeVisible();
+    }
   });
 
-  test("ver detalle abre el modal con líneas, dirección y bitácora, y cierra con Escape", async ({ page }) => {
-    await switchToTodasTab(page);
+  test("abrir una orden desde su folio abre el panel con líneas, dirección y bitácora, y cierra con Escape", async ({
+    page,
+  }) => {
     await filterByStatus(page, "cancelada");
 
     const row = firstRow(page);
-    await expect(row.getByRole("button", { name: "Ver detalle" })).toBeVisible();
-    await row.getByRole("button", { name: "Ver detalle" }).click();
+    const orderNumber = await rowOrderNumber(row);
+    await orderButton(row).click();
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAccessibleName(orderNumber);
     await expect(dialog.getByText("Líneas", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Dirección de envío", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Bitácora", { exact: true })).toBeVisible();
@@ -116,7 +131,6 @@ test.describe.serial("Órdenes", () => {
     // Runs before the confirm/reject tests below, while "pagada" is still
     // exactly the 2 orders seed-e2e-orders.ts left in that bucket (the
     // disputed bike + the plain accessory) — precise enough to check both.
-    await switchToTodasTab(page);
     await filterByStatus(page, "pagada");
     const rows = page.locator("table tbody tr");
     await expect(rows.first()).toBeVisible();
@@ -125,7 +139,7 @@ test.describe.serial("Órdenes", () => {
 
     let foundDisputed = false;
     for (let i = 0; i < count; i++) {
-      await rows.nth(i).getByRole("button", { name: "Ver detalle" }).click();
+      await orderButton(rows.nth(i)).click();
       const dialog = page.getByRole("dialog");
       await expect(dialog).toBeVisible();
       if (await dialog.getByText("perdido", { exact: true }).isVisible()) {
@@ -141,6 +155,7 @@ test.describe.serial("Órdenes", () => {
   test("confirmar proveedor: clic real contra Stripe test-mode captura el cargo y la orden pasa a pagada", async ({
     page,
   }) => {
+    await switchToQueueTab(page);
     const row = firstRow(page);
     await expect(row.getByRole("button", { name: "Confirmar" })).toBeVisible();
     const orderNumber = await rowOrderNumber(row);
@@ -161,6 +176,7 @@ test.describe.serial("Órdenes", () => {
     page,
   }) => {
     // Only one order is left in the queue — the previous test consumed the other.
+    await switchToQueueTab(page);
     const rows = page.locator("table tbody tr");
     await expect(rows.first().getByRole("button", { name: "Rechazar" })).toBeVisible();
     await expect(rows).toHaveCount(1);
@@ -182,11 +198,10 @@ test.describe.serial("Órdenes", () => {
   });
 
   test("cambia el estatus de una orden pagada a 'en preparación' desde el detalle", async ({ page }) => {
-    await switchToTodasTab(page);
     await filterByStatus(page, "pagada");
     const row = firstRow(page);
-    await expect(row.getByRole("button", { name: "Ver detalle" })).toBeVisible();
-    await row.getByRole("button", { name: "Ver detalle" }).click();
+    await expect(orderButton(row)).toBeVisible();
+    await orderButton(row).click();
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
@@ -197,7 +212,6 @@ test.describe.serial("Órdenes", () => {
   });
 
   test("acción masiva: selecciona 2 órdenes pagadas y las marca 'en preparación'", async ({ page }) => {
-    await switchToTodasTab(page);
     await filterByStatus(page, "pagada");
     const rows = page.locator("table tbody tr");
     await expect(rows.first()).toBeVisible();
@@ -215,11 +229,10 @@ test.describe.serial("Órdenes", () => {
   });
 
   test("captura la guía de envío de una orden en preparación y la marca como enviada", async ({ page }) => {
-    await switchToTodasTab(page);
     await filterByStatus(page, "en preparación");
     const row = firstRow(page);
-    await expect(row.getByRole("button", { name: "Ver detalle" })).toBeVisible();
-    await row.getByRole("button", { name: "Ver detalle" }).click();
+    await expect(orderButton(row)).toBeVisible();
+    await orderButton(row).click();
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
@@ -232,11 +245,10 @@ test.describe.serial("Órdenes", () => {
   });
 
   test("edita la dirección de envío de una orden pendiente de pago", async ({ page }) => {
-    await switchToTodasTab(page);
     await filterByStatus(page, "pendiente de pago");
     const row = firstRow(page);
-    await expect(row.getByRole("button", { name: "Ver detalle" })).toBeVisible();
-    await row.getByRole("button", { name: "Ver detalle" }).click();
+    await expect(orderButton(row)).toBeVisible();
+    await orderButton(row).click();
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
@@ -248,14 +260,13 @@ test.describe.serial("Órdenes", () => {
   });
 
   test("agrega una nota interna a una orden pendiente de pago", async ({ page }) => {
-    await switchToTodasTab(page);
     await filterByStatus(page, "pendiente de pago");
     // The other pending_payment order — the address test above already used
     // the first row, so this one hasn't been touched by any prior test.
     const rows = page.locator("table tbody tr");
-    await expect(rows.first().getByRole("button", { name: "Ver detalle" })).toBeVisible();
+    await expect(orderButton(rows.first())).toBeVisible();
     await expect(rows).toHaveCount(2);
-    await rows.nth(1).getByRole("button", { name: "Ver detalle" }).click();
+    await orderButton(rows.nth(1)).click();
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();

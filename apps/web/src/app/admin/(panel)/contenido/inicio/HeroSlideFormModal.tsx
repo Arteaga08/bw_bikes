@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Toggle } from "@/components/ui/Toggle";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/lib/api/error";
-import { CategoryImageField } from "../../catalogo/categorias/CategoryImageField";
+import { ImageField } from "@/components/ui/ImageField";
 import { HeroCtaFields, type HeroCtaValue } from "./HeroCtaFields";
 
 const FOCAL_POINT_LABELS: Record<HeroFocalPoint, string> = {
@@ -40,7 +40,7 @@ export interface HeroSlideFormModalProps {
 /**
  * Create/edit form for one hero slide. Same two-step image flow as
  * `CategoryFormModal`: on create, the photo is staged locally
- * (`CategoryImageField` in `"deferred"` mode) and uploaded right after the
+ * (`ImageField` in `"deferred"` mode) and uploaded right after the
  * first "Guardar" creates the slide — one click for the admin, two requests
  * underneath. `HeroSlide.image` is optional at the API for exactly this
  * reason (`hero-slide.model.ts`); a slide with no image yet just never
@@ -198,10 +198,19 @@ export function HeroSlideFormModal({
     >
       <div className="flex flex-col gap-md">
         {slide?.image ? (
-          <CategoryImageField mode="immediate" image={slide.image} onUpload={handleUploadImage} onRemove={handleRemoveImage} />
+          <ImageField
+            mode="immediate"
+            aspect="16/9"
+            label="Imagen del slide"
+            image={slide.image}
+            onUpload={handleUploadImage}
+            onRemove={handleRemoveImage}
+          />
         ) : (
-          <CategoryImageField
+          <ImageField
             mode="deferred"
+            aspect="16/9"
+            label="Imagen del slide"
             previewUrl={pendingPreviewUrl}
             onSelect={handleSelectPendingImage}
             onClear={handleClearPendingImage}

@@ -28,6 +28,7 @@ const base = createProductService<IBike>(Bike, {
 export interface BikeInput {
   name?: string;
   slug?: string;
+  modelName?: string;
   brand?: string;
   category?: string;
   shortDescription?: string;
@@ -78,6 +79,7 @@ export function toPublicBike(bike: IBike): PublicBike {
     id: String(bike._id),
     name: bike.name,
     slug: bike.slug,
+    ...(bike.modelName ? { model: bike.modelName } : {}),
     brand: brand ?? { id: String(bike.brand), name: "", slug: "", order: 0 },
     category: category ?? { id: String(bike.category), name: "", slug: "", parent: null, order: 0, usesSizes: false },
     badges: bike.populated("badges")
@@ -125,6 +127,7 @@ export function toAdminBike(bike: IBike): AdminBike {
     id: String(bike._id),
     name: bike.name,
     slug: bike.slug,
+    ...(bike.modelName ? { model: bike.modelName } : {}),
     brand: brand ?? { id: String(bike.brand), name: "", slug: "", order: 0 },
     category: category ?? { id: String(bike.category), name: "", slug: "", parent: null, order: 0, usesSizes: false },
     badges: bike.populated("badges")
@@ -188,6 +191,7 @@ async function create(input: BikeInput, actor: ActorContext): Promise<IBike> {
         {
           name,
           slug,
+          modelName: input.modelName,
           brand: new Types.ObjectId(input.brand),
           category: new Types.ObjectId(input.category),
           shortDescription: input.shortDescription,
@@ -281,6 +285,7 @@ async function update(id: string, input: BikeInput, actor: ActorContext): Promis
   }
 
   if (input.name !== undefined) bike.name = input.name;
+  if (input.modelName !== undefined) bike.modelName = input.modelName;
   if (input.shortDescription !== undefined) bike.shortDescription = input.shortDescription;
   if (input.modelYear !== undefined) bike.modelYear = input.modelYear;
   if (input.description !== undefined) bike.description = input.description;

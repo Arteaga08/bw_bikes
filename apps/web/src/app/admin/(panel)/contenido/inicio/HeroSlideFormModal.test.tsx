@@ -27,7 +27,7 @@ function makeSlide(overrides: Partial<AdminHeroSlide> = {}): AdminHeroSlide {
 
 beforeEach(() => {
   // Same reasoning as `CategoryFormModal.test.tsx`: jsdom has no Blob URL API,
-  // and `CategoryImageField`'s deferred mode needs it to preview a picked file.
+  // and `ImageField`'s deferred mode needs it to preview a picked file.
   URL.createObjectURL = vi.fn(() => "blob:preview");
   URL.revokeObjectURL = vi.fn();
 });

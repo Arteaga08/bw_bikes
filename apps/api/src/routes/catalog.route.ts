@@ -11,6 +11,7 @@ import {
   listPublicBikes,
 } from "../controllers/bike.controller.js";
 import { getPublicBrandBySlug, listPublicBrands } from "../controllers/brand.controller.js";
+import { listPublicOnSale } from "../controllers/catalog.controller.js";
 import { createCategoryController } from "../controllers/category.controller.js";
 import { getPublicAvailability } from "../controllers/inventory.controller.js";
 import { recordProductView } from "../controllers/product-view.controller.js";
@@ -90,6 +91,12 @@ router.get("/bikes/:slug", validate(slugParamSchema, "params"), getPublicBikeByS
 router.get("/accessories", validate(publicProductListQuerySchema, "query"), listPublicAccessories);
 router.get("/accessories/filter-options", getAccessoryFilterOptions);
 router.get("/accessories/:slug", validate(slugParamSchema, "params"), getPublicAccessoryBySlug);
+
+// The storefront's "Ofertas" listing — bikes and accessories merged into one
+// paginated, discount-only result (`on-sale.service.ts`). Own route, no
+// `:slug` to collide with, same query schema as `/bikes`/`/accessories`
+// (`onSale` itself is forced server-side, not read from the request).
+router.get("/on-sale", validate(publicProductListQuerySchema, "query"), listPublicOnSale);
 
 // M7: anonymous "someone looked at this" event, feeding the preferences
 // report. `productViewRateLimiter` runs in addition to the router-wide

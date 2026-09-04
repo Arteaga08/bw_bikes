@@ -67,6 +67,33 @@ describe("SlideOver", () => {
     expect(screen.getByRole("button", { name: "Confirmar" })).toBeInTheDocument();
   });
 
+  it("widens the panel via maxWidthClassName and keeps the 480px default otherwise", () => {
+    const { rerender } = render(
+      <SlideOver open onClose={vi.fn()} title="Orden">
+        Contenido
+      </SlideOver>,
+    );
+    expect(screen.getByRole("dialog")).toHaveClass("max-w-[480px]");
+
+    rerender(
+      <SlideOver open onClose={vi.fn()} title="Orden" maxWidthClassName="max-w-[46rem]">
+        Contenido
+      </SlideOver>,
+    );
+    expect(screen.getByRole("dialog")).toHaveClass("max-w-[46rem]");
+    expect(screen.getByRole("dialog")).not.toHaveClass("max-w-[480px]");
+  });
+
+  it("renders headerAside next to the close button", () => {
+    render(
+      <SlideOver open onClose={vi.fn()} title="Orden" headerAside={<button type="button">Siguiente</button>}>
+        Contenido
+      </SlideOver>,
+    );
+    expect(screen.getByRole("button", { name: "Siguiente" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cerrar panel" })).toBeInTheDocument();
+  });
+
   it("traps focus inside the panel and returns it to the trigger on close", () => {
     function Harness() {
       const [open, setOpen] = useState(false);

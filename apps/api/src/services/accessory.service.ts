@@ -26,6 +26,7 @@ const base = createProductService<IAccessory>(Accessory, {
 export interface AccessoryInput {
   name?: string;
   slug?: string;
+  modelName?: string;
   brand?: string;
   category?: string;
   description?: string;
@@ -51,6 +52,7 @@ export function toPublicAccessory(accessory: IAccessory): PublicAccessory {
     id: String(accessory._id),
     name: accessory.name,
     slug: accessory.slug,
+    ...(accessory.modelName ? { model: accessory.modelName } : {}),
     brand: brand ?? { id: String(accessory.brand), name: "", slug: "", order: 0 },
     category: category ?? { id: String(accessory.category), name: "", slug: "", parent: null, order: 0, usesSizes: false },
     badges: accessory.populated("badges")
@@ -83,6 +85,7 @@ export function toAdminAccessory(accessory: IAccessory): AdminAccessory {
     id: String(accessory._id),
     name: accessory.name,
     slug: accessory.slug,
+    ...(accessory.modelName ? { model: accessory.modelName } : {}),
     brand: brand ?? { id: String(accessory.brand), name: "", slug: "", order: 0 },
     category: category ?? { id: String(accessory.category), name: "", slug: "", parent: null, order: 0, usesSizes: false },
     badges: accessory.populated("badges")
@@ -128,6 +131,7 @@ async function create(input: AccessoryInput, actor: ActorContext): Promise<IAcce
         {
           name,
           slug,
+          modelName: input.modelName,
           brand: new Types.ObjectId(input.brand),
           category: new Types.ObjectId(input.category),
           description: input.description,
@@ -206,6 +210,7 @@ async function update(id: string, input: AccessoryInput, actor: ActorContext): P
   }
 
   if (input.name !== undefined) accessory.name = input.name;
+  if (input.modelName !== undefined) accessory.modelName = input.modelName;
   if (input.description !== undefined) accessory.description = input.description;
   if (input.price !== undefined) accessory.price = input.price;
   if (input.compareAtPrice !== undefined) accessory.compareAtPrice = input.compareAtPrice;

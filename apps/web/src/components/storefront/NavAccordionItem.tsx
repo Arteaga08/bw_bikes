@@ -12,7 +12,7 @@ export interface NavAccordionItemProps {
   isActive: boolean;
   /** `[]` renders the CTA row alone, no sub-list — the "Ofertas" case. */
   sections: MegaMenuSection[];
-  /** Defaults to "Ver todas" — Ofertas passes its own ("Rebajas de bicicletas"). */
+  /** Defaults to "Ver todas" — Ofertas passes its own ("Rebajas de bicis y accesorios"). */
   ctaLabel?: string;
   currentPathname: string;
 }

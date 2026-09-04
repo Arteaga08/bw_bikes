@@ -22,6 +22,7 @@ import {
   removeHeroSlideImage,
 } from "@/lib/api/admin-content";
 import { ApiError } from "@/lib/api/error";
+import { EditorSection } from "../../catalogo/EditorSection";
 
 // Code-split the same way `CategoriesView` splits its form modal — only
 // mounted once the admin opens "Agregar slide"/"Editar", so the form plus
@@ -126,21 +127,22 @@ export function HeroSlidesView({ initialSlides, bikes, accessories, bikeCategori
   }
 
   return (
-    <div className="flex flex-col gap-md p-md sm:p-lg">
-      <div className="flex items-center justify-between gap-sm">
-        <p className="font-body text-caption text-grafito">
-          {slides.length} de {MAX_HERO_SLIDES} slides
-        </p>
+    <EditorSection
+      id="hero-slides"
+      title="Carrusel de inicio"
+      description="Las fotos, textos y botones del carrusel que abre la página de inicio."
+      count={{ current: slides.length, max: MAX_HERO_SLIDES }}
+      actions={
         <Button
-          variant="primary"
+          variant="secondary"
           iconLeft={<Plus />}
           disabled={slides.length >= MAX_HERO_SLIDES}
           onClick={() => setFormDialog({ mode: "create" })}
         >
           Agregar slide
         </Button>
-      </div>
-
+      }
+    >
       {slides.length === 0 ? (
         <EmptyState
           icon={<ImagesSquare size={32} aria-hidden="true" />}
@@ -247,6 +249,6 @@ export function HeroSlidesView({ initialSlides, bikes, accessories, bikeCategori
           </p>
         </Modal>
       ) : null}
-    </div>
+    </EditorSection>
   );
 }

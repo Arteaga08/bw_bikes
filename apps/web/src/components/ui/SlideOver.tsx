@@ -20,12 +20,23 @@ export interface SlideOverProps {
   closeButtonClassName?: string;
   /** Overrides the close button's glyph — the storefront's cart drawer passes its own animated icon; admin consumers leave this unset and keep the default Phosphor `X`. */
   closeButtonIcon?: ReactNode;
+  /** Panel's max width. Default: the 480px `CustomerDetailDrawer` already uses — a denser detail (e.g. an order's) can widen it. */
+  maxWidthClassName?: string;
+  /** Rendered between the title block and the close button — the órdenes detail panel's prev/next row navigation, for example. Omit for the plain title/close header every other consumer uses. */
+  headerAside?: ReactNode;
+  /** `"side"` (default) is the edge-to-edge right-hand drawer. `"center"` keeps the same header/body/footer contract but centers the panel as a rounded, capped-height dialog instead — the órdenes detail panel uses it so a click-through row still reads as "one order at a time," not a drawer competing with the table underneath. */
+  variant?: "side" | "center";
 }
 
 /**
- * Right-hand detail panel (~480px) — the component DASHBOARD_GUIDELINES.md §5
- * specs by name for the "row → detail" pattern, and the reason a dense order
- * detail doesn't have to fit inside `Modal`'s 448px centered box.
+ * Right-hand detail panel by default (480px, widen via `maxWidthClassName`)
+ * — the component DASHBOARD_GUIDELINES.md §5 specs by name for the
+ * "row → detail" pattern, and the reason a dense order detail doesn't have to
+ * fit inside `Modal`'s 448px centered box. `variant="center"` keeps the same
+ * header/body/footer contract but anchors the panel in the middle of the
+ * screen as a rounded, capped-height dialog instead of a full-height edge
+ * drawer — for a "one order at a time" detail view where the table
+ * underneath shouldn't stay visible.
  *
  * Same accessibility contract as `Modal` deliberately (`role="dialog"` +
  * `aria-modal` + `aria-labelledby`, Escape and overlay click to close, focus
@@ -49,6 +60,9 @@ export function SlideOver({
   closeButtonSize,
   closeButtonClassName,
   closeButtonIcon,
+  maxWidthClassName = "max-w-[480px]",
+  headerAside,
+  variant = "side",
 }: SlideOverProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -70,8 +84,16 @@ export function SlideOver({
     event.stopPropagation();
   }
 
+  const centered = variant === "center";
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-negro/60" onClick={onClose}>
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex bg-negro/60",
+        centered ? "items-center justify-center p-md" : "justify-end",
+      )}
+      onClick={onClose}
+    >
       <div
         ref={containerRef}
         role="dialog"
@@ -79,7 +101,11 @@ export function SlideOver({
         aria-labelledby={titleId}
         tabIndex={-1}
         onClick={stopPropagation}
-        className="flex h-full w-full max-w-[480px] flex-col border-l border-borde bg-surface focus:outline-none"
+        className={cn(
+          "flex w-full flex-col bg-surface focus:outline-none",
+          centered ? "max-h-full overflow-hidden rounded-card-lg border border-borde" : "h-full border-l border-borde",
+          maxWidthClassName,
+        )}
       >
         <header className="flex items-start justify-between gap-md border-b border-borde px-lg py-md">
           <div className="min-w-0">
@@ -88,13 +114,16 @@ export function SlideOver({
             </h2>
             {subtitle ? <p className="mt-xs font-body text-caption text-grafito">{subtitle}</p> : null}
           </div>
-          <CloseButton
-            onClick={onClose}
-            aria-label="Cerrar panel"
-            size={closeButtonSize}
-            className={cn("-mr-sm shrink-0", closeButtonClassName)}
-            icon={closeButtonIcon}
-          />
+          <div className="flex shrink-0 items-start gap-sm">
+            {headerAside}
+            <CloseButton
+              onClick={onClose}
+              aria-label="Cerrar panel"
+              size={closeButtonSize}
+              className={cn("-mr-sm shrink-0", closeButtonClassName)}
+              icon={closeButtonIcon}
+            />
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto px-lg py-md font-body text-body text-negro">{children}</div>

@@ -86,4 +86,10 @@ inventoryItemSchema.index({ itemType: 1, itemId: 1, sku: 1 }, { unique: true });
 // Serves the admin list's SKU search and the "all rows of this product" read.
 inventoryItemSchema.index({ sku: 1 });
 
+// `itemId` alone is not a prefix of the unique index above (`itemType` leads
+// it), so the product-first `/admin/inventory/products` list's `$lookup`
+// (localField `_id` → foreignField `itemId`, from `Bike`/`Accessory`) would
+// otherwise scan this collection once per product on every page.
+inventoryItemSchema.index({ itemId: 1 });
+
 export const InventoryItem = model<IInventoryItem>("InventoryItem", inventoryItemSchema);

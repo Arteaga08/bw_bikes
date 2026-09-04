@@ -15,3 +15,6 @@ export const MAX_GALLERY_IMAGES = 15;
 /** Mirrors `MIN_MODEL_YEAR`/`MAX_MODEL_YEAR` in `apps/api/src/models/bike.model.ts`. */
 export const MIN_MODEL_YEAR = 1990;
 export const MAX_MODEL_YEAR = 2100;
+
+/** Mirrors `MAX_MODEL_LENGTH` in `apps/api/src/models/bike.model.ts`. */
+export const MAX_MODEL_LENGTH = 80;

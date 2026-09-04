@@ -3,8 +3,10 @@ import {
   adjustInventoryStock,
   createInventoryItem,
   getInventoryItem,
+  getInventoryProduct,
   getInventorySummary,
   listInventory,
+  listInventoryProducts,
 } from "../controllers/inventory.controller.js";
 import { protect, restrictTo, validate } from "../middlewares/index.js";
 import {
@@ -12,6 +14,8 @@ import {
   createInventoryItemSchema,
   idParamSchema,
   inventoryListQuerySchema,
+  inventoryProductListQuerySchema,
+  inventoryProductQuerySchema,
 } from "../validators/index.js";
 
 /**
@@ -36,6 +40,18 @@ router.post("/inventory", validate(createInventoryItemSchema), createInventoryIt
 // a fixed segment must win over the wildcard param, or this would be read as
 // a lookup for the item whose id is literally "summary".
 router.get("/inventory/summary", getInventorySummary);
+
+// Same reasoning again: `/inventory/products` has the same segment count as
+// `/inventory/:id` and must be registered first, or it reads as a lookup for
+// the item whose id is literally "products". The product-first list behind
+// the redesigned `/admin/inventario` — one row per product, not per SKU.
+router.get("/inventory/products", validate(inventoryProductListQuerySchema, "query"), listInventoryProducts);
+router.get(
+  "/inventory/products/:id",
+  validate(idParamSchema, "params"),
+  validate(inventoryProductQuerySchema, "query"),
+  getInventoryProduct,
+);
 
 router.get("/inventory/:id", validate(idParamSchema, "params"), getInventoryItem);
 

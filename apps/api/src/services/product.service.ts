@@ -60,15 +60,17 @@ export interface ProductServiceOptions {
   itemType: ItemType;
 }
 
-const SORTABLE_FIELDS = ["createdAt", "price", "name"] as const;
+/** Exported so `on-sale.service.ts` can re-sort its in-memory merge of both catalogs by the exact same vocabulary `list()` validates against — a caller-controlled sort field must never drift between the two. */
+export const SORTABLE_FIELDS = ["createdAt", "price", "name"] as const;
 
 /**
  * Named compound orders the storefront's "Ordenar por" control exposes for
  * "Novedades primero"/"Favoritas primero" — a bare `-isNewArrival` would
  * split the grid into two blocks with an arbitrary order inside each, so
  * both alias to the flag first, `createdAt` descending as the tiebreaker.
+ * Exported for the same reason as `SORTABLE_FIELDS` above.
  */
-const SORT_ALIASES = {
+export const SORT_ALIASES = {
   "-isNewArrival": { isNewArrival: -1, createdAt: -1 },
   "-isCustomerFavorite": { isCustomerFavorite: -1, createdAt: -1 },
 } as const;
@@ -194,6 +196,14 @@ export function createProductService<TDoc extends ProductDocument>(
     // Same reasoning as `isNewArrival`: public rail + admin catalog filter.
     if (typeof query["isCustomerFavorite"] === "boolean") {
       filter["isCustomerFavorite"] = query["isCustomerFavorite"];
+    }
+
+    // "En oferta" == carries a `compareAtPrice` that's actually above `price`
+    // — the same rule `product.validator.ts` already enforces at write time.
+    // A missing `compareAtPrice` sorts below any number in Mongo's comparison
+    // order, so `$gt` alone excludes it — no separate `$exists` check needed.
+    if (query["onSale"] === true) {
+      filter["$expr"] = { $gt: ["$compareAtPrice", "$price"] };
     }
 
     const category = query["category"];
@@ -329,6 +339,38 @@ export function createProductService<TDoc extends ProductDocument>(
     ]);
 
     return { documents, meta: buildMeta(total, page, limit) };
+  }
+
+  /**
+   * Every match for a filter, sorted, capped at `cap` documents — no
+   * pagination. Built for `on-sale.service.ts`'s cross-collection merge:
+   * combining bikes and accessories into one paginated "Ofertas" listing
+   * needs a full sorted slice from *each* collection before it can page the
+   * merged result, and `list()`'s own `limit` tops out at the shared
+   * `MAX_LIMIT` (100, `list-query.ts`) same as every other endpoint — too low
+   * once the caller needs more than one page's worth to merge correctly.
+   * Unlike `list()`, this never applies `search` — its one caller has no
+   * search box of its own.
+   */
+  async function listAllMatching(
+    query: Record<string, unknown>,
+    scope: { publicOnly: boolean },
+    cap: number,
+  ): Promise<TDoc[]> {
+    const { sort } = parseListQuery(query, {
+      allowedSortFields: SORTABLE_FIELDS,
+      defaultSort: "-createdAt",
+      sortAliases: SORT_ALIASES,
+    });
+    const filter = await buildFilter(query, scope);
+
+    return Product.find(filter)
+      .sort(sort)
+      .limit(cap)
+      .populate("category")
+      .populate("brand")
+      .populate(badgesPopulateOption(scope.publicOnly))
+      .exec();
   }
 
   /**
@@ -773,6 +815,7 @@ export function createProductService<TDoc extends ProductDocument>(
     partitionNewVariants,
     resolveSlug,
     list,
+    listAllMatching,
     getFilterOptions,
     getById,
     getBySlug,

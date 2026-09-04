@@ -49,21 +49,23 @@ export default async function HeroInicioPage() {
   return (
     <>
       <PageHeader
-        title="Gestion de Home"
-        subtitle="Las fotos, textos y botones del carrusel que abre la página de inicio — hasta 5 slides."
+        title="Gestión de Home"
+        subtitle="Las tres zonas editables de la página de inicio: el carrusel de arriba, las dos tarjetas de compra y el banner de la bici del mes."
       />
-      <HeroSlidesView
-        initialSlides={slidesRes.data.slides}
-        bikes={bikesRes.data.bikes}
-        accessories={accessoriesRes.data.accessories}
-        bikeCategories={bikeCategoriesRes.data.categories}
-        accessoryCategories={accessoryCategoriesRes.data.categories}
-      />
-      <HomeTilesView initialTiles={homeTilesRes.data.tiles} />
-      <BikeOfMonthView
-        initialBikeOfMonth={bikeOfMonthRes.data.bikeOfMonth}
-        bikes={bikesRes.data.bikes}
-      />
+      <div className="flex flex-col gap-lg p-md sm:p-lg">
+        <HeroSlidesView
+          initialSlides={slidesRes.data.slides}
+          bikes={bikesRes.data.bikes}
+          accessories={accessoriesRes.data.accessories}
+          bikeCategories={bikeCategoriesRes.data.categories}
+          accessoryCategories={accessoryCategoriesRes.data.categories}
+        />
+        <HomeTilesView initialTiles={homeTilesRes.data.tiles} />
+        <BikeOfMonthView
+          initialBikeOfMonth={bikeOfMonthRes.data.bikeOfMonth}
+          bikes={bikesRes.data.bikes}
+        />
+      </div>
     </>
   );
 }

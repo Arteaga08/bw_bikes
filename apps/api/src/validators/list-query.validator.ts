@@ -73,6 +73,13 @@ const productFilters = {
   maxPrice: priceCents.optional(),
   isNewArrival: Joi.boolean().optional(),
   isCustomerFavorite: Joi.boolean().optional(),
+  // Same public+admin reach as `isNewArrival`/`isCustomerFavorite` above: the
+  // storefront's "Ofertas" listing (`/catalog/on-sale`) reads it publicly,
+  // and it's exposed on the plain catalog endpoints too for free. "En oferta"
+  // means exactly "has a `compareAtPrice` above `price`" (see `buildFilter`'s
+  // `$expr` in `product.service.ts`) — the same rule the validator already
+  // enforces at write time.
+  onSale: Joi.boolean().optional(),
 };
 
 export const publicProductListQuerySchema = Joi.object({

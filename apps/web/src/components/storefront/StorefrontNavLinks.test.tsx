@@ -34,7 +34,7 @@ describe("StorefrontNavLinks", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     // The photo tile's own link carries the heading copy; the standalone
     // button carries the actual call to action — both point to /ofertas.
-    expect(screen.getByRole("link", { name: "Rebajas de bicicletas" })).toHaveAttribute("href", "/ofertas");
+    expect(screen.getByRole("link", { name: "Rebajas de bicis y accesorios" })).toHaveAttribute("href", "/ofertas");
     expect(screen.getByRole("link", { name: "Ver rebajas" })).toHaveAttribute("href", "/ofertas");
 
     fireEvent.click(trigger);

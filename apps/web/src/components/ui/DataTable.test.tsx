@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { DataTable, DataTableSkeleton, type DataTableColumn } from "./DataTable";
 
 interface Row {
@@ -74,6 +74,37 @@ describe("DataTable", () => {
     } finally {
       restore();
     }
+  });
+
+  it("has no cursor-pointer and no click handler on a row when onRowClick is omitted", () => {
+    render(<DataTable columns={columns} rows={rows} getRowKey={(row) => row.id} />);
+    const row = screen.getByText("Best Seller").closest("tr")!;
+    expect(row).not.toHaveClass("cursor-pointer");
+  });
+
+  it("calls onRowClick with the row when a cell is clicked", () => {
+    const onRowClick = vi.fn();
+    render(<DataTable columns={columns} rows={rows} getRowKey={(row) => row.id} onRowClick={onRowClick} />);
+
+    const row = screen.getByText("Best Seller").closest("tr")!;
+    expect(row).toHaveClass("cursor-pointer");
+    fireEvent.click(screen.getByText("Best Seller"));
+
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+    expect(onRowClick).toHaveBeenCalledWith(rows[0]);
+  });
+
+  it("does not call onRowClick when the click lands on an interactive element inside the row", () => {
+    const onRowClick = vi.fn();
+    const actionColumns: DataTableColumn<Row>[] = [
+      ...columns,
+      { key: "actions", header: "Acciones", kind: "actions", render: (row) => <button type="button">Confirmar {row.id}</button> },
+    ];
+    render(<DataTable columns={actionColumns} rows={rows} getRowKey={(row) => row.id} onRowClick={onRowClick} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar 1" }));
+
+    expect(onRowClick).not.toHaveBeenCalled();
   });
 });
 

@@ -1,6 +1,6 @@
 import type { ProductImage, ProductVariant, SpecGroup } from "@bw-bikes/shared";
 import { type Document, model, Schema, type Types } from "mongoose";
-import { MAX_DESCRIPTION_LENGTH, MAX_PRODUCT_BADGES, MAX_PRODUCT_NAME_LENGTH } from "./bike.model.js";
+import { MAX_DESCRIPTION_LENGTH, MAX_MODEL_LENGTH, MAX_PRODUCT_BADGES, MAX_PRODUCT_NAME_LENGTH } from "./bike.model.js";
 import { MAX_GALLERY_IMAGES, productImageSchema } from "./schemas/product-image.schema.js";
 import { MAX_PRICE_CENTS, MAX_VARIANTS, productVariantSchema } from "./schemas/product-variant.schema.js";
 import { MAX_SPEC_GROUPS, specGroupSchema } from "./schemas/spec-group.schema.js";
@@ -8,6 +8,8 @@ import { MAX_SPEC_GROUPS, specGroupSchema } from "./schemas/spec-group.schema.js
 export interface IAccessory extends Document {
   name: string;
   slug: string;
+  /** The trim/version name, e.g. "SL 5" — optional free text, shared with `Bike`. Named `modelName` — see `bike.model.ts`'s `IBike.modelName` for why not `model`. */
+  modelName?: string;
   brand: Types.ObjectId;
   category: Types.ObjectId;
   description: string;
@@ -37,6 +39,7 @@ const accessorySchema = new Schema<IAccessory>(
   {
     name: { type: String, required: true, trim: true, maxlength: MAX_PRODUCT_NAME_LENGTH },
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    modelName: { type: String, trim: true, maxlength: MAX_MODEL_LENGTH },
     brand: { type: Schema.Types.ObjectId, ref: "Brand", required: true, index: true },
     category: { type: Schema.Types.ObjectId, ref: "AccessoryCategory", required: true },
 

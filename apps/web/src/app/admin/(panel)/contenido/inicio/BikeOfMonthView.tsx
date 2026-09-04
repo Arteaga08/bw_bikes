@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { useToast } from "@/hooks/use-toast";
 import { removeBikeOfMonthImage, updateBikeOfMonth, uploadBikeOfMonthImage } from "@/lib/api/admin-content";
 import { ApiError } from "@/lib/api/error";
-import { CategoryImageField } from "../../catalogo/categorias/CategoryImageField";
+import { ImageField } from "@/components/ui/ImageField";
 import { EditorSection } from "../../catalogo/EditorSection";
 
 export interface BikeOfMonthViewProps {
@@ -91,9 +91,15 @@ export function BikeOfMonthView({ initialBikeOfMonth, bikes }: BikeOfMonthViewPr
       description={
         'El banner de una sola bici destacada, después de las tarjetas de comprar bicis/accesorios — los botones "Conocer más" y "Comprar" ya están fijos en el sitio, solo eliges a qué bici llevan.'
       }
-      className="mt-2xl"
     >
-      <CategoryImageField mode="immediate" image={bikeOfMonth.image} onUpload={handleUploadImage} onRemove={handleRemoveImage} />
+      <ImageField
+        mode="immediate"
+        aspect="16/9"
+        label="Imagen del banner"
+        image={bikeOfMonth.image}
+        onUpload={handleUploadImage}
+        onRemove={handleRemoveImage}
+      />
 
       <Input
         label="Título"
@@ -122,13 +128,13 @@ export function BikeOfMonthView({ initialBikeOfMonth, bikes }: BikeOfMonthViewPr
         onChange={(event) => setSubtitle(event.target.value)}
       />
 
-      {bikeOfMonth.isBroken ? (
-        <Badge variant="error">La bici seleccionada ya no existe o está inactiva — revisa el banner</Badge>
-      ) : bikeOfMonth.href ? (
-        <p className="font-body text-caption text-grafito">Los botones van a: {bikeOfMonth.href}</p>
-      ) : null}
+      <div className="flex flex-col items-start gap-sm border-t border-borde pt-md">
+        {bikeOfMonth.isBroken ? (
+          <Badge variant="error">La bici seleccionada ya no existe o está inactiva — revisa el banner</Badge>
+        ) : bikeOfMonth.href ? (
+          <p className="font-body text-caption text-grafito">Los botones van a: {bikeOfMonth.href}</p>
+        ) : null}
 
-      <div>
         <Button variant="primary" loading={submitting} onClick={() => void handleSave()}>
           Guardar cambios
         </Button>

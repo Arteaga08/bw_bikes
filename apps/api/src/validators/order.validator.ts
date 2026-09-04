@@ -5,7 +5,7 @@ import { MAX_INTERNAL_NOTE_LENGTH } from "../models/schemas/internal-note.schema
 import { ORDER_PRIORITIES } from "../models/order.model.js";
 import { BULK_ALLOWED_STATUSES } from "../services/order.service.js";
 import { ORDER_STATUSES } from "../services/order-state.js";
-import { objectId } from "./common.validator.js";
+import { commaListOf, objectId } from "./common.validator.js";
 import { pagination } from "./list-query.validator.js";
 
 const status = Joi.string()
@@ -60,9 +60,21 @@ export const orderListQuerySchema = Joi.object({
   status: status.optional(),
 });
 
+/**
+ * `pagination` already carries `search` (trimmed, length-capped by
+ * `parseListQuery`) — `listForAdmin` is what turns it into a filter, this
+ * schema just has to not strip it.
+ *
+ * `status` accepts either a single value (`status.optional()`, unchanged for
+ * every existing caller) or a comma-separated list
+ * (`?status=paid,processing`) — the shape `OrderFilters`'s status-group
+ * options and `OrdersSummaryCards`'s tile navigation both need. `.try` picks
+ * whichever alternative parses; a bare invalid value fails on both and
+ * surfaces the single-status message, which stays the common case's wording.
+ */
 export const adminOrderListQuerySchema = Joi.object({
   ...pagination,
-  status: status.optional(),
+  status: Joi.alternatives().try(status, commaListOf(ORDER_STATUSES as readonly OrderStatus[])).optional(),
   priority: priority.optional(),
   orderNumber: Joi.string().trim().uppercase().max(40).optional(),
 });

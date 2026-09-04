@@ -6,7 +6,7 @@ export interface OrderTimelineProps {
   entries: OrderStatusHistoryEntry[];
 }
 
-/** Same left-border rail as the admin panel's `OrderStatusHistoryList`, without the actor id — that's staff-only context, not something a customer needs. */
+/** Same left-border rail as the admin panel's `OrderActivityList`, without the actor id — that's staff-only context, not something a customer needs. */
 export function OrderTimeline({ entries }: OrderTimelineProps) {
   return (
     <ol className="flex flex-col gap-sm">

@@ -61,7 +61,9 @@ describe("CatalogProductGrid", () => {
   });
 
   it("omits the gutter on the empty state too when noGutter is set", () => {
-    render(<CatalogProductGrid products={[]} colorSwatchIndex={emptySwatchIndex} emptyMessage="Vacío." noGutter />);
-    expect(screen.getByText("Vacío.")).not.toHaveClass("px-lg");
+    const { container } = render(
+      <CatalogProductGrid products={[]} colorSwatchIndex={emptySwatchIndex} emptyMessage="Vacío." noGutter />,
+    );
+    expect(container.firstElementChild).not.toHaveClass("px-lg");
   });
 });

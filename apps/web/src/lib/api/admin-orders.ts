@@ -17,27 +17,30 @@ export interface AdminOrderListParams {
   limit?: number;
   /** Whitelisted by the backend to `createdAt` | `totalCents` | `status` | `priority`, `-` prefix for descending. */
   sort?: string;
-  status?: OrderStatus;
+  /** A single status, or several — joined into one comma-separated `?status=` value the backend's `commaListOf` parses back into a list, for the grouped filter chips and `OrdersSummaryCards`'s tiles (`ORDER_STATUS_GROUPS`). */
+  status?: OrderStatus | readonly OrderStatus[];
   priority?: OrderPriority;
-  /** Exact match, case-insensitive on the wire (the backend uppercases it) — never a free-text search. */
+  /** Exact match, case-insensitive on the wire (the backend uppercases it) — the folio-only search, distinct from `search` below. */
   orderNumber?: string;
+  /** Free-text match on the buyer's name, phone, or account email — trimmed and length-capped server-side by `parseListQuery`. */
+  search?: string;
 }
 
 /**
  * Builds the querystring from an explicit whitelist and drops empty values —
  * never forwards the caller's full filter-state object. Mirrors
- * `adminOrderListQuerySchema` (`apps/api/src/validators/order.validator.ts`):
- * `search` is deliberately not a param here because `listForAdmin` accepts
- * it but never reads it.
+ * `adminOrderListQuerySchema` (`apps/api/src/validators/order.validator.ts`).
  */
 function buildOrderListQuery(params: AdminOrderListParams): string {
   const entries: Array<[string, string]> = [];
   if (params.page !== undefined) entries.push(["page", String(params.page)]);
   if (params.limit !== undefined) entries.push(["limit", String(params.limit)]);
   if (params.sort) entries.push(["sort", params.sort]);
-  if (params.status) entries.push(["status", params.status]);
+  const status = params.status;
+  if (status) entries.push(["status", typeof status === "string" ? status : status.join(",")]);
   if (params.priority) entries.push(["priority", params.priority]);
   if (params.orderNumber) entries.push(["orderNumber", params.orderNumber]);
+  if (params.search) entries.push(["search", params.search]);
 
   const query = new URLSearchParams(entries).toString();
   return query ? `?${query}` : "";

@@ -36,7 +36,7 @@ export function ForgotPasswordForm() {
   }
 
   if (submitted) {
-    return <p className="font-body text-body text-grafito">{GENERIC_ACK_MESSAGE}</p>;
+    return <p className="font-body text-body text-grafito text-center">{GENERIC_ACK_MESSAGE}</p>;
   }
 
   return (

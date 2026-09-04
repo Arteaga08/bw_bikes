@@ -306,6 +306,47 @@ export async function getPublicCatalogProducts(options: {
 }
 
 /**
+ * Server-side only, anonymous storefront read for `/ofertas` — bikes and
+ * accessories with a real discount, merged and paginated by the API
+ * (`GET /catalog/on-sale`, `apps/api/src/services/on-sale.service.ts`).
+ * Unlike `getPublicCatalogProducts`, the two catalogs aren't independently
+ * paginated here: the API already interleaves them into one sorted result
+ * and hands back `order`, the page's real bike/accessory sequence — this
+ * function's only job is turning `res.data.bikes`/`res.data.accessories`
+ * back into `PublicProductSummary`s (via the same `toSummary` every other
+ * catalog read uses) and re-assembling them in that order.
+ */
+export async function getPublicOnSaleProducts(options: {
+  page?: number;
+  filters?: CatalogFilterState;
+}): Promise<CatalogProductPage> {
+  const { page = 1, filters } = options;
+  const params = filters ? serializeFilterState(filters) : new URLSearchParams();
+  params.set("page", String(page));
+  params.set("limit", String(CATALOG_PAGE_SIZE));
+
+  const res = await publicApiFetch<{
+    bikes: PublicBike[];
+    accessories: PublicAccessory[];
+    order: Array<{ kind: "bike" | "accessory"; id: string }>;
+  }>(`/catalog/on-sale?${params.toString()}`, { revalidateSeconds: 300 });
+
+  const bikeById = new Map(res.data.bikes.map((bike) => [bike.id, toSummary(bike, "bike")]));
+  const accessoryById = new Map(res.data.accessories.map((accessory) => [accessory.id, toSummary(accessory, "accessory")]));
+  const products = res.data.order
+    .map((row) => (row.kind === "bike" ? bikeById.get(row.id) : accessoryById.get(row.id)))
+    .filter((product): product is PublicProductSummary => product !== undefined);
+
+  const meta = res.meta;
+  return {
+    products,
+    page: meta?.page ?? page,
+    pages: meta?.pages ?? 1,
+    total: meta?.total ?? products.length,
+  };
+}
+
+/**
  * The filter sidebar's vocabulary (brands/sizes/colors/price/ficha-técnica
  * groups) for one catalog — `/catalog/{bikes,accessories}/filter-options`,
  * derived from the products actually in the collection

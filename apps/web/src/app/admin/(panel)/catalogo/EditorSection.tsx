@@ -13,6 +13,8 @@ export interface EditorSectionProps {
   count?: { current: number; max: number };
   /** A `HelpPopover` rendered right next to the title — "¿dónde sale esto en la ficha pública?". Omit it and the section looks exactly like it always has; only the sections M10.7 S5 named actually pass one. */
   help?: ReactNode;
+  /** The section's own action (e.g. "Agregar slide"), in the header's right rail next to `count`. A section-scoped action belongs on the section it acts on, not in a page-level toolbar. */
+  actions?: ReactNode;
   children: ReactNode;
   className?: string;
 }
@@ -24,7 +26,7 @@ export interface EditorSectionProps {
  * variant rows) goes one level back *down* instead of stacking another card,
  * so nothing here is ever a card inside a card.
  */
-export function EditorSection({ id, title, description, count, help, children, className }: EditorSectionProps) {
+export function EditorSection({ id, title, description, count, help, actions, children, className }: EditorSectionProps) {
   const titleId = useId();
   const atLimit = count !== undefined && count.current >= count.max;
 
@@ -44,17 +46,22 @@ export function EditorSection({ id, title, description, count, help, children, c
           </div>
           {description ? <p className="max-w-[65ch] font-body text-caption text-grafito">{description}</p> : null}
         </div>
-        {count ? (
-          <span
-            className={cn(
-              "flex shrink-0 items-center gap-xs font-ui text-caption",
-              atLimit ? "text-estado-advertencia" : "text-grafito",
-            )}
-            title={atLimit ? `Alcanzaste el máximo de ${count.max}.` : undefined}
-          >
-            {atLimit ? <Warning aria-hidden="true" size={14} weight="fill" /> : null}
-            {count.current}/{count.max}
-          </span>
+        {count || actions ? (
+          <div className="flex shrink-0 items-center gap-md">
+            {count ? (
+              <span
+                className={cn(
+                  "flex items-center gap-xs font-ui text-caption",
+                  atLimit ? "text-estado-advertencia" : "text-grafito",
+                )}
+                title={atLimit ? `Alcanzaste el máximo de ${count.max}.` : undefined}
+              >
+                {atLimit ? <Warning aria-hidden="true" size={14} weight="fill" /> : null}
+                {count.current}/{count.max}
+              </span>
+            ) : null}
+            {actions}
+          </div>
         ) : null}
       </div>
       <div className="flex flex-col gap-md p-lg">{children}</div>

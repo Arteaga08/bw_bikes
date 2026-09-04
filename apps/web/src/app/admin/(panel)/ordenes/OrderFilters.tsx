@@ -1,15 +1,26 @@
 "use client";
 
-import type { OrderPriority, OrderStatus } from "@bw-bikes/shared";
+import type { OrderPriority } from "@bw-bikes/shared";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { ALL_ORDER_PRIORITIES, ALL_ORDER_STATUSES, ORDER_PRIORITY_LABELS, ORDER_STATUS_LABELS } from "@/lib/orders/status";
+import {
+  ALL_ORDER_PRIORITIES,
+  ALL_ORDER_STATUSES,
+  ORDER_PRIORITY_LABELS,
+  ORDER_STATUS_GROUP_LABELS,
+  ORDER_STATUS_GROUPS,
+  ORDER_STATUS_LABELS,
+  type OrderStatusGroup,
+} from "@/lib/orders/status";
 
 export interface OrderFiltersValue {
-  status: OrderStatus | "";
+  /** A single status, a group's comma-joined csv (`ORDER_STATUS_GROUPS`), or `""` for every status — the same shape the backend's `?status=` now accepts. */
+  status: string;
   priority: OrderPriority | "";
-  /** Free text as typed; the caller uppercases it before sending (the backend does exact-match, uppercase). */
+  /** Exact-match search by folio, as typed; the caller uppercases it before sending (the backend does exact-match, uppercase). */
   orderNumber: string;
+  /** Free-text match on the buyer's name, phone, or account email. */
+  search: string;
   sort: string;
 }
 
@@ -27,28 +38,38 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "priority", label: "Prioridad" },
 ];
 
+/** Fixed display order for the group options — matches the tile row above (Pendientes → Pagos → Envíos → Problemas). */
+const STATUS_GROUP_ORDER: OrderStatusGroup[] = ["action", "progress", "shipping", "problems"];
+
 /**
- * Only the filters the backend actually supports
- * (`adminOrderListQuerySchema`): status, priority, exact order number, and
- * the sort whitelist. No free-text search, no date range, no customer/amount
- * filter — the list endpoint doesn't accept them, so offering them here
- * would just produce a silently-ignored control.
+ * The filters the backend supports (`adminOrderListQuerySchema`): status
+ * (single or grouped), priority, exact order number, free-text search, and
+ * the sort whitelist.
  */
 export function OrderFilters({ value, onChange }: OrderFiltersProps) {
   return (
     <div className="flex flex-wrap items-end gap-md px-lg py-md">
       <Select
         label="Estatus"
-        wrapperClassName="min-w-40"
+        wrapperClassName="min-w-48"
         value={value.status}
-        onChange={(event) => onChange({ ...value, status: event.target.value as OrderStatus | "" })}
+        onChange={(event) => onChange({ ...value, status: event.target.value })}
       >
         <option value="">Todos</option>
-        {ALL_ORDER_STATUSES.map((status) => (
-          <option key={status} value={status}>
-            {ORDER_STATUS_LABELS[status]}
-          </option>
-        ))}
+        <optgroup label="Grupos">
+          {STATUS_GROUP_ORDER.map((group) => (
+            <option key={group} value={ORDER_STATUS_GROUPS[group].join(",")}>
+              {ORDER_STATUS_GROUP_LABELS[group]}
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label="Estatus individual">
+          {ALL_ORDER_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {ORDER_STATUS_LABELS[status]}
+            </option>
+          ))}
+        </optgroup>
       </Select>
 
       <Select
@@ -64,6 +85,14 @@ export function OrderFilters({ value, onChange }: OrderFiltersProps) {
           </option>
         ))}
       </Select>
+
+      <Input
+        label="Buscar"
+        wrapperClassName="min-w-48"
+        placeholder="Nombre, correo o teléfono"
+        value={value.search}
+        onChange={(event) => onChange({ ...value, search: event.target.value })}
+      />
 
       <Input
         label="Número de orden"

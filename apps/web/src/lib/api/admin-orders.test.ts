@@ -27,6 +27,28 @@ describe("listAdminOrders", () => {
     expect(calledUrl).toBe("/api/v1/admin/orders?page=2&status=awaiting_supplier_confirmation");
   });
 
+  it("joins a status array into one comma-separated query value", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ status: "success", message: "OK", data: { orders: [] }, meta: { total: 0, page: 1, pages: 1, limit: 20 } }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await listAdminOrders({ status: ["paid", "processing"] });
+
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe("/api/v1/admin/orders?status=paid%2Cprocessing");
+  });
+
+  it("sends the search param", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ status: "success", message: "OK", data: { orders: [] }, meta: { total: 0, page: 1, pages: 1, limit: 20 } }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await listAdminOrders({ search: "Manuel" });
+
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe("/api/v1/admin/orders?search=Manuel");
+  });
+
   it("sends no querystring when every param is omitted", async () => {
     const fetchSpy = vi
       .fn()

@@ -47,9 +47,9 @@ describe("Navbar", () => {
     expect(desktopNav.getByRole("button", { name: "Ofertas" })).toBeInTheDocument();
   });
 
-  it("renders Buscar as a disabled placeholder, Carrito as a real trigger and Cuenta as a real link to /mi-cuenta — M13 B", () => {
+  it("renders Buscar as a real search toggle, Carrito as a real trigger and Cuenta as a real link to /mi-cuenta", () => {
     renderAt("/bicicletas");
-    expect(screen.getByRole("button", { name: "Buscar" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Buscar" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Carrito (0)" })).toBeEnabled();
     expect(screen.getByRole("link", { name: "Cuenta" })).toHaveAttribute("href", "/mi-cuenta");
   });

@@ -299,6 +299,8 @@ interface PublicProductBase {
   id: string;
   name: string;
   slug: string;
+  /** The trim/version name, e.g. "SL 5" — optional free text, shared by both catalogs. */
+  model?: string;
   brand: PublicBrand;
   category: PublicCategory;
   /** Merchandising badges curated by the admin (`Bike.badges`/`Accessory.badges`), max 3 — see `badge.model.ts`. */

@@ -125,7 +125,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     title: "Contenido",
     items: [
       {
-        label: "Configuracion De Home",
+        label: "Gestión de Home",
         href: "/admin/contenido/inicio",
         icon: Image,
         keywords: ["hero", "inicio", "carrusel", "home", "banner"],

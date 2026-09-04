@@ -25,7 +25,17 @@ export const EDITOR_STEPS: readonly EditorStepDefinition[] = [
   {
     id: "basics",
     label: "Datos generales",
-    errorKeys: ["name", "brand", "category", "description", "priceInput", "compareAtPriceInput", "shortDescription", "modelYear"],
+    errorKeys: [
+      "name",
+      "model",
+      "brand",
+      "category",
+      "description",
+      "priceInput",
+      "compareAtPriceInput",
+      "shortDescription",
+      "modelYear",
+    ],
   },
   { id: "variants", label: "Tallas y variantes", errorKeys: ["variants"] },
   { id: "specs", label: "Ficha técnica y resumen", errorKeys: ["specGroups"] },

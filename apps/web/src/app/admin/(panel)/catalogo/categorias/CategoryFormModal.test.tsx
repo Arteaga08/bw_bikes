@@ -24,7 +24,7 @@ function makeImageFile(name = "logo.png"): File {
 }
 
 beforeEach(() => {
-  // jsdom doesn't implement the Blob URL API — `CategoryImageField`'s
+  // jsdom doesn't implement the Blob URL API — `ImageField`'s
   // deferred mode needs it to preview a file the admin just picked, before
   // there's a category id to upload it to. Patched in place (not via
   // `vi.stubGlobal`) so the real `URL` constructor next/image relies on

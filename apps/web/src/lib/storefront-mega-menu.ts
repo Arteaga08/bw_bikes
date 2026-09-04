@@ -124,16 +124,17 @@ export function buildAccessoryMegaMenuContent(categories: PublicCategoryTreeNode
 }
 
 /**
- * Ofertas → sin secciones, sin fetch. Un único CTA, sin ningún porcentaje de
- * descuento inventado — no existe todavía un filtro backend de "en oferta"
- * (`publicProductListQuerySchema` no acepta ese query param), así que este
- * panel no puede prometer una cifra real.
+ * Ofertas → sin secciones, sin fetch. `/ofertas` mezcla bicicletas y
+ * accesorios en una sola grilla (`ofertas/page.tsx`) y no tiene páginas
+ * `/ofertas/:slug` propias — a diferencia de Bicicletas/Accesorios, no hay un
+ * árbol de categorías al que un link de sección pueda apuntar, así que este
+ * panel se queda en un único CTA.
  */
 export function buildOffersMegaMenuContent(): MegaMenuContent {
   return {
     sections: [],
     eyebrow: "Ofertas",
-    ctaLabel: "Rebajas de bicicletas",
+    ctaLabel: "Rebajas de bicis y accesorios",
     ctaHref: "/ofertas",
     photo: OFFERS_MENU_PHOTO,
   };

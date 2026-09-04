@@ -17,19 +17,27 @@ import { PaymentStateBadge } from "./PaymentStateBadge";
 
 export interface OrderNumberCellProps {
   order: AdminOrder;
-  /** Only the queue tab has a clock worth showing — see `OrdersView`'s own `orderCell` comment. */
+  /** Whether *this order* has a live authorization clock — no longer a per-tab flag, so it shows up in "Todas" too. See `OrdersView`'s own `orderCell` comment. */
   showCountdown: boolean;
   alertHours: number;
   cancelHours: number;
+  /**
+   * Opens the order's detail panel. The folio is the keyboard-reachable route
+   * to the same action `DataTable`'s `onRowClick` gives the mouse — a real
+   * `<button>`, not a `<tr onClick>` (which nothing but a pointer can reach).
+   */
+  onOpen: () => void;
 }
 
-export function OrderNumberCell({ order, showCountdown, alertHours, cancelHours }: OrderNumberCellProps) {
+export function OrderNumberCell({ order, showCountdown, alertHours, cancelHours, onOpen }: OrderNumberCellProps) {
   const pieces = order.lines.reduce((sum, line) => sum + line.qty, 0);
   const firstLineName = order.lines[0]?.name;
   const extraLines = order.lines.length - 1;
   return (
     <div>
-      <p className="font-ui text-ui text-negro">{order.orderNumber}</p>
+      <button type="button" onClick={onOpen} className="font-ui text-ui text-negro hover:underline">
+        {order.orderNumber}
+      </button>
       {firstLineName ? (
         <p className="mt-xs truncate font-body text-caption text-grafito">
           {firstLineName}

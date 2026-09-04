@@ -2,6 +2,8 @@
 
 import type { AdminOrder, OrderActivityEntry, OrderPriority, ShippingAddress } from "@bw-bikes/shared";
 import {
+  CaretDown,
+  CaretUp,
   CheckCircle,
   ClockCounterClockwise,
   CreditCard,
@@ -17,13 +19,13 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { FormSkeleton } from "@/components/ui/Skeleton";
+import { SlideOver } from "@/components/ui/SlideOver";
 import type { RecordShipmentInput } from "@/lib/api/admin-orders";
 import { buildOrderTimeline } from "@/lib/orders/activity";
 import { formatCurrencyCents } from "@/lib/format";
-import { formatDateTime } from "@/lib/orders/format";
+import { formatDateShort, formatDateTime } from "@/lib/orders/format";
 import { ALL_ORDER_PRIORITIES, ORDER_PRIORITY_LABELS, shipmentEligibility } from "@/lib/orders/status";
 import { AuthorizationCountdown } from "./AuthorizationCountdown";
 import { DisputeStatusBadge } from "./DisputeStatusBadge";
@@ -75,7 +77,13 @@ const EMPTY_SHIPPING_ADDRESS: ShippingAddress = {
   country: "MX",
 };
 
-export interface OrderDetailModalProps {
+/** Where `onPrev`/`onNext` sit in the currently-loaded page — drives the "3 de 20" counter and which arrow, if either, is disabled. */
+export interface OrderDetailPosition {
+  index: number;
+  total: number;
+}
+
+export interface OrderDetailPanelProps {
   order: AdminOrder | null;
   loading: boolean;
   activity: OrderActivityEntry[];
@@ -90,25 +98,39 @@ export interface OrderDetailModalProps {
   onUpdateShippingAddress: (address: ShippingAddress) => Promise<boolean>;
   onUpdatePriority: (priority: OrderPriority) => Promise<boolean>;
   onAddNote: (body: string) => Promise<boolean>;
+  /**
+   * Row-to-row navigation within the currently-loaded page of `OrdersView`'s
+   * table — never across a page boundary, so the arrows stay disabled at
+   * either end instead of silently fetching page 2. All three are optional
+   * together: a caller that omits them (or passes a single-row `position`)
+   * gets no nav row at all, same as before this existed.
+   */
+  onPrev?: () => void;
+  onNext?: () => void;
+  position?: OrderDetailPosition;
 }
 
 /**
- * Lazy-loaded (`next/dynamic`, see `OrdersView.tsx`) — replaces M9's
- * `OrderDetailSlideOver`. Two columns on `md+` (`Modal size="lg"`): the main
+ * The órdenes redesign's row-click target — a `SlideOver` in its `"center"`
+ * variant, so a row click reads as "one order, front and center" rather than
+ * a drawer competing with the table still visible beside it, while keeping
+ * the same header/body/footer contract (subtitle, `onPrev`/`onNext` nav,
+ * footer actions) the edge-drawer variant offers everywhere else. Lazy-loaded
+ * (`next/dynamic`, see `OrdersView.tsx`). Two columns on `lg+`: the main
  * column is the order itself (lines, totals, fulfillment), the side column
  * is everything about *this specific* order that isn't the purchase — who,
  * how it was paid, and staff-only context. Confirm/reject stay dialogs owned
- * by `OrdersView` (the queue row and this footer must trigger the *same*
- * dialog instance); shipment, address, priority and notes are all local
- * inline state this component owns, since none of them ever needs to leave
- * the panel.
+ * by `OrdersView` (a row's inline buttons and this footer must trigger the
+ * *same* dialog instance); shipment, address, priority and notes are all
+ * local inline state this component owns, since none of them ever needs to
+ * leave the panel.
  *
  * Every section is an `OrderDetailCard` — a bordered `bg-inset` panel with
- * its own icon+title — instead of a bare heading floating on the modal's
- * own `bg-surface`, which used to read as one flat ticket with no
- * separation between "who bought it" and "how it's paid".
+ * its own icon+title — instead of a bare heading floating on the panel's own
+ * `bg-surface`, which used to read as one flat ticket with no separation
+ * between "who bought it" and "how it's paid".
  */
-export function OrderDetailModal({
+export function OrderDetailPanel({
   order,
   loading,
   activity,
@@ -123,7 +145,10 @@ export function OrderDetailModal({
   onUpdateShippingAddress,
   onUpdatePriority,
   onAddNote,
-}: OrderDetailModalProps) {
+  onPrev,
+  onNext,
+  position,
+}: OrderDetailPanelProps) {
   const [editingAddress, setEditingAddress] = useState(false);
   const [editingShipment, setEditingShipment] = useState(false);
   const [shipmentJustSaved, setShipmentJustSaved] = useState(false);
@@ -239,8 +264,51 @@ export function OrderDetailModal({
 
   const eligibility = order ? shipmentEligibility(order.status) : "not_yet";
 
+  const subtitle = order
+    ? [order.customer ? `${order.customer.firstName} ${order.customer.lastName}` : null, formatDateShort(order.createdAt)]
+        .filter(Boolean)
+        .join(" · ")
+    : undefined;
+
+  // Only rendered once there's more than one row to move between — a
+  // single-result "Todas" filter or the queue's lone pending order gets no
+  // dead-looking pair of disabled arrows.
+  const navAside =
+    position && position.total > 1 ? (
+      <div className="flex items-center gap-xs">
+        <Button
+          variant="bare"
+          size="icon-sm"
+          aria-label="Orden anterior"
+          disabled={!onPrev || position.index <= 1}
+          onClick={onPrev}
+          iconLeft={<CaretUp />}
+        />
+        <Button
+          variant="bare"
+          size="icon-sm"
+          aria-label="Orden siguiente"
+          disabled={!onNext || position.index >= position.total}
+          onClick={onNext}
+          iconLeft={<CaretDown />}
+        />
+        <span className="font-body text-caption text-grafito">
+          {position.index} de {position.total}
+        </span>
+      </div>
+    ) : undefined;
+
   return (
-    <Modal open={open} onClose={handleClose} title={order ? order.orderNumber : "Orden"} size="lg" footer={footer}>
+    <SlideOver
+      open={open}
+      onClose={handleClose}
+      title={order ? order.orderNumber : "Orden"}
+      subtitle={subtitle}
+      maxWidthClassName="max-w-[46rem]"
+      headerAside={navAside}
+      footer={footer}
+      variant="center"
+    >
       {loading || !order ? (
         <FormSkeleton fields={6} />
       ) : (
@@ -279,7 +347,7 @@ export function OrderDetailModal({
             </Select>
           </div>
 
-          <div className="grid grid-cols-1 gap-lg md:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="grid grid-cols-1 gap-lg lg:grid-cols-[minmax(0,1fr)_18rem]">
             {/* Main column — the purchase itself. */}
             <div className="flex flex-col gap-lg">
               <OrderDetailCard icon={Package} title="Líneas">
@@ -528,6 +596,6 @@ export function OrderDetailModal({
           </div>
         </div>
       )}
-    </Modal>
+    </SlideOver>
   );
 }

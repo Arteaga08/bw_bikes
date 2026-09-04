@@ -3,6 +3,7 @@ import Joi from "joi";
 import {
   MAX_COLOR_LENGTH,
   MAX_DESCRIPTION_LENGTH,
+  MAX_MODEL_LENGTH,
   MAX_MODEL_YEAR,
   MAX_ON_HAND,
   MAX_PRODUCT_BADGES,
@@ -33,6 +34,11 @@ const brand = objectId.messages({
   "string.empty": "La marca es obligatoria.",
   "string.pattern.base": "La marca es inválida.",
   "any.required": "La marca es obligatoria.",
+});
+
+/** The trim/version name, e.g. "SL 5" — optional free text, shared by both catalogs. */
+const modelName = Joi.string().trim().max(MAX_MODEL_LENGTH).allow("").messages({
+  "string.max": `El modelo no puede exceder ${MAX_MODEL_LENGTH} caracteres.`,
 });
 
 const description = Joi.string().trim().min(1).max(MAX_DESCRIPTION_LENGTH).messages({
@@ -169,6 +175,7 @@ const compareAtPrice = priceCents.greater(Joi.ref("price")).messages({
 const productBase = {
   name,
   slug: slug.optional(),
+  modelName: modelName.optional(),
   brand,
   category: objectId.messages({ "string.pattern.base": "La categoría es inválida." }),
   description,

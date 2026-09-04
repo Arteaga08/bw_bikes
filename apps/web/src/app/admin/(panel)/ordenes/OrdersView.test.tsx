@@ -85,7 +85,7 @@ describe("OrdersView", () => {
     vi.unstubAllGlobals();
   });
 
-  it("shows the empty state when the queue has no orders", async () => {
+  it("shows the empty state for the default 'Todas' tab when there are no orders", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string) => {
@@ -103,10 +103,34 @@ describe("OrdersView", () => {
 
     renderView();
 
+    expect(await screen.findByText("No hay órdenes con estos filtros")).toBeInTheDocument();
+  });
+
+  it("shows the queue's own empty state once switched to 'Cola de proveedor'", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/admin/orders/summary")) return Promise.resolve(summaryResponse());
+        return Promise.resolve(
+          jsonResponse({
+            status: "success",
+            message: "Órdenes obtenidas.",
+            data: { orders: [] },
+            meta: { total: 0, page: 1, pages: 1, limit: 20 },
+          }),
+        );
+      }),
+    );
+
+    renderView();
+    await screen.findByText("No hay órdenes con estos filtros");
+    await user.click(screen.getByRole("tab", { name: /Cola de proveedor/ }));
+
     expect(await screen.findByText("No hay órdenes esperando confirmación")).toBeInTheDocument();
   });
 
-  it("renders a fetched order in the queue", async () => {
+  it("renders a fetched order on the default 'Todas' tab", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string) => {
@@ -130,6 +154,10 @@ describe("OrdersView", () => {
     expect(await screen.findAllByText("BW-2026-K7XQ2M")).not.toHaveLength(0);
   });
 
+  // No tab switch anywhere below — the whole point of the redesign is that
+  // "Confirmar" shows up inline for an `awaiting_supplier_confirmation`
+  // order right on the default "Todas" tab, not only inside "Cola de
+  // proveedor".
   it("confirming an order calls the endpoint, toasts success, and refetches the list", async () => {
     const order = makeOrder();
     const fetchSpy = vi.fn().mockImplementation((url: string) => {

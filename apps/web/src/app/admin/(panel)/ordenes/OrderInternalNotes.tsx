@@ -19,9 +19,9 @@ export interface OrderInternalNotesProps {
 /**
  * Staff-only, append-only — the field the "categoría" table asked for
  * ("cliente llamó molesto por retraso, enviar regalo compensatorio").
- * Chronological, oldest first, same convention as `OrderStatusHistoryList`:
- * both render the array in the order the API returns it, which is push
- * order on the backend.
+ * Chronological, oldest first, same convention as `OrderActivityList`: both
+ * render the array in the order the API returns it, which is push order on
+ * the backend.
  */
 export function OrderInternalNotes({ notes, onAddNote, submitting }: OrderInternalNotesProps) {
   const [draft, setDraft] = useState("");

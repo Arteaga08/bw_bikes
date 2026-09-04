@@ -7,6 +7,8 @@ import { MAX_PRICE_CENTS, MAX_VARIANTS, productVariantSchema } from "./schemas/p
 import { MAX_SPEC_GROUPS, specGroupSchema } from "./schemas/spec-group.schema.js";
 
 export const MAX_PRODUCT_NAME_LENGTH = 140;
+/** The trim/version name printed on the sheet, e.g. "SL 5" for a "Trek Domane SL 5" — free text, shared by both catalogs. */
+export const MAX_MODEL_LENGTH = 80;
 /** Only used to bound the **snapshot** brand name frozen onto an order line (`order-line.schema.ts`) — `Bike.brand`/`Accessory.brand` themselves are a `Brand` reference, not a string; see `brand.model.ts`'s own `MAX_BRAND_NAME_LENGTH`. */
 export const MAX_BRAND_LENGTH = 60;
 export const MAX_SHORT_DESCRIPTION_LENGTH = 300;
@@ -22,6 +24,8 @@ export const MAX_MODEL_YEAR = 2100;
 export interface IBike extends Document {
   name: string;
   slug: string;
+  /** The trim/version name, e.g. "SL 5" — optional free text, shared with `Accessory`. Named `modelName`, not `model`: Mongoose reserves `Document.model` for looking up sibling models, same reasoning as `isNewArrival`'s own doc comment. */
+  modelName?: string;
   brand: Types.ObjectId;
   category: Types.ObjectId;
   shortDescription: string;
@@ -49,6 +53,7 @@ const bikeSchema = new Schema<IBike>(
   {
     name: { type: String, required: true, trim: true, maxlength: MAX_PRODUCT_NAME_LENGTH },
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    modelName: { type: String, trim: true, maxlength: MAX_MODEL_LENGTH },
     // First-class filter fields. The free-form spec sheet is display-only, so
     // anything the storefront filters on must be a typed column here — that's
     // the trade-off the client accepted for a template-less ficha técnica.

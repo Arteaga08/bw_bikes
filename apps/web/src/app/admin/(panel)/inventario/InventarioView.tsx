@@ -1,343 +1,220 @@
 "use client";
 
-import type { AdminInventoryItem, InventorySummary, ItemType } from "@bw-bikes/shared";
-import { X } from "@phosphor-icons/react";
+import type { AdminBrand, AdminInventoryProductRow as AdminInventoryProductRowData, ColorTemplate, ItemType } from "@bw-bikes/shared";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import type { ComboboxOption } from "@/components/ui/Combobox";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Input } from "@/components/ui/Input";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { Pagination } from "@/components/ui/Pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tab, TabList } from "@/components/ui/Tabs";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useToast } from "@/hooks/use-toast";
-import { adminAccessoriesApi, adminBikesApi } from "@/lib/api/admin-catalog";
-import {
-  adjustAdminInventoryStock,
-  createAdminInventoryItem,
-  getAdminInventorySummary,
-  listAdminInventory,
-} from "@/lib/api/admin-inventory";
-import { ApiError } from "@/lib/api/error";
-import { CategoryBand } from "./CategoryBand";
-import { InventoryAlertCards, type InventoryStockFilter } from "./InventoryAlertCards";
-import { InventoryRow } from "./InventoryRow";
+import { adminColorTemplatesApi } from "@/lib/api/admin-catalog";
+import type { CategoryTreeNode } from "@/lib/api/admin-catalog";
+import type { AdminInventoryProductListParams } from "@/lib/api/admin-inventory";
+import { listAdminInventoryProducts } from "@/lib/api/admin-inventory";
+import { DEFAULT_INVENTORY_FILTERS, InventoryFilters, type InventoryFiltersValue } from "./InventoryFilters";
+import { InventoryProductRow } from "./InventoryProductRow";
+import { InventoryStatusChips, type InventoryStockFilter } from "./InventoryStatusChips";
 
-// Code-split, gated on their own "ever opened" flag rather than mounted
-// unconditionally — both dialogs used to always be in the tree (controlled
-// by `item`/`open` props alone), which would have made a plain
-// `next/dynamic` swap start loading their chunks on every visit to this
-// screen regardless of whether the admin ever opens either one.
-const NewInventoryEntryDialog = dynamic(
-  () => import("./NewInventoryEntryDialog").then((mod) => mod.NewInventoryEntryDialog),
+// Same lazy-mount rationale `StockAdjustDialog`/`NewInventoryEntryDialog`
+// documented before this redesign: gated on `everOpenedDetail` rather than
+// mounted unconditionally, so the code-split chunk only starts loading once
+// an admin actually opens a product, not on every visit to this screen.
+const ProductInventoryModal = dynamic(
+  () => import("./ProductInventoryModal").then((mod) => mod.ProductInventoryModal),
   { ssr: false },
 );
-const StockAdjustDialog = dynamic(() => import("./StockAdjustDialog").then((mod) => mod.StockAdjustDialog), {
-  ssr: false,
-});
 
+const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
-const SEARCH_RESULT_LIMIT = 50;
 
-function apiErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
+export interface InventarioViewProps {
+  bikeCategoryTree: CategoryTreeNode[];
+  accessoryCategoryTree: CategoryTreeNode[];
+  brands: AdminBrand[];
 }
 
-const STOCK_FILTER_LABELS: Record<InventoryStockFilter, string> = {
-  out: "Agotados",
-  low: "Bajos",
-};
+function ProductRowSkeleton() {
+  return (
+    <div className="flex items-center gap-md border-b border-borde p-md last:border-b-0">
+      <Skeleton className="h-16 w-16 shrink-0" />
+      <div className="flex min-w-0 flex-1 flex-col gap-xs">
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-3 w-1/2" />
+      </div>
+      <Skeleton className="h-8 w-12 shrink-0" />
+    </div>
+  );
+}
 
 /**
- * Cards arriba (vistazo rapido, store-wide, clicables para filtrar) seguidas
- * por "Por categoria" como contenido dominante (dos arboles independientes,
- * bandas asimetricas) y Captura al final (un solo dorado en toda la vista).
- * Buscar por SKU y filtrar por una card son dos formas de acotar la misma
- * sección — activar una limpia la otra, para no combinar dos modos de
- * filtrado a la vez. Refetching is coarse on purpose - one `refetchToken`
- * bumped after any mutation reloads the summary and whichever category
- * bands are open, the same "refetch, never optimistic update" discipline
- * every other screen in this panel follows.
+ * The orchestrator: filters → status chips → flat paginated product list →
+ * detail modal — the product-first redesign of what used to be three
+ * `StatCard`s, a SKU-level "Por categoría" accordion, and two separate
+ * dialogs (`StockAdjustDialog`, `NewInventoryEntryDialog`). Same
+ * filters-then-list template `CatalogView` already establishes for the rest
+ * of the panel, extended with the `Bicicletas`/`Accesorios` split this
+ * screen still needs (bikes and accessories are two independent catalogs and
+ * category trees).
+ *
+ * Search and the status chip are no longer mutually exclusive — both are
+ * independent params on the same `/admin/inventory/products` endpoint, so
+ * there is nothing to arbitrate between them the way SKU search and the old
+ * alert cards used to.
  */
-export function InventarioView() {
-  const { toast } = useToast();
-
+export function InventarioView({ bikeCategoryTree, accessoryCategoryTree, brands }: InventarioViewProps) {
   const [catalogTab, setCatalogTab] = useState<ItemType>("bike");
-  const [refetchToken, setRefetchToken] = useState(0);
+  const [filters, setFilters] = useState<InventoryFiltersValue>(DEFAULT_INVENTORY_FILTERS);
   const [stockFilter, setStockFilter] = useState<InventoryStockFilter | null>(null);
+  const [page, setPage] = useState(1);
+  const [refetchToken, setRefetchToken] = useState(0);
 
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
-  const trimmedSearch = debouncedSearch.trim();
-  const [searchResults, setSearchResults] = useState<AdminInventoryItem[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchError, setSearchError] = useState(false);
+  const debouncedSearch = useDebouncedValue(filters.search, SEARCH_DEBOUNCE_MS);
 
-  const [summary, setSummary] = useState<InventorySummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [products, setProducts] = useState<AdminInventoryProductRowData[]>([]);
+  const [counts, setCounts] = useState<{ all: number; out: number; low: number; ok: number; onRequest: number } | null>(null);
+  const [meta, setMeta] = useState({ total: 0, page: 1, pages: 1, limit: PAGE_SIZE });
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
-  const [bikeOptions, setBikeOptions] = useState<ComboboxOption[]>([]);
-  const [accessoryOptions, setAccessoryOptions] = useState<ComboboxOption[]>([]);
+  const [openProduct, setOpenProduct] = useState<AdminInventoryProductRowData | null>(null);
+  const [everOpenedDetail, setEverOpenedDetail] = useState(false);
+  const [colorTemplatesByValue, setColorTemplatesByValue] = useState<Map<string, ColorTemplate>>(new Map());
 
-  const [adjustTarget, setAdjustTarget] = useState<AdminInventoryItem | null>(null);
-  const [adjustSubmitting, setAdjustSubmitting] = useState(false);
-  // Same lazy-mount rationale as `everOpenedNewEntry` below — `StockAdjustDialog`
-  // used to be unconditionally in the tree (`item` alone gated its visible
-  // state), so the code-split chunk would otherwise start loading the
-  // moment this screen mounts, whether or not the admin ever adjusts stock.
-  const [everOpenedAdjust, setEverOpenedAdjust] = useState(false);
-  const handleAdjust = useCallback((item: AdminInventoryItem) => {
-    setEverOpenedAdjust(true);
-    setAdjustTarget(item);
-  }, []);
-  const [newEntryOpen, setNewEntryOpen] = useState(false);
-  // Same lazy-mount rationale as `OrdersView`'s `everOpenedDetail`: the two
-  // product Combobox option lists below are only for this dialog, but used
-  // to fetch 200 products (`limit: 100` × 2) on every mount of the page,
-  // whether or not the admin ever opens "Nueva entrada".
-  const [everOpenedNewEntry, setEverOpenedNewEntry] = useState(false);
-  const [newEntrySubmitting, setNewEntrySubmitting] = useState(false);
+  const categoryTree = catalogTab === "bike" ? bikeCategoryTree : accessoryCategoryTree;
+
+  const effectiveParams: AdminInventoryProductListParams = useMemo(
+    () => ({
+      itemType: catalogTab,
+      page,
+      limit: PAGE_SIZE,
+      sort: filters.sort,
+      ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
+      ...(filters.category ? { category: filters.category } : {}),
+      ...(filters.brand.trim() ? { brand: filters.brand.trim() } : {}),
+      ...(stockFilter ? { stock: stockFilter } : {}),
+    }),
+    [catalogTab, page, filters.sort, filters.category, filters.brand, debouncedSearch, stockFilter],
+  );
+
+  // "Adjust state during render" — the same pattern `CatalogView` documents:
+  // a genuine change resets to the loading state right here, in the render
+  // body, so a plain `refetch()` after a modal mutation doesn't flash a
+  // full-page skeleton.
+  const requestKey = JSON.stringify(effectiveParams);
+  const [lastRequestKey, setLastRequestKey] = useState<string | null>(null);
+  if (requestKey !== lastRequestKey) {
+    setLastRequestKey(requestKey);
+    setLoading(true);
+    setLoadError(false);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    listAdminInventoryProducts(effectiveParams)
+      .then((result) => {
+        if (cancelled) return;
+        setProducts(result.data.products);
+        setCounts(result.data.counts);
+        setMeta(result.meta ?? { total: result.data.products.length, page: 1, pages: 1, limit: PAGE_SIZE });
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveParams, refetchToken]);
 
   function refetch(): void {
     setRefetchToken((token) => token + 1);
   }
 
+  function handleTabChange(next: ItemType): void {
+    setCatalogTab(next);
+    // The previous `category` id belongs to the tab's own tree — carrying it
+    // over would silently filter the other catalog by an id it never had.
+    setFilters((current) => ({ ...current, category: "" }));
+    setStockFilter(null);
+    setPage(1);
+  }
+
+  function updateFilters(next: InventoryFiltersValue): void {
+    setFilters(next);
+    setPage(1);
+  }
+
   function toggleStockFilter(filter: InventoryStockFilter): void {
-    setSearch("");
     setStockFilter((current) => (current === filter ? null : filter));
+    setPage(1);
   }
 
-  function handleSearchChange(next: string): void {
-    if (next.trim() !== "") setStockFilter(null);
-    setSearch(next);
-  }
-
-  // "Adjust state during render" - a `refetchToken` bump resets the summary
-  // loading flag right here, in the render body; the effect below only ever
-  // calls setState in response to the fetch actually settling.
-  const [lastRefetchToken, setLastRefetchToken] = useState(refetchToken);
-  if (refetchToken !== lastRefetchToken) {
-    setLastRefetchToken(refetchToken);
-    setSummaryLoading(true);
-  }
-
-  // Same pattern for the search results: a change in the debounced term, the
-  // active tab, or a mutation elsewhere invalidates the cached results here.
-  const searchRequestKey = `${trimmedSearch}-${catalogTab}-${refetchToken}`;
-  const [lastSearchRequestKey, setLastSearchRequestKey] = useState<string | null>(null);
-  if (trimmedSearch !== "" && searchRequestKey !== lastSearchRequestKey) {
-    setLastSearchRequestKey(searchRequestKey);
-    setSearchLoading(true);
-    setSearchError(false);
-  }
+  const handleOpenProduct = useCallback((product: AdminInventoryProductRowData) => {
+    setEverOpenedDetail(true);
+    setOpenProduct(product);
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    getAdminInventorySummary()
-      .then((result) => {
-        if (!cancelled) setSummary(result);
-      })
-      .finally(() => {
-        if (!cancelled) setSummaryLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [refetchToken]);
-
-  useEffect(() => {
-    if (trimmedSearch === "") return;
-    let cancelled = false;
-    listAdminInventory({ itemType: catalogTab, search: trimmedSearch, limit: SEARCH_RESULT_LIMIT, sort: "available" })
-      .then((result) => {
-        if (cancelled) return;
-        setSearchResults(result.data.items);
-        setSearchError(false);
-      })
-      .catch(() => {
-        if (!cancelled) setSearchError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setSearchLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [trimmedSearch, catalogTab, refetchToken]);
-
-  useEffect(() => {
-    if (!everOpenedNewEntry) return;
-    Promise.all([
-      adminBikesApi.list({ limit: 100, sort: "name" }),
-      adminAccessoriesApi.list({ limit: 100, sort: "name" }),
-    ]).then(([bikes, accessories]) => {
-      setBikeOptions(bikes.data.map((bike) => ({ id: bike.id, label: bike.name })));
-      setAccessoryOptions(accessories.data.map((accessory) => ({ id: accessory.id, label: accessory.name })));
+    if (!everOpenedDetail || colorTemplatesByValue.size > 0) return;
+    adminColorTemplatesApi.list({ limit: 100 }).then((result) => {
+      setColorTemplatesByValue(new Map(result.data.map((template) => [template.value.toLowerCase(), template])));
     });
-  }, [everOpenedNewEntry]);
-
-  async function handleAdjustConfirm(input: { delta: number } | { onHand: number }, reason: string): Promise<void> {
-    if (!adjustTarget) return;
-    setAdjustSubmitting(true);
-    try {
-      await adjustAdminInventoryStock(adjustTarget.id, { ...input, reason });
-      toast({ variant: "success", title: "Stock actualizado" });
-      setAdjustTarget(null);
-      refetch();
-    } catch (error) {
-      toast({ variant: "error", title: "No se pudo ajustar", description: apiErrorMessage(error, "Intenta de nuevo.") });
-    } finally {
-      setAdjustSubmitting(false);
-    }
-  }
-
-  async function handleNewEntryConfirm(input: {
-    itemType: ItemType;
-    itemId: string;
-    sku: string;
-    onHand: number;
-  }): Promise<void> {
-    setNewEntrySubmitting(true);
-    try {
-      await createAdminInventoryItem(input);
-      toast({ variant: "success", title: "Entrada registrada" });
-      setNewEntryOpen(false);
-      refetch();
-    } catch (error) {
-      toast({ variant: "error", title: "No se pudo registrar", description: apiErrorMessage(error, "Intenta de nuevo.") });
-    } finally {
-      setNewEntrySubmitting(false);
-    }
-  }
-
-  const groupsByType = useMemo(() => {
-    const groups = summary?.groups ?? [];
-    return {
-      bike: groups.filter((group) => group.itemType === "bike"),
-      accessory: groups.filter((group) => group.itemType === "accessory"),
-    };
-  }, [summary]);
-
-  const isSearching = trimmedSearch !== "";
+  }, [everOpenedDetail, colorTemplatesByValue.size]);
 
   return (
-    <div className="flex flex-col gap-xl p-md sm:p-lg">
-      <InventoryAlertCards totals={summary?.totals ?? null} activeFilter={stockFilter} onToggleFilter={toggleStockFilter} />
+    <div className="flex flex-col gap-lg p-md sm:p-lg">
+      <InventoryStatusChips counts={counts} activeFilter={stockFilter} onToggleFilter={toggleStockFilter} />
 
-      {/* Por categoria - contenido dominante de la pantalla, dos arboles independientes */}
-      <section className="flex flex-col gap-md">
-        <h2 className="font-display text-h2 text-negro">Por categoría</h2>
+      <div className="flex flex-col gap-sm sm:flex-row sm:items-end sm:justify-between">
+        <TabList label="Catálogo">
+          <Tab selected={catalogTab === "bike"} onSelect={() => handleTabChange("bike")}>
+            Bicicletas
+          </Tab>
+          <Tab selected={catalogTab === "accessory"} onSelect={() => handleTabChange("accessory")}>
+            Accesorios
+          </Tab>
+        </TabList>
 
-        <div className="flex flex-col gap-sm sm:flex-row sm:items-end sm:justify-between">
-          <TabList label="Catálogo">
-            <Tab selected={catalogTab === "bike"} onSelect={() => setCatalogTab("bike")}>
-              Bicicletas
-            </Tab>
-            <Tab selected={catalogTab === "accessory"} onSelect={() => setCatalogTab("accessory")}>
-              Accesorios
-            </Tab>
-          </TabList>
+        <InventoryFilters value={filters} onChange={updateFilters} categoryTree={categoryTree} brands={brands} />
+      </div>
 
-          <Input
-            label="Buscar"
-            labelHidden
-            placeholder="Buscar por SKU"
-            value={search}
-            onChange={(event) => handleSearchChange(event.target.value)}
-            wrapperClassName="sm:max-w-[16rem]"
-          />
+      <ErrorBoundary>
+        <div className="rounded-card border border-borde bg-surface">
+          {loading ? (
+            Array.from({ length: 6 }, (_, index) => <ProductRowSkeleton key={index} />)
+          ) : loadError ? (
+            <EmptyState
+              title="No se pudo cargar el inventario"
+              description="Ocurrió un problema al conectar con el servidor."
+              action={
+                <Button variant="ghost" onClick={refetch}>
+                  Reintentar
+                </Button>
+              }
+            />
+          ) : products.length === 0 ? (
+            <EmptyState title="Sin productos con estos filtros" description="Ajusta los filtros de búsqueda, marca o categoría." />
+          ) : (
+            products.map((product) => (
+              <InventoryProductRow key={product.itemId} product={product} onOpen={handleOpenProduct} />
+            ))
+          )}
         </div>
+      </ErrorBoundary>
 
-        {stockFilter && !isSearching ? (
-          <button
-            type="button"
-            onClick={() => setStockFilter(null)}
-            className="inline-flex w-fit items-center gap-xs rounded-control border border-borde bg-inset px-sm py-1 font-ui text-caption text-negro transition-colors duration-150 hover:bg-borde focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-negro"
-          >
-            Filtro: {STOCK_FILTER_LABELS[stockFilter]}
-            <X size={12} weight="bold" aria-hidden="true" />
-          </button>
-        ) : null}
+      <Pagination meta={meta} onPageChange={setPage} />
 
-        {isSearching ? (
-          <div className="rounded-card border border-borde bg-surface">
-            {searchLoading ? (
-              <div className="flex flex-col gap-sm p-md">
-                {Array.from({ length: 3 }, (_, index) => (
-                  <Skeleton key={index} className="h-16 w-full" />
-                ))}
-              </div>
-            ) : searchError ? (
-              <EmptyState
-                title="No se pudo buscar"
-                description="Ocurrió un problema al conectar con el servidor."
-                action={
-                  <Button variant="ghost" onClick={refetch}>
-                    Reintentar
-                  </Button>
-                }
-              />
-            ) : searchResults.length === 0 ? (
-              <EmptyState title="Sin resultados" description={`Ningún SKU coincide con "${trimmedSearch}".`} />
-            ) : (
-              searchResults.map((item) => (
-                <InventoryRow key={item.id} item={item} onAdjust={handleAdjust} density="comfortable" />
-              ))
-            )}
-          </div>
-        ) : summaryLoading ? (
-          <div className="flex flex-col gap-sm rounded-card border border-borde bg-surface p-md">
-            {Array.from({ length: 3 }, (_, index) => (
-              <Skeleton key={index} className="h-10 w-full" />
-            ))}
-          </div>
-        ) : groupsByType[catalogTab].length === 0 ? (
-          <EmptyState title="Sin categorías" description="Crea una categoría en el catálogo para verla aquí." />
-        ) : (
-          <div className="rounded-card border border-borde bg-surface">
-            {groupsByType[catalogTab].map((group) => (
-              <CategoryBand
-                key={`${group.itemType}-${group.categoryId}`}
-                group={group}
-                onAdjust={handleAdjust}
-                refetchToken={refetchToken}
-                stockFilter={stockFilter}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Captura - la mas ligera, sin card ni heading propio: el unico dorado de la vista */}
-      <Button
-        variant="primary"
-        onClick={() => {
-          setEverOpenedNewEntry(true);
-          setNewEntryOpen(true);
-        }}
-        className="self-start"
-      >
-        Registrar entrada
-      </Button>
-
-      {everOpenedAdjust ? (
-        <StockAdjustDialog
-          item={adjustTarget}
-          onClose={() => setAdjustTarget(null)}
-          onConfirm={handleAdjustConfirm}
-          submitting={adjustSubmitting}
-        />
-      ) : null}
-
-      {everOpenedNewEntry ? (
-        <NewInventoryEntryDialog
-          open={newEntryOpen}
-          onClose={() => setNewEntryOpen(false)}
-          onConfirm={handleNewEntryConfirm}
-          submitting={newEntrySubmitting}
-          bikeOptions={bikeOptions}
-          accessoryOptions={accessoryOptions}
+      {everOpenedDetail ? (
+        <ProductInventoryModal
+          product={openProduct}
+          onClose={() => setOpenProduct(null)}
+          onMutated={refetch}
+          colorTemplatesByValue={colorTemplatesByValue}
         />
       ) : null}
     </div>

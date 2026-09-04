@@ -5,7 +5,6 @@ import { ComparisonRowShell, MISSING } from "./ComparisonRow";
 
 export interface ComparisonOverviewRowProps {
   bikes: ComparableBike[];
-  gridTemplateColumns: string;
 }
 
 /**
@@ -13,9 +12,9 @@ export interface ComparisonOverviewRowProps {
  * — the sticky header pins brand/name/price/CTA under the navbar, and the
  * photo scrolls away with the rest of "Ficha general" underneath it.
  */
-export function ComparisonImageRow({ bikes, gridTemplateColumns }: ComparisonOverviewRowProps) {
+export function ComparisonImageRow({ bikes }: ComparisonOverviewRowProps) {
   return (
-    <ComparisonRowShell label="Imagen" gridTemplateColumns={gridTemplateColumns}>
+    <ComparisonRowShell label="Imagen">
       {bikes.map((bike) => (
         <dd key={bike.slug} className="relative aspect-[4/3] overflow-hidden rounded-card bg-blanco">
           <span className="sr-only">{bike.name}</span>
@@ -24,7 +23,7 @@ export function ComparisonImageRow({ bikes, gridTemplateColumns }: ComparisonOve
               src={bike.image.url}
               alt={bike.image.alt ?? bike.name}
               fill
-              sizes="(max-width: 1023px) 60vw, 20vw"
+              sizes="(max-width: 1023px) 45vw, 20vw"
               className="object-contain"
             />
           ) : null}
@@ -48,9 +47,9 @@ export interface ComparisonColorsRowProps extends ComparisonOverviewRowProps {
  * "nobody has a value" rule `buildOverviewGroup` applies to its own rows —
  * so `ComparisonTable` only renders this when at least one bike qualifies.
  */
-export function ComparisonColorsRow({ bikes, gridTemplateColumns, colorSwatchIndex }: ComparisonColorsRowProps) {
+export function ComparisonColorsRow({ bikes, colorSwatchIndex }: ComparisonColorsRowProps) {
   return (
-    <ComparisonRowShell label="Colores" gridTemplateColumns={gridTemplateColumns}>
+    <ComparisonRowShell label="Colores">
       {bikes.map((bike) =>
         bike.colors.length > 0 ? (
           <dd key={bike.slug} className="flex flex-wrap items-center gap-xs">

@@ -1,4 +1,11 @@
-import type { AdminInventoryItem, InventorySummary, ItemType } from "@bw-bikes/shared";
+import type {
+  AdminInventoryItem,
+  AdminInventoryProductCounts,
+  AdminInventoryProductDetail,
+  AdminInventoryProductRow,
+  InventorySummary,
+  ItemType,
+} from "@bw-bikes/shared";
 import { apiFetch } from "./client";
 import type { ParsedResponse } from "./parse-response";
 
@@ -12,7 +19,7 @@ export interface AdminInventoryListParams {
   /** A root category id — the backend requires `itemType` alongside it, since bikes and accessories are two independent trees. */
   category?: string;
   stock?: "low" | "out";
-  /** Matches SKU only — `listItems` doesn't search by product name. */
+  /** Matches SKU only — `listItems` doesn't search by product name. For a name/brand/SKU search, use `listAdminInventoryProducts` instead. */
   search?: string;
 }
 
@@ -85,4 +92,57 @@ export async function adjustAdminInventoryStock(id: string, input: AdjustStockIn
     body: JSON.stringify(input),
   });
   return data.item;
+}
+
+export interface AdminInventoryProductListParams {
+  page?: number;
+  limit?: number;
+  /** Whitelisted by the backend to `name` | `totalAvailable` | `createdAt`, `-` prefix for descending. */
+  sort?: string;
+  itemType: ItemType;
+  /** A root category id — includes its child categories. */
+  category?: string;
+  /** A brand's `slug`, never a raw id or free text. */
+  brand?: string;
+  stock?: "low" | "out";
+  /** Matches product name, brand name, or SKU. */
+  search?: string;
+}
+
+/**
+ * Builds the querystring from an explicit whitelist and drops empty values —
+ * never forwards the caller's full filter-state object. Mirrors
+ * `inventoryProductListQuerySchema` (`apps/api/src/validators/inventory.validator.ts`).
+ */
+function buildInventoryProductListQuery(params: AdminInventoryProductListParams): string {
+  const entries: Array<[string, string]> = [["itemType", params.itemType]];
+  if (params.page !== undefined) entries.push(["page", String(params.page)]);
+  if (params.limit !== undefined) entries.push(["limit", String(params.limit)]);
+  if (params.sort) entries.push(["sort", params.sort]);
+  if (params.category) entries.push(["category", params.category]);
+  if (params.brand) entries.push(["brand", params.brand]);
+  if (params.stock) entries.push(["stock", params.stock]);
+  if (params.search) entries.push(["search", params.search]);
+
+  return `?${new URLSearchParams(entries).toString()}`;
+}
+
+/** The product-first list `/admin/inventario` renders — one row per product, never per SKU. */
+export function listAdminInventoryProducts(
+  params: AdminInventoryProductListParams,
+): Promise<ParsedResponse<{ products: AdminInventoryProductRow[]; counts: AdminInventoryProductCounts }>> {
+  return apiFetch<{ products: AdminInventoryProductRow[]; counts: AdminInventoryProductCounts }>(
+    `/admin/inventory/products${buildInventoryProductListQuery(params)}`,
+  );
+}
+
+/** Every active variant of one product, including the ones with no inventory row yet — what the product modal renders. */
+export async function getAdminInventoryProductDetail(
+  itemType: ItemType,
+  itemId: string,
+): Promise<AdminInventoryProductDetail> {
+  const { data } = await apiFetch<{ product: AdminInventoryProductDetail }>(
+    `/admin/inventory/products/${itemId}?${new URLSearchParams({ itemType }).toString()}`,
+  );
+  return data.product;
 }

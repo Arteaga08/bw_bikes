@@ -26,10 +26,10 @@ import { ApiError } from "@/lib/api/error";
 import { findSpecSheetError, MAX_SPEC_GROUPS, pruneEmptyFields, type SpecSheetError } from "@/lib/catalog/spec-groups";
 import { MAX_SUMMARY_ROWS } from "@/lib/catalog/summary";
 import { centsToPriceInput, parsePriceToCents } from "@/lib/catalog/price";
-import { MAX_MODEL_YEAR, MIN_MODEL_YEAR } from "./catalog-limits";
+import { MAX_MODEL_LENGTH, MAX_MODEL_YEAR, MIN_MODEL_YEAR } from "./catalog-limits";
 import { BadgesPicker, MAX_PRODUCT_BADGES } from "./BadgesPicker";
 import { BikeBasicsFields, type BikeBasicsValue } from "./BikeBasicsFields";
-import { CategoryImageField } from "./categorias/CategoryImageField";
+import { ImageField } from "@/components/ui/ImageField";
 import {
   EDITOR_STEPS,
   type EditorStepId,
@@ -56,7 +56,7 @@ import { SummaryEditor } from "./SummaryEditor";
 import { findDuplicateSkuIndices, MAX_VARIANTS, VariantsEditor, type VariantRow } from "./VariantsEditor";
 
 /**
- * Code-split, same pattern as `OrdersView.tsx`'s `OrderDetailModal` — these
+ * Code-split, same pattern as `OrdersView.tsx`'s `OrderDetailPanel` — these
  * are two of the largest step components in this stepper (400+ lines each)
  * and the wizard already renders only the active step's JSX (the `switch`
  * below), so nothing was ever mounting both at once; the only thing a
@@ -109,6 +109,7 @@ export interface ProductEditorProps {
 /** Where the error summary jumps to for each key `validate()` can report — "slug" is never validated, so it's absent on purpose. */
 const ERROR_TARGET_IDS: Partial<Record<keyof FormErrors, string>> = {
   name: PRODUCT_FIELD_IDS.name,
+  model: PRODUCT_FIELD_IDS.model,
   brand: PRODUCT_FIELD_IDS.brand,
   category: PRODUCT_FIELD_IDS.category,
   description: PRODUCT_FIELD_IDS.description,
@@ -141,6 +142,7 @@ function basicsFromProduct(product?: AdminBike | AdminAccessory): ProductBasicsV
   return {
     name: product?.name ?? "",
     slug: product?.slug ?? "",
+    model: product?.model ?? "",
     brand: product?.brand.id ?? "",
     category: product?.category.id ?? "",
     description: product?.description ?? "",
@@ -281,7 +283,7 @@ function ProductEditorContent({
     return new Set(upToCurrent);
   });
 
-  // The geometry chart, in the two modes `CategoryImageField` already knows
+  // The geometry chart, in the two modes `ImageField` already knows
   // how to be. On edit the bike exists, so a pick uploads straight away; on
   // create there's no id to POST against, so the `File` is staged here and
   // `handleSubmit` uploads it right after the bike is created — the admin
@@ -381,6 +383,9 @@ function ProductEditorContent({
     const nextErrors: FormErrors = {};
 
     if (!basics.name.trim()) nextErrors.name = "El nombre es obligatorio.";
+    if (basics.model.trim().length > MAX_MODEL_LENGTH) {
+      nextErrors.model = `El modelo no puede exceder ${MAX_MODEL_LENGTH} caracteres.`;
+    }
     if (!basics.brand.trim()) nextErrors.brand = "La marca es obligatoria.";
     if (!basics.category) nextErrors.category = "Selecciona una categoría.";
     if (!basics.description.trim()) nextErrors.description = "La descripción es obligatoria.";
@@ -527,6 +532,7 @@ function ProductEditorContent({
     const sharedPayload = {
       name: basics.name.trim(),
       ...(basics.slug.trim() ? { slug: basics.slug.trim() } : {}),
+      ...(basics.model.trim() ? { model: basics.model.trim() } : {}),
       brand: basics.brand.trim(),
       category: basics.category,
       description: basics.description.trim(),
@@ -778,7 +784,7 @@ function ProductEditorContent({
                 help={<SectionHelp zone="geometria" />}
               >
                 {mode === "edit" && productId ? (
-                  <CategoryImageField
+                  <ImageField
                     mode="immediate"
                     image={geometryImage}
                     onUpload={async (file) => {
@@ -790,7 +796,7 @@ function ProductEditorContent({
                     }}
                   />
                 ) : (
-                  <CategoryImageField
+                  <ImageField
                     mode="deferred"
                     previewUrl={pendingGeometryUrl}
                     onSelect={stageGeometryFile}

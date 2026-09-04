@@ -1,5 +1,7 @@
 import type { PublicColorSwatch, PublicProductSummary } from "@/lib/api/public-catalog";
 import { cn } from "@/lib/cn";
+import { RhinoMark } from "@/components/storefront/RhinoMark";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { CatalogProductCard } from "./CatalogProductCard";
 
 export interface CatalogProductGridProps {
@@ -27,9 +29,11 @@ const GUTTER = "px-lg sm:px-[clamp(2rem,8vw,8rem)]";
 export function CatalogProductGrid({ products, colorSwatchIndex, emptyMessage, noGutter }: CatalogProductGridProps) {
   if (products.length === 0) {
     return (
-      <p className={cn("py-3xl text-center font-body text-body text-grafito", !noGutter && GUTTER)}>
-        {emptyMessage}
-      </p>
+      <div className={cn("py-3xl", !noGutter && GUTTER)}>
+        <div className="mx-auto max-w-card">
+          <EmptyState icon={<RhinoMark className="h-8 w-auto" />} title={emptyMessage} />
+        </div>
+      </div>
     );
   }
 

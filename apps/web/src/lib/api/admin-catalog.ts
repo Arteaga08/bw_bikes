@@ -100,6 +100,7 @@ export interface ProductVariantInput {
 interface ProductBasicsInput {
   name: string;
   slug?: string;
+  model?: string;
   brand: string;
   category: string;
   description: string;

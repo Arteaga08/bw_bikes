@@ -139,6 +139,6 @@ describe("MobileMenu", () => {
 
     const toggle = screen.getByRole("button", { name: "Ofertas" });
     fireEvent.click(toggle);
-    expect(screen.getByRole("link", { name: "Rebajas de bicicletas" })).toHaveAttribute("href", "/ofertas");
+    expect(screen.getByRole("link", { name: "Rebajas de bicis y accesorios" })).toHaveAttribute("href", "/ofertas");
   });
 });

@@ -21,7 +21,7 @@ const CARRIER_OPTIONS: Array<{ value: Carrier; label: string }> = [
 export interface ShipmentFormProps {
   onSubmit: (input: RecordShipmentInput) => void | Promise<void>;
   submitting: boolean;
-  /** Brief post-submit confirmation window, owned by the parent (`OrderDetailModal`) — see `Button`'s `success` prop. */
+  /** Brief post-submit confirmation window, owned by the parent (`OrderDetailPanel`) — see `Button`'s `success` prop. */
   success: boolean;
   /** `order.status === "processing"` — this submission also transitions the order to `shipped`. */
   willTransitionToShipped: boolean;

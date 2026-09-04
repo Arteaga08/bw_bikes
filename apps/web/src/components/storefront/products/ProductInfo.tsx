@@ -7,10 +7,10 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { useVariantAvailability } from "@/hooks/use-variant-availability";
 import type { PublicColorSwatch } from "@/lib/api/public-catalog";
-import { FULFILLMENT_MODE_BADGE_VARIANTS, FULFILLMENT_MODE_LABELS } from "@/lib/catalog/labels";
 import { recommendSize } from "@/lib/size-recommendation";
 import { AddToCartButton } from "./AddToCartButton";
 import { ColorSwatchSelector } from "./ColorSwatchSelector";
+import { FulfillmentModeNotice } from "./FulfillmentModeNotice";
 import { PaymentMethodsBlock } from "./PaymentMethodsBlock";
 import { ProductDescriptionTeaser } from "./ProductDescriptionTeaser";
 import { ProductPrice } from "./ProductPrice";
@@ -196,17 +196,20 @@ export function ProductInfo({ product, itemType, colorSwatchIndex, sizeGuide = [
         </div>
       ) : null}
 
-      {selectedVariant && selectedVariant.fulfillmentMode !== "in_stock" ? (
-        <div className="mt-lg flex items-center gap-xs">
-          <Badge variant={FULFILLMENT_MODE_BADGE_VARIANTS[selectedVariant.fulfillmentMode]}>
-            {FULFILLMENT_MODE_LABELS[selectedVariant.fulfillmentMode]}
-          </Badge>
-          {selectedVariant.fulfillmentMode === "preorder" && selectedVariant.preorderReleaseDate ? (
-            <p className="font-body text-caption text-grafito">
-              Disponible aprox. {new Date(selectedVariant.preorderReleaseDate).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
-            </p>
-          ) : null}
+      {product.model || ("modelYear" in product && product.modelYear) ? (
+        <div className="mt-lg">
+          <span className="font-ui text-ui text-grafito">Modelo: </span>
+          <span className="font-ui text-ui text-negro">
+            {[product.model, "modelYear" in product ? product.modelYear : undefined].filter(Boolean).join(" ")}
+          </span>
         </div>
+      ) : null}
+
+      {selectedVariant && selectedVariant.fulfillmentMode !== "in_stock" ? (
+        <FulfillmentModeNotice
+          fulfillmentMode={selectedVariant.fulfillmentMode}
+          preorderReleaseDate={selectedVariant.preorderReleaseDate}
+        />
       ) : null}
 
       <div className={selectedVariant && selectedVariant.fulfillmentMode !== "in_stock" ? "mt-sm flex items-center gap-sm" : "mt-lg flex items-center gap-sm"}>

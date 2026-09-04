@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { adminBrandsApi, type BrandInput } from "@/lib/api/admin-catalog";
 import { ApiError } from "@/lib/api/error";
 import { slugify } from "@/lib/catalog/slugify";
-import { CategoryImageField } from "../categorias/CategoryImageField";
+import { ImageField } from "@/components/ui/ImageField";
 
 export interface BrandFormModalProps {
   onClose: () => void;
@@ -24,10 +24,10 @@ export interface BrandFormModalProps {
 /**
  * Create/edit form for a brand. Same deferred-logo trick
  * `CategoryFormModal` uses for its image: before the brand exists there's no
- * id to upload a logo to, so `CategoryImageField` runs in `"deferred"` mode
+ * id to upload a logo to, so `ImageField` runs in `"deferred"` mode
  * and stages the picked file locally; the first "Guardar" creates the brand
  * and, if a file was staged, uploads it right after — one click, not two
- * saves. `CategoryImageField` is reused as-is: a brand's `logo` is the exact
+ * saves. `ImageField` is reused as-is: a brand's `logo` is the exact
  * same `CategoryImage` shape as a category's `image`.
  */
 export function BrandFormModal({ onClose, onSaved, initial }: BrandFormModalProps) {
@@ -160,9 +160,9 @@ export function BrandFormModal({ onClose, onSaved, initial }: BrandFormModalProp
         <Toggle label="Activa" checked={isActive} onChange={setIsActive} />
 
         {brand ? (
-          <CategoryImageField mode="immediate" image={brand.logo} onUpload={handleUploadLogo} onRemove={handleRemoveLogo} />
+          <ImageField mode="immediate" image={brand.logo} onUpload={handleUploadLogo} onRemove={handleRemoveLogo} />
         ) : (
-          <CategoryImageField
+          <ImageField
             mode="deferred"
             previewUrl={pendingPreviewUrl}
             onSelect={handleSelectPendingLogo}

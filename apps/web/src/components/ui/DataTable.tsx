@@ -58,6 +58,18 @@ export interface DataTableProps<TRow> {
    */
   mobileRow?: (row: TRow) => ReactNode;
   /**
+   * Makes a desktop row clickable — the órdenes redesign's "row → detail" in
+   * one click, instead of a dedicated "Ver detalle" button in every row.
+   * Optional and additive: without it a row renders exactly as before,
+   * including no `cursor-pointer`.
+   *
+   * The keyboard-accessible route to the same action is a focusable element
+   * inside one of the row's own columns (a button-styled folio cell, for
+   * instance) — the `<tr>` itself never becomes a tab stop, so this doesn't
+   * duplicate or fight with that column's own click handler.
+   */
+  onRowClick?: (row: TRow) => void;
+  /**
    * Floor for the `<table>`'s width, so columns get a real share of the
    * surface instead of shrinking to their content (which left visible blank
    * space on wide screens once `table-auto` alone was in charge). The
@@ -85,11 +97,20 @@ function resolveAlign<TRow>(column: DataTableColumn<TRow>): "left" | "center" | 
  * `EmptyState` would force every caller through this component's opinion of
  * "empty", instead of the page's own fetch state machine.
  */
+/**
+ * Elements a row click must not hijack — the selection checkbox, per-row
+ * action buttons (Confirmar/Rechazar), and anything else genuinely
+ * interactive inside a cell. Without this guard, `onRowClick` fires *in
+ * addition to* whatever the user actually clicked.
+ */
+const ROW_CLICK_EXCLUDE_SELECTOR = "button, input, a, select, label, textarea";
+
 function DataTableInner<TRow>({
   columns,
   rows,
   getRowKey,
   mobileRow,
+  onRowClick,
   minWidthClassName = "min-w-[46rem]",
 }: DataTableProps<TRow>) {
   // Only one layout actually renders now, not both hidden behind `md:` —
@@ -119,7 +140,18 @@ function DataTableInner<TRow>({
         <TableHead columns={columns} />
         <tbody>
           {rows.map((row) => (
-            <tr key={getRowKey(row)} className="border-b border-borde last:border-b-0 hover:bg-base">
+            <tr
+              key={getRowKey(row)}
+              className={cn("border-b border-borde last:border-b-0 hover:bg-base", onRowClick && "cursor-pointer")}
+              onClick={
+                onRowClick
+                  ? (event) => {
+                      if ((event.target as HTMLElement).closest(ROW_CLICK_EXCLUDE_SELECTOR)) return;
+                      onRowClick(row);
+                    }
+                  : undefined
+              }
+            >
               {columns.map((column, index) => (
                 <td
                   key={column.key}

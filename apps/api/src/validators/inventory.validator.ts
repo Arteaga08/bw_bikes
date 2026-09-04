@@ -105,3 +105,27 @@ export const inventoryListQuerySchema = Joi.object({
   // are two independent trees and the id alone doesn't say which one.
   category: objectId.optional().messages({ "string.pattern.base": "La categoría es inválida." }),
 });
+
+/**
+ * `GET /admin/inventory/products` — the product-first list `/admin/inventario`
+ * renders. `itemType` is required here (unlike the SKU-level list above)
+ * because the aggregation runs against one catalog collection at a time —
+ * bikes and accessories are two independent collections with two independent
+ * category trees, so there is no single query that spans both.
+ */
+export const inventoryProductListQuerySchema = Joi.object({
+  ...pagination,
+  itemType: itemType.required(),
+  category: objectId.optional().messages({ "string.pattern.base": "La categoría es inválida." }),
+  // A slug, same as every other admin catalog filter — the client never
+  // needs to know a brand's id.
+  brand: Joi.string().trim().max(120).optional(),
+  stock: Joi.string().valid("low", "out").optional().messages({
+    "any.only": 'El filtro de stock debe ser "low" u "out".',
+  }),
+});
+
+/** `GET /admin/inventory/products/:id` needs `itemType` too, since the same id could exist in either catalog. */
+export const inventoryProductQuerySchema = Joi.object({
+  itemType: itemType.required(),
+});
