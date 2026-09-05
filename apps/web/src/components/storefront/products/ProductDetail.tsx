@@ -1,4 +1,4 @@
-import type { CustomerFit, ItemType, PublicAccessory, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
+import type { ItemType, PublicAccessory, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
 import type { PublicColorSwatch } from "@/lib/api/public-catalog";
 import { HomeBikeOfMonth } from "@/components/storefront/bike-of-month/HomeBikeOfMonth";
 import { ProductBreadcrumbs, type ProductBreadcrumb } from "./ProductBreadcrumbs";
@@ -18,8 +18,6 @@ export interface ProductDetailProps {
   sizeGuide?: PublicSizeGuideEntry[];
   /** Categoría → subcategoría → producto, resuelto en la página vía `findCategoryAncestry`. Vacío si el árbol de categorías no cargó. */
   breadcrumbs?: ProductBreadcrumb[];
-  /** El fit guardado del cliente (A4), si tiene sesión — ver `ProductInfoProps.fit`. */
-  fit?: CustomerFit;
 }
 
 /**
@@ -74,7 +72,7 @@ export interface ProductDetailProps {
  * y `ScrollRail` ya traen su propio espaciado interno pensado para ir de
  * extremo a extremo, igual que en el home.
  */
-export function ProductDetail({ product, itemType, colorSwatchIndex, sizeGuide = [], breadcrumbs = [], fit }: ProductDetailProps) {
+export function ProductDetail({ product, itemType, colorSwatchIndex, sizeGuide = [], breadcrumbs = [] }: ProductDetailProps) {
   return (
     <>
       <div className="bg-blanco px-lg pt-md pb-2xl sm:px-[clamp(2rem,8vw,8rem)]">
@@ -85,7 +83,7 @@ export function ProductDetail({ product, itemType, colorSwatchIndex, sizeGuide =
           </div>
 
           <div className="mt-lg lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:sticky lg:top-16 lg:self-start">
-            <ProductInfo product={product} itemType={itemType} colorSwatchIndex={colorSwatchIndex} sizeGuide={sizeGuide} fit={fit} />
+            <ProductInfo product={product} itemType={itemType} colorSwatchIndex={colorSwatchIndex} sizeGuide={sizeGuide} />
           </div>
 
           <div className="lg:col-start-1 lg:row-start-2">

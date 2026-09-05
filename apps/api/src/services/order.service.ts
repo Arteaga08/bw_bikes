@@ -508,6 +508,20 @@ async function createOrderDocument(params: {
         }).exec();
         if (existing) return existing;
       }
+
+      // The one-live-checkout-per-customer guard (order.model.ts's partial
+      // unique index on `{ userId }`, scoped to `pending_payment`): another
+      // request from this same customer won the race for the one live
+      // checkout slot — cancelStalePendingOrders' own find-then-cancel can't
+      // see a sibling request that hasn't written its order yet, so this index
+      // is what actually closes that window. Retrying with a fresh order
+      // number would just collide again — that index has nothing to do with
+      // the number — so this attempt has genuinely lost and must say so
+      // instead of burning every retry on a collision it can't resolve.
+      const keyPattern = (error as { keyPattern?: Record<string, unknown> }).keyPattern;
+      if (keyPattern && "userId" in keyPattern && !("idempotencyKey" in keyPattern)) {
+        throw new AppError("Ya tienes un intento de compra en proceso. Espera un momento y vuelve a intentarlo.", 409);
+      }
       // Otherwise it was the order number; try another one.
     }
   }
@@ -542,6 +556,24 @@ async function failOrder(order: IOrder, reason: string): Promise<void> {
  * resulting `payment_intent.succeeded` webhook would try `cancelled → paid`,
  * a transition the state machine refuses (order-state.ts) — money captured
  * with no order left to receive it.
+ *
+ * This is a find-then-cancel, not an atomic claim: two checkout requests from
+ * the same customer can both run this and both see "nothing stale yet" before
+ * either has written its own order. That race is real, but it no longer
+ * matters — `createOrderDocument`'s insert is guarded by order.model.ts's
+ * partial unique index on `{ userId }` scoped to `pending_payment`, so at most
+ * one of the two ever gets to keep its order; the other's insert fails and
+ * `createFromCart` turns that into a 409. This function only has to handle
+ * the sequential case (a customer abandons and comes back) correctly, which
+ * it does.
+ *
+ * The `continue` below is exactly where that matters: when a payment can't be
+ * cancelled, the stale order is deliberately left in `pending_payment` rather
+ * than closed. Before the unique index existed, the caller would go on to
+ * create a second order anyway, leaving two live holds despite the comment
+ * above saying that must not happen. Now the second `createOrderDocument`
+ * collides on the same index and is refused — the code finally does what the
+ * comment always said it should.
  */
 async function cancelStalePendingOrders(userId: string): Promise<void> {
   const stale = await Order.find({ userId, status: "pending_payment" }).exec();

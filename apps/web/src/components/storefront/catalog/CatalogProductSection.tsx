@@ -1,8 +1,5 @@
-import {
-  buildColorSwatchIndex,
-  getPublicCatalogProducts,
-  getPublicColorSwatches,
-} from "@/lib/api/public-catalog";
+import type { PublicColorSwatch } from "@/lib/api/public-catalog";
+import { getPublicCatalogProducts } from "@/lib/api/public-catalog";
 import { ApiError } from "@/lib/api/error";
 import type { CatalogKind } from "@/lib/storefront-catalog";
 import { serializeFilterState, type CatalogFilterState } from "@/lib/storefront-catalog-filters";
@@ -21,19 +18,25 @@ export interface CatalogProductSectionProps {
   emptyMessage: string;
   /** Forwarded to `CatalogProductGrid` — set when the filter sidebar's results column already owns the page gutter. */
   noGutter?: boolean;
+  /**
+   * Built by the caller from the same `getPublicCatalogFilterOptions` read
+   * it already runs for the filter sidebar (`loadFilterData`), same as
+   * `OfertasProductSection`'s own `colorSwatchIndex` prop — this component
+   * used to fetch swatches itself via a `getPublicColorSwatches` call that,
+   * once that helper got its own lightweight `/colors` endpoint
+   * (M-optimización), stopped being the same request as the sidebar's and
+   * became a second, needless one on every catalog page.
+   */
+  colorSwatchIndex: Map<string, PublicColorSwatch>;
 }
 
 /**
  * The listing half of a catalog page — `CatalogHeader` owns the cover and
- * category rail above it, this owns the grid and pager below. Fetches
- * products and color swatches in parallel: two independent reads, neither
- * blocks the other.
+ * category rail above it, this owns the grid and pager below.
  *
  * Same degrade contract as `CatalogHeader`/`HomeNewProducts`: only `ApiError`
- * is swallowed (a genuine bug still surfaces), and a swatch-fetch failure
- * degrades to `ColorSwatch`'s own placeholder ring rather than losing the
- * products — a catalog without color hex is still a catalog; one without
- * products isn't.
+ * is swallowed (a genuine bug still surfaces) — a catalog without products
+ * isn't a catalog.
  */
 export async function CatalogProductSection({
   catalog,
@@ -43,22 +46,19 @@ export async function CatalogProductSection({
   basePath,
   emptyMessage,
   noGutter,
+  colorSwatchIndex,
 }: CatalogProductSectionProps) {
-  const [productsResult, swatches] = await Promise.all([
-    getPublicCatalogProducts({ catalog, ...(categoryId ? { categoryId } : {}), ...(filters ? { filters } : {}), page }).catch(
-      (error) => {
-        if (!(error instanceof ApiError)) throw error;
-        return { products: [], page: 1, pages: 1, total: 0 };
-      },
-    ),
-    getPublicColorSwatches(catalog).catch((error) => {
-      if (!(error instanceof ApiError)) throw error;
-      return [];
-    }),
-  ]);
+  const productsResult = await getPublicCatalogProducts({
+    catalog,
+    ...(categoryId ? { categoryId } : {}),
+    ...(filters ? { filters } : {}),
+    page,
+  }).catch((error) => {
+    if (!(error instanceof ApiError)) throw error;
+    return { products: [], page: 1, pages: 1, total: 0 };
+  });
 
   const productsWithImage = productsResult.products.filter((product) => product.gallery.length > 0);
-  const colorSwatchIndex = buildColorSwatchIndex(swatches);
   // On a `/[slug]` page `filters.categories` is normally empty — the
   // sidebar hides its own Categoría/Grupo groups there
   // (`CatalogFilterGroups`'s `hideCategoryFilter`), since the route's own

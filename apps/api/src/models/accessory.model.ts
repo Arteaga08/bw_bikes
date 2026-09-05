@@ -101,6 +101,12 @@ accessorySchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
 accessorySchema.index({ category: 1, isActive: 1, price: 1 });
 accessorySchema.index({ isNewArrival: 1, isActive: 1, createdAt: -1 });
 accessorySchema.index({ isCustomerFavorite: 1, isActive: 1, createdAt: -1 });
+// See `bike.model.ts`'s twin indexes: the public catalog's default listing
+// (no category, `PUBLIC_VISIBILITY` filter) and its other two sort options
+// otherwise fall back to a full collection scan.
+accessorySchema.index({ isActive: 1, archivedAt: 1, createdAt: -1 });
+accessorySchema.index({ isActive: 1, archivedAt: 1, price: 1 });
+accessorySchema.index({ isActive: 1, archivedAt: 1, name: 1 });
 // See `bike.model.ts`'s twin index for why this compound-multikey shape is
 // safe: both keys resolve from the same `specGroups.fields` array element.
 accessorySchema.index({ "specGroups.fields.label": 1, "specGroups.fields.value": 1 });

@@ -40,13 +40,16 @@ import { v1Router, webhookRouter } from "./routes/index.js";
 export function buildApp(): Express {
   const app = express();
 
-  // Behind a reverse proxy (Render/Railway) every request otherwise arrives
-  // from the proxy's own IP, so a per-IP limiter (e.g. login 5/15min) would
-  // throttle all users globally instead of individually. Only trusted in
-  // production, where that proxy is real; trusting it in dev/test would let
-  // a spoofed X-Forwarded-For header bypass rate limiting.
-  if (env.isProduction) {
-    app.set("trust proxy", 1);
+  // Decides what `req.ip` and `req.protocol` report behind a reverse proxy,
+  // which is what ends up in the logs. Hop count comes from the environment
+  // because it is a property of the deployment, not of NODE_ENV.
+  //
+  // Rate limiting deliberately does *not* depend on this: `trust proxy`
+  // derives `req.ip` from the client-controlled X-Forwarded-For, so keying
+  // limiters on it made every limit bypassable by rotating a header. They key
+  // on `resolveClientKey` instead — see utils/client-ip.ts.
+  if (env.trustProxyHops > 0) {
+    app.set("trust proxy", env.trustProxyHops);
   }
 
   app.disable("x-powered-by");

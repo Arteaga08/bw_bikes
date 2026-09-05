@@ -20,7 +20,12 @@ const AUTH_ROUTE_PATH = "/api/v1/auth";
 function baseCookieOptions(): CookieOptions {
   return {
     httpOnly: true,
-    secure: env.isProduction,
+    // `env.cookieSecure`, not `env.isProduction`: a staging deploy that
+    // leaves `NODE_ENV` at something other than `production` used to send
+    // session cookies over plain HTTP with no signal that anything had
+    // changed. `COOKIE_SECURE` (config/env.ts) is explicit instead, and
+    // defaults to secure everywhere except `development`.
+    secure: env.cookieSecure,
     sameSite: "strict",
   };
 }

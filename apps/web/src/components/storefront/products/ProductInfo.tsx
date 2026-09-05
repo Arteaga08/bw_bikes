@@ -1,10 +1,11 @@
 "use client";
 
-import type { CustomerFit, ItemType, ProductVariant, PublicAccessory, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
+import type { ItemType, ProductVariant, PublicAccessory, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
+import { useCustomerFit } from "@/hooks/use-customer-fit";
 import { useVariantAvailability } from "@/hooks/use-variant-availability";
 import type { PublicColorSwatch } from "@/lib/api/public-catalog";
 import { recommendSize } from "@/lib/size-recommendation";
@@ -27,8 +28,6 @@ export interface ProductInfoProps {
   colorSwatchIndex: Map<string, PublicColorSwatch>;
   /** Bikes only — see `ProductDetailProps.sizeGuide`. */
   sizeGuide?: PublicSizeGuideEntry[];
-  /** The signed-in customer's saved fit (A4), if any — `undefined` when logged out. Drives the size preselection below. */
-  fit?: CustomerFit;
 }
 
 function normalizeColorKey(value: string): string {
@@ -89,9 +88,15 @@ function findMatchingVariant(
  * carrito para agregar un SKU específico todavía), así que no vive en la
  * URL como los filtros del catálogo.
  */
-export function ProductInfo({ product, itemType, colorSwatchIndex, sizeGuide = [], fit }: ProductInfoProps) {
+export function ProductInfo({ product, itemType, colorSwatchIndex, sizeGuide = [] }: ProductInfoProps) {
   const searchParams = useSearchParams();
   const { isSoldOut } = useVariantAvailability(itemType, [product.id]);
+  // Fetched client-side (M-optimización), not passed from the server: a
+  // `cookies()` read on the PDP page itself was the one thing keeping
+  // `bicicletas/producto/[slug]` off ISR. Only requested when there's a
+  // size guide to recommend against at all — an accessory PDP, or a bike
+  // category with no guide, has no use for it.
+  const fit = useCustomerFit(sizeGuide.length > 0);
 
   const activeVariants = useMemo(() => product.variants.filter((variant) => variant.isActive), [product.variants]);
   const colors = useMemo(() => extractColors(activeVariants), [activeVariants]);
@@ -100,8 +105,7 @@ export function ProductInfo({ product, itemType, colorSwatchIndex, sizeGuide = [
 
   // A return trip from `/ingresar` (`AddToCartButton`'s `?sku=…&agregar=1`
   // round trip) preselects the exact variant the shopper had picked before
-  // being sent to log in, ahead of both the plain default and A4's fit
-  // suggestion below.
+  // being sent to log in.
   const returnedVariant = useMemo(() => {
     const returnedSku = searchParams.get("sku");
     if (!returnedSku) return undefined;
@@ -110,13 +114,14 @@ export function ProductInfo({ product, itemType, colorSwatchIndex, sizeGuide = [
 
   const [selectedColor, setSelectedColor] = useState<string | undefined>(returnedVariant?.color ?? colors[0]);
 
-  // A4-mis-tallas.md: preselects `selectedSize` at mount from the customer's
-  // saved height/ride style, only when the recommended size both exists and
-  // is available under the initially-picked color — never a size the
-  // shopper can't actually buy. `suggestedSize` is kept separately (not
-  // re-derived from `selectedSize` later) so the "Sugerida" note only shows
-  // for as long as the preselection itself is still the active pick.
-  const [suggestedSize] = useState<string | undefined>(() => {
+  // A4-mis-tallas.md: `fit` arrives asynchronously now (see `useCustomerFit`
+  // above), so this can no longer *preselect* a size the way it used to —
+  // that would either show nothing on first paint and then jump to a
+  // selection once the fetch resolves, or (worse) silently overwrite a size
+  // the shopper had already picked manually in that window. Recommending is
+  // now purely informational (the note below), and only ever the customer's
+  // own click sets `selectedSize`.
+  const recommendedSize = useMemo(() => {
     if (!fit?.heightCm || !fit?.rideStyle || sizeGuide.length === 0) return undefined;
     const recommendation = recommendSize(sizeGuide, fit.heightCm, fit.rideStyle);
     if (!recommendation) return undefined;
@@ -124,8 +129,8 @@ export function ProductInfo({ product, itemType, colorSwatchIndex, sizeGuide = [
       (variant) => variant.size === recommendation.primary && (variant.color === undefined || variant.color === colors[0]),
     );
     return isAvailable ? recommendation.primary : undefined;
-  });
-  const [selectedSize, setSelectedSize] = useState<string | undefined>(returnedVariant?.size ?? suggestedSize);
+  }, [fit, sizeGuide, activeVariants, colors]);
+  const [selectedSize, setSelectedSize] = useState<string | undefined>(returnedVariant?.size);
 
   const colorOptions = colors.map((value) => {
     const swatch = colorSwatchIndex.get(normalizeColorKey(value));
@@ -190,8 +195,12 @@ export function ProductInfo({ product, itemType, colorSwatchIndex, sizeGuide = [
             sizeGuide={sizeGuide}
             initialHeightCm={fit?.heightCm}
           />
-          {suggestedSize && selectedSize === suggestedSize ? (
-            <p className="mt-xs font-body text-caption text-grafito">Sugerida según tu perfil · cambiar</p>
+          {/* Informational only (M-optimización) — nothing here ever sets
+              `selectedSize`, so there's no async selection to jump when
+              `fit` resolves a beat after mount. Hides once the shopper's own
+              click lands on the recommended size, the same as before. */}
+          {recommendedSize && selectedSize !== recommendedSize ? (
+            <p className="mt-xs font-body text-caption text-grafito">Tu talla recomendada para esta bici es {recommendedSize}.</p>
           ) : null}
         </div>
       ) : null}

@@ -166,6 +166,19 @@ bikeSchema.index({ category: 1, isActive: 1, price: 1 });
 bikeSchema.index({ isNewArrival: 1, isActive: 1, createdAt: -1 });
 // The home's "Favoritas de los ciclistas" rail: same access pattern, own flag.
 bikeSchema.index({ isCustomerFavorite: 1, isActive: 1, createdAt: -1 });
+// The public catalog's default listing (`/catalog/bikes` with no category —
+// `product.service.ts`'s `list()`/`listAllMatching()`, both scoped by
+// `PUBLIC_VISIBILITY`): without this, `{isActive,archivedAt:null}` matches
+// most of the collection and Mongo falls back to a full collection scan plus
+// an in-memory sort for the default `-createdAt` order. `archivedAt` doesn't
+// appear in any other index even though `PUBLIC_VISIBILITY` applies it to
+// every public query — this is the one that was missing it.
+bikeSchema.index({ isActive: 1, archivedAt: 1, createdAt: -1 });
+// Same query shape, covering the catalog's other two sort options
+// (`SORTABLE_FIELDS`) once no category narrows the scan — "Ordenar por
+// precio"/"nombre" outside a category otherwise has no index to use either.
+bikeSchema.index({ isActive: 1, archivedAt: 1, price: 1 });
+bikeSchema.index({ isActive: 1, archivedAt: 1, name: 1 });
 // The filter sidebar's spec-group facet (`product.service.ts`'s `getFilterOptions`)
 // matches by label then groups by value — both keys resolve from the same
 // `specGroups.fields` array element, so this is the supported "array of

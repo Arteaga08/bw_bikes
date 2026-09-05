@@ -1,6 +1,6 @@
 import type { CustomerFit, PublicBike, PublicSizeGuideEntry } from "@bw-bikes/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicColorSwatch } from "@/lib/api/public-catalog";
 import { ProductInfo } from "./ProductInfo";
 
@@ -20,6 +20,10 @@ vi.mock("@/components/cart/CartProvider", () => ({
 vi.mock("@/hooks/use-variant-availability", () => ({
   useVariantAvailability: () => ({ status: "ready", isSoldOut: () => false }),
 }));
+const { useCustomerFitMock } = vi.hoisted(() => ({
+  useCustomerFitMock: vi.fn<() => import("@bw-bikes/shared").CustomerFit | undefined>(() => undefined),
+}));
+vi.mock("@/hooks/use-customer-fit", () => ({ useCustomerFit: useCustomerFitMock }));
 
 function makeBike(overrides: Partial<PublicBike> = {}): PublicBike {
   return {
@@ -46,6 +50,10 @@ function makeBike(overrides: Partial<PublicBike> = {}): PublicBike {
 const EMPTY_SWATCH_INDEX = new Map<string, PublicColorSwatch>();
 
 describe("ProductInfo", () => {
+  beforeEach(() => {
+    useCustomerFitMock.mockReturnValue(undefined);
+  });
+
   it("shows the base price and no color/size selectors for a single-variant product", () => {
     const bike = makeBike({
       variants: [{ sku: "SKU-1", fulfillmentMode: "in_stock", isActive: true }],
@@ -122,7 +130,7 @@ describe("ProductInfo", () => {
     expect(screen.getByRole("radio", { name: "Rojo" })).toBeInTheDocument();
   });
 
-  describe("size preselection from a saved fit (A4)", () => {
+  describe("size recommendation from a saved fit (A4)", () => {
     const SIZE_GUIDE: PublicSizeGuideEntry[] = [
       { value: "MD", minHeightCm: 160, maxHeightCm: 175 },
       { value: "LG", minHeightCm: 176, maxHeightCm: 190 },
@@ -132,36 +140,56 @@ describe("ProductInfo", () => {
       return makeBike({ variants });
     }
 
-    it("preselects the recommended size and shows the suggestion note when it's available", () => {
+    // `fit` now arrives from `useCustomerFit` — a client-side fetch, not a
+    // server-passed prop (M-optimización) — so it can no longer *preselect*
+    // a radio without risking either a blank-then-jump on first paint or
+    // silently overwriting a size the shopper already clicked while the
+    // fetch was in flight. It's informational only now: never sets
+    // `selectedSize`, only ever shows a note next to the selector.
+    it("never auto-selects a radio, but shows the recommendation note when a fit is available", () => {
+      useCustomerFitMock.mockReturnValue({ heightCm: 170, rideStyle: "balanced", gearSizes: [] } satisfies CustomerFit);
       const bike = makeBikeWithSizes([
         { sku: "SKU-MD", size: "MD", fulfillmentMode: "in_stock", isActive: true },
         { sku: "SKU-LG", size: "LG", fulfillmentMode: "in_stock", isActive: true },
       ]);
-      const fit: CustomerFit = { heightCm: 170, rideStyle: "balanced", gearSizes: [] };
 
-      render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} fit={fit} />);
-
-      expect(screen.getByRole("radio", { name: "MD" })).toHaveAttribute("aria-checked", "true");
-      expect(screen.getByText("Sugerida según tu perfil · cambiar")).toBeInTheDocument();
-    });
-
-    it("does not preselect anything when the recommended size is sold out", () => {
-      const bike = makeBikeWithSizes([{ sku: "SKU-LG", size: "LG", fulfillmentMode: "in_stock", isActive: true }]);
-      const fit: CustomerFit = { heightCm: 170, rideStyle: "balanced", gearSizes: [] };
-
-      render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} fit={fit} />);
+      render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} />);
 
       expect(screen.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
-      expect(screen.queryByText("Sugerida según tu perfil · cambiar")).not.toBeInTheDocument();
+      expect(screen.getByText("Tu talla recomendada para esta bici es MD.")).toBeInTheDocument();
     });
 
-    it("does not preselect anything without a saved fit", () => {
+    it("hides the recommendation note once the shopper picks that exact size themselves", () => {
+      useCustomerFitMock.mockReturnValue({ heightCm: 170, rideStyle: "balanced", gearSizes: [] } satisfies CustomerFit);
+      const bike = makeBikeWithSizes([
+        { sku: "SKU-MD", size: "MD", fulfillmentMode: "in_stock", isActive: true },
+        { sku: "SKU-LG", size: "LG", fulfillmentMode: "in_stock", isActive: true },
+      ]);
+
+      render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} />);
+      fireEvent.click(screen.getByRole("radio", { name: "MD" }));
+
+      expect(screen.queryByText("Tu talla recomendada para esta bici es MD.")).not.toBeInTheDocument();
+    });
+
+    it("shows no recommendation when the recommended size is sold out", () => {
+      useCustomerFitMock.mockReturnValue({ heightCm: 170, rideStyle: "balanced", gearSizes: [] } satisfies CustomerFit);
+      const bike = makeBikeWithSizes([{ sku: "SKU-LG", size: "LG", fulfillmentMode: "in_stock", isActive: true }]);
+
+      render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} />);
+
+      expect(screen.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Tu talla recomendada/)).not.toBeInTheDocument();
+    });
+
+    it("shows no recommendation without a saved fit", () => {
+      useCustomerFitMock.mockReturnValue(undefined);
       const bike = makeBikeWithSizes([{ sku: "SKU-MD", size: "MD", fulfillmentMode: "in_stock", isActive: true }]);
 
       render(<ProductInfo product={bike} itemType="bike" colorSwatchIndex={EMPTY_SWATCH_INDEX} sizeGuide={SIZE_GUIDE} />);
 
       expect(screen.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
-      expect(screen.queryByText("Sugerida según tu perfil · cambiar")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Tu talla recomendada/)).not.toBeInTheDocument();
     });
   });
 });

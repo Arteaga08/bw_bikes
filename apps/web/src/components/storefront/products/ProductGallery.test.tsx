@@ -1,7 +1,13 @@
 import type { ProductImage } from "@bw-bikes/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProductGallery } from "./ProductGallery";
+
+// `ProductGalleryLightbox` is code-split (`next/dynamic`) — same warmup
+// reasoning as `MobileMenu.test.tsx`.
+beforeAll(async () => {
+  await import("./ProductGalleryLightbox");
+});
 
 function image(order: number): ProductImage {
   return { publicId: `img-${order}`, url: `https://res.cloudinary.com/demo/image/upload/img-${order}.jpg`, width: 800, height: 800, order };
@@ -125,14 +131,16 @@ describe("ProductGallery", () => {
     expect(tileAt(3)).not.toHaveClass("lg:col-span-2");
   });
 
-  it("opens the lightbox at the clicked photo's index in the full sorted list", () => {
+  it("opens the lightbox at the clicked photo's index in the full sorted list", async () => {
     render(<ProductGallery images={images(6)} productName="Bici" />);
 
     // La 5ª foto: fuera del bento colapsado, pero siempre alcanzable desde el
     // carrusel — el lightbox debe abrirse en ella, no en la primera.
     fireEvent.click(tileAt(4));
 
-    const dialog = screen.getByRole("dialog");
+    // `ProductGalleryLightbox` is code-split (`next/dynamic`, M-optimización)
+    // and only mounts once a tile is clicked, so `findBy` waits for its chunk.
+    const dialog = await screen.findByRole("dialog", {}, { timeout: 3000 });
     expect(dialog).toBeInTheDocument();
     expect(screen.getByText("5 / 6")).toBeInTheDocument();
   });

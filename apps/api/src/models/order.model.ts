@@ -287,6 +287,25 @@ orderSchema.index(
   { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } },
 );
 
+// One live checkout per customer, enforced where it actually holds under
+// concurrency.
+//
+// `createFromCart` (order.service.ts) calls `cancelStalePendingOrders` before
+// creating a new order, but that call is read-then-act: it finds existing
+// `pending_payment` orders and cancels them, which is a real gap when two
+// checkout requests from the same customer run at once — both read "nothing
+// to cancel yet" before either has written its own order, and both proceed.
+// This partial unique index is the actual guarantee: only one `pending_payment`
+// order per `userId` can exist at the database level, so the loser of that
+// race collides on insert and is turned into a 409 instead of a second live
+// hold. Partial (not full-column-unique) because a customer accumulates many
+// orders over time in every other status — this only ever needs to reject a
+// *second concurrent* `pending_payment` one.
+orderSchema.index(
+  { userId: 1 },
+  { unique: true, partialFilterExpression: { status: "pending_payment" } },
+);
+
 // The webhook's only lookup: from a provider payment id to the order it belongs
 // to. Unique so one payment can never be claimed by two orders — the single
 // index that makes `findByIntentId` a safe basis for moving money. Partial for

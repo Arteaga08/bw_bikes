@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { HomeBikeOfMonth } from "@/components/storefront/bike-of-month/HomeBikeOfMonth";
 import { HomeBranchCtas } from "@/components/storefront/branch/HomeBranchCtas";
 import { HomeBrands } from "@/components/storefront/brands/HomeBrands";
@@ -29,19 +30,43 @@ import { HomeNewProducts } from "@/components/storefront/products/HomeNewProduct
  * chrome shared by every route, not a home-only section. That was the last
  * section on the list; the home is no longer "under construction" past this
  * point.
+ *
+ * `HomeHero`/`HomeCategories` (the first fold) are left unwrapped on
+ * purpose: without any `<Suspense>` boundary at all, Next holds the entire
+ * response until every fetch on the page resolves, so wrapping *everything*
+ * would only mean the two above-the-fold sections wait on the slowest
+ * below-the-fold one for no reason. Every section from `HomeBrands` down —
+ * each with its own independent fetch — streams in behind its own boundary
+ * once ready, instead of holding up the two the visitor sees first
+ * (M-optimización). `HomeBranchCtas` stays outside `Suspense` too: it fetches
+ * nothing (its links are static), so there's nothing there to stream.
  */
 export default function HomePage() {
   return (
     <>
       <HomeHero />
       <HomeCategories />
-      <HomeBrands />
-      <HomeNewProducts />
-      <HomeCategoryCtas />
-      <HomeBikeOfMonth />
-      <HomeFavoriteProducts />
-      <HomeComparatorBanner />
-      <HomeBestSellingAccessories />
+      <Suspense fallback={null}>
+        <HomeBrands />
+      </Suspense>
+      <Suspense fallback={null}>
+        <HomeNewProducts />
+      </Suspense>
+      <Suspense fallback={null}>
+        <HomeCategoryCtas />
+      </Suspense>
+      <Suspense fallback={null}>
+        <HomeBikeOfMonth />
+      </Suspense>
+      <Suspense fallback={null}>
+        <HomeFavoriteProducts />
+      </Suspense>
+      <Suspense fallback={null}>
+        <HomeComparatorBanner />
+      </Suspense>
+      <Suspense fallback={null}>
+        <HomeBestSellingAccessories />
+      </Suspense>
       <HomeBranchCtas />
     </>
   );

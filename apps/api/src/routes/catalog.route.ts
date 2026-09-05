@@ -1,10 +1,12 @@
 import { Router } from "express";
 import {
+  getAccessoryColorSwatches,
   getAccessoryFilterOptions,
   getPublicAccessoryBySlug,
   listPublicAccessories,
 } from "../controllers/accessory.controller.js";
 import {
+  getBikeColorSwatches,
   getBikeFilterOptions,
   getBikeSizeGuide,
   getPublicBikeBySlug,
@@ -82,6 +84,8 @@ router.get("/bikes", validate(publicProductListQuerySchema, "query"), listPublic
 // mistake `getPublicBikeCategoryTree`'s doc comment already warns about for
 // the missing `/catalog` prefix).
 router.get("/bikes/filter-options", getBikeFilterOptions);
+// Same `:slug`-collision reasoning as `filter-options` above.
+router.get("/bikes/colors", getBikeColorSwatches);
 // Same reasoning, and same fix — not nested under `/bikes` at all, so there's
 // no `:slug` to collide with regardless, but it lives here with its sibling
 // bike-scoped reads rather than at the bottom of the file.
@@ -90,6 +94,8 @@ router.get("/bikes/:slug", validate(slugParamSchema, "params"), getPublicBikeByS
 
 router.get("/accessories", validate(publicProductListQuerySchema, "query"), listPublicAccessories);
 router.get("/accessories/filter-options", getAccessoryFilterOptions);
+// Same `:slug`-collision reasoning as `filter-options` above.
+router.get("/accessories/colors", getAccessoryColorSwatches);
 router.get("/accessories/:slug", validate(slugParamSchema, "params"), getPublicAccessoryBySlug);
 
 // The storefront's "Ofertas" listing — bikes and accessories merged into one

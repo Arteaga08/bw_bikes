@@ -1,5 +1,6 @@
 export * from "./app-error.js";
 export * from "./async-handler.js";
+export * from "./client-ip.js";
 export * from "./cookies.js";
 export * from "./crypto.js";
 export * from "./duration.js";

@@ -368,6 +368,38 @@ describe("checkout", () => {
     expect(staleOrder?.status).toBe("pending_payment");
   });
 
+  it("lets only one of two simultaneous checkout attempts by the same customer create a pending order", async () => {
+    // "One live checkout per customer" (order.service.ts's createFromCart) is
+    // enforced by cancelStalePendingOrders, which reads existing orders before
+    // deciding to cancel them. Two requests racing through it both read "no
+    // stale order yet" and both proceed — this pins the fix: a partial unique
+    // index on {userId, pending_payment} is what actually closes the window.
+    stubStripe();
+    await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
+
+    const [a, b] = await Promise.all([
+      request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() }),
+      request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() }),
+    ]);
+
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([201, 409]);
+    expect(await Order.countDocuments({ status: "pending_payment" })).toBe(1);
+  });
+
+  it("still lets an abandoned checkout be followed by a new one, sequentially", async () => {
+    stubStripe();
+    await addToCart(app, cookie, { itemType: "bike", itemId: bike.itemId, sku: bike.sku });
+
+    const first = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
+    const second = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect((await Order.findById(first.body.data.order.id).exec())?.status).toBe("cancelled");
+    expect(await Order.countDocuments({ status: "pending_payment" })).toBe(1);
+  });
+
   it("refuses an empty cart", async () => {
     stubStripe();
     const res = await request(app).post(ORDERS).set("Cookie", cookie).send({ termsAcceptedAt: new Date().toISOString() });

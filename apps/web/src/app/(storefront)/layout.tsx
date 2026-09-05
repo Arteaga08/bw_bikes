@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import { Navbar } from "@/components/storefront/Navbar";
 import { WishlistProvider } from "@/components/storefront/WishlistProvider";
 import { ComparisonProvider } from "@/components/storefront/comparison/ComparisonProvider";
-import { ComparisonTray } from "@/components/storefront/comparison/ComparisonTray";
+import { ComparisonTrayMount } from "@/components/storefront/comparison/ComparisonTrayMount";
 import { Footer } from "@/components/storefront/footer/Footer";
-import { CartDrawer } from "@/components/cart/CartDrawer";
+import { CartDrawerMount } from "@/components/cart/CartDrawerMount";
 import { CartProvider } from "@/components/cart/CartProvider";
 import { SkipLink } from "@/components/shell/SkipLink";
 import { ToastProvider } from "@/components/ui/Toast";
@@ -67,8 +67,8 @@ export default async function StorefrontLayout({ children }: { children: ReactNo
               {children}
             </main>
             <Footer />
-            <CartDrawer cloudName={cloudinaryCloudName()} />
-            <ComparisonTray />
+            <CartDrawerMount cloudName={cloudinaryCloudName()} />
+            <ComparisonTrayMount />
           </ComparisonProvider>
         </WishlistProvider>
       </CartProvider>

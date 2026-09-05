@@ -10,6 +10,7 @@ import { CatalogSortMenu } from "@/components/storefront/catalog/CatalogSortMenu
 import { HomeNewProducts } from "@/components/storefront/products/HomeNewProducts";
 import { ApiError } from "@/lib/api/error";
 import {
+  buildColorSwatchIndex,
   findCategoryInTree,
   getPublicBikeCategoryTree,
   getPublicCatalogFilterOptions,
@@ -70,14 +71,16 @@ export async function generateMetadata({ params }: BicicletaCategoriaPageProps):
 
 export default async function BicicletaCategoriaPage({ params, searchParams }: BicicletaCategoriaPageProps) {
   const [{ slug }, rawSearchParams] = await Promise.all([params, searchParams]);
-  const category = await findCategoryNode(slug);
+
+  // `findCategoryNode` and `loadFilterData` both read the same tree
+  // (deduped by Next's fetch memoization either way) but neither depends on
+  // the other's result — they used to run one after the other for no reason.
+  const [category, { categoryTree, options }] = await Promise.all([findCategoryNode(slug), loadFilterData()]);
   if (!category) notFound();
 
   const filters = parseFilterStateFromSearchParams(rawSearchParams);
   const pageParam = rawSearchParams["page"];
   const page = Number(Array.isArray(pageParam) ? pageParam[0] : pageParam) || 1;
-
-  const { categoryTree, options } = await loadFilterData();
 
   return (
     <>
@@ -103,6 +106,7 @@ export default async function BicicletaCategoriaPage({ params, searchParams }: B
             basePath={`/bicicletas/${slug}`}
             emptyMessage="No hay bicicletas disponibles en esta categoría todavía."
             noGutter
+            colorSwatchIndex={buildColorSwatchIndex(options.colors)}
           />
         </div>
       </div>

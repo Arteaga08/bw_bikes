@@ -51,6 +51,10 @@ export default defineConfig({
       CLIENT_URL: "http://localhost:3000",
       JWT_ACCESS_EXPIRES_IN: "15m",
       JWT_REFRESH_EXPIRES_IN: "30d",
+      // Exercised for real by tests/rate-limit-key.test.ts: the suite sends
+      // this token to assert the trusted-proxy path, and a wrong one to
+      // assert the fallback.
+      PROXY_SHARED_SECRET: "test-proxy-shared-secret-fixture-at-least-32-chars",
       // Inert Cloudinary fixtures: env.ts requires them, and config/cloudinary.ts
       // hands them to the SDK, but no test ever lets a request reach the network
       // — tests/helpers/cloudinary.ts stubs the uploader, and the magic-bytes

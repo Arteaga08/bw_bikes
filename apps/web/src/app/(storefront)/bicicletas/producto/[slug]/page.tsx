@@ -1,9 +1,7 @@
-import type { AccountDTO, CustomerFit, PublicBike } from "@bw-bikes/shared";
+import type { PublicBike } from "@bw-bikes/shared";
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ProductDetail } from "@/components/storefront/products/ProductDetail";
-import { serverApiFetch } from "@/lib/api/server";
 import { ApiError } from "@/lib/api/error";
 import {
   buildColorSwatchIndex,
@@ -13,7 +11,6 @@ import {
   getPublicBikeSizeGuide,
   getPublicColorSwatches,
 } from "@/lib/api/public-catalog";
-import { ACCESS_TOKEN_COOKIE } from "@/lib/config";
 
 interface BicicletaProductoPageProps {
   params: Promise<{ slug: string }>;
@@ -23,28 +20,6 @@ interface BicicletaProductoPageProps {
 async function loadBike(slug: string): Promise<PublicBike | undefined> {
   try {
     return await getPublicBikeBySlug(slug);
-  } catch (error) {
-    if (!(error instanceof ApiError)) throw error;
-    return undefined;
-  }
-}
-
-/**
- * The signed-in customer's saved fit (A4), for the size preselection below.
- * No session cookie at all → skip the call entirely (the common case, an
- * anonymous visitor). A cookie present but rejected by the API degrades to
- * `undefined` the same way the size guide/category tree already do — a
- * stale or expired cookie on the storefront just means no preselection, not
- * a broken PDP.
- */
-async function loadCustomerFit(): Promise<CustomerFit | undefined> {
-  const cookieStore = await cookies();
-  if (!cookieStore.get(ACCESS_TOKEN_COOKIE)) return undefined;
-  try {
-    const { data } = await serverApiFetch<{ account: AccountDTO }>("/account", undefined, {
-      unauthorizedRedirectPath: null,
-    });
-    return data.account.fit;
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;
     return undefined;
@@ -64,7 +39,14 @@ export async function generateMetadata({ params }: BicicletaProductoPageProps): 
 
 export default async function BicicletaProductoPage({ params }: BicicletaProductoPageProps) {
   const { slug } = await params;
-  const [bike, bikeColorSwatches, accessoryColorSwatches, fit] = await Promise.all([
+  // `getPublicBikeCategoryTree` doesn't depend on `bike` at all — it used to
+  // wait for a second `Promise.all` below (alongside `getPublicBikeSizeGuide`,
+  // which genuinely does need `bike.category.id`) for no reason. Customer
+  // fit (A4) no longer lives here either — `ProductInfo` fetches it
+  // client-side (M-optimización) via `useCustomerFit`, which is what makes
+  // this page cacheable now: the `cookies()` read was the one uncached fetch
+  // in the whole public catalog.
+  const [bike, bikeColorSwatches, accessoryColorSwatches, categoryTree] = await Promise.all([
     loadBike(slug),
     getPublicColorSwatches("bike").catch((error: unknown) => {
       if (!(error instanceof ApiError)) throw error;
@@ -78,7 +60,10 @@ export default async function BicicletaProductoPage({ params }: BicicletaProduct
       if (!(error instanceof ApiError)) throw error;
       return [];
     }),
-    loadCustomerFit(),
+    getPublicBikeCategoryTree().catch((error: unknown) => {
+      if (!(error instanceof ApiError)) throw error;
+      return [];
+    }),
   ]);
   if (!bike) notFound();
 
@@ -87,16 +72,10 @@ export default async function BicicletaProductoPage({ params }: BicicletaProduct
   // `[]` the same way the color-swatch reads do: a size guide that fails to
   // load just means the "¿Cuál es mi talla?"/"Guía de tallas" links don't
   // render, not a broken PDP.
-  const [sizeGuide, categoryTree] = await Promise.all([
-    getPublicBikeSizeGuide(bike.category.id).catch((error: unknown) => {
-      if (!(error instanceof ApiError)) throw error;
-      return [];
-    }),
-    getPublicBikeCategoryTree().catch((error: unknown) => {
-      if (!(error instanceof ApiError)) throw error;
-      return [];
-    }),
-  ]);
+  const sizeGuide = await getPublicBikeSizeGuide(bike.category.id).catch((error: unknown) => {
+    if (!(error instanceof ApiError)) throw error;
+    return [];
+  });
   const breadcrumbs = [
     ...findCategoryAncestry(categoryTree, bike.category.id).map((category) => ({
       label: category.name,
@@ -112,7 +91,6 @@ export default async function BicicletaProductoPage({ params }: BicicletaProduct
       colorSwatchIndex={buildColorSwatchIndex([...bikeColorSwatches, ...accessoryColorSwatches])}
       sizeGuide={sizeGuide}
       breadcrumbs={breadcrumbs}
-      fit={fit}
     />
   );
 }

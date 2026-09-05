@@ -171,6 +171,7 @@ describe("Coupons — admin CRUD", () => {
       couponId: id,
       userId: "000000000000000000000001",
       orderId: "000000000000000000000002",
+      slot: 0,
       code: "BUENFIN20",
       discountCents: 10_000,
     });

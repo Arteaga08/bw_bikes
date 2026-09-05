@@ -7,6 +7,18 @@ import { AppError } from "../utils/app-error.js";
 import { generateToken, hashToken } from "../utils/crypto.js";
 import { parseDurationMs } from "../utils/duration.js";
 
+/**
+ * Pinned explicitly on every `jwt.verify` call below. `jsonwebtoken@9` with a
+ * string secret already restricts itself to an HMAC algorithm and rejects
+ * `alg: none`, so this isn't closing a live hole today — but leaving
+ * `algorithms` unset means that safety is incidental, riding on the current
+ * library version and the secret happening to be a plain string rather than
+ * an explicit contract. A key-type change (e.g. introducing an RSA/EC key
+ * elsewhere in the codebase and a verify call accidentally reusing it) is
+ * exactly the scenario this class of bug — algorithm confusion — comes from.
+ */
+const JWT_ALGORITHM = "HS256";
+
 // ---------------------------------------------------------------------------
 // Access token (short-lived JWT, cookie-carried, never persisted server-side)
 // ---------------------------------------------------------------------------
@@ -31,7 +43,7 @@ export function signAccessToken(user: { id: string; role: UserRole }): string {
  * presented here instead).
  */
 export function verifyAccessToken(token: string): AccessTokenPayload {
-  const decoded = jwt.verify(token, env.jwtSecret);
+  const decoded = jwt.verify(token, env.jwtSecret, { algorithms: [JWT_ALGORITHM] });
   if (typeof decoded === "string" || decoded["purpose"] !== "access" || typeof decoded["sub"] !== "string") {
     throw new AppError("Sesión inválida o expirada.", 401);
   }
@@ -51,7 +63,7 @@ export function signChallengeToken(userId: string, purpose: ChallengePurpose): s
 }
 
 export function verifyChallengeToken(token: string, expectedPurpose: ChallengePurpose): { userId: string } {
-  const decoded = jwt.verify(token, env.jwtSecret);
+  const decoded = jwt.verify(token, env.jwtSecret, { algorithms: [JWT_ALGORITHM] });
   if (typeof decoded === "string" || decoded["purpose"] !== expectedPurpose || typeof decoded["sub"] !== "string") {
     throw new AppError("Sesión de verificación inválida o expirada.", 401);
   }

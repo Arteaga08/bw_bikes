@@ -1,4 +1,5 @@
 import cors, { type CorsOptions } from "cors";
+import { AppError } from "../utils/index.js";
 import { allowedOrigins } from "./allowed-origins.js";
 
 /**
@@ -15,7 +16,12 @@ const corsOptions: CorsOptions = {
       callback(null, true);
       return;
     }
-    callback(new Error(`Origin not allowed by CORS: ${origin}`));
+    // An `AppError` here, not a plain `Error`: the global error handler's
+    // `normalize()` only recognizes `AppError` as operational — a bare
+    // `Error` fell through to its 500 branch, so every disallowed origin
+    // both answered the wrong status *and* triggered `logger.error` for what
+    // is really just a routine, expected rejection.
+    callback(new AppError("Origen no permitido.", 403));
   },
   credentials: true,
 };

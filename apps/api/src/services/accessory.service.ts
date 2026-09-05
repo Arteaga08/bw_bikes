@@ -39,12 +39,19 @@ export interface AccessoryInput {
   isCustomerFavorite?: boolean;
 }
 
-/** Storefront DTO — same contract as `toPublicBike`, minus the bike-only fields. */
+/**
+ * Storefront DTO — same contract as `toPublicBike`, minus the bike-only
+ * fields. Same `instanceof Types.ObjectId` reasoning as `toPublicBike`'s own
+ * doc comment: `.populated(path)` doesn't exist on the plain objects
+ * `product.service.ts`'s `.lean()` queries return, so this checks structure
+ * instead — safe for hydrated documents too, since an unpopulated ref is
+ * always an ObjectId either way.
+ */
 export function toPublicAccessory(accessory: IAccessory): PublicAccessory {
-  const category = accessory.populated("category")
+  const category = !(accessory.category instanceof Types.ObjectId)
     ? toPublicCategory(accessory.category as unknown as Parameters<typeof toPublicCategory>[0])
     : undefined;
-  const brand = accessory.populated("brand")
+  const brand = !(accessory.brand instanceof Types.ObjectId)
     ? toPublicBrand(accessory.brand as unknown as Parameters<typeof toPublicBrand>[0])
     : undefined;
 
@@ -55,7 +62,7 @@ export function toPublicAccessory(accessory: IAccessory): PublicAccessory {
     ...(accessory.modelName ? { model: accessory.modelName } : {}),
     brand: brand ?? { id: String(accessory.brand), name: "", slug: "", order: 0 },
     category: category ?? { id: String(accessory.category), name: "", slug: "", parent: null, order: 0, usesSizes: false },
-    badges: accessory.populated("badges")
+    badges: accessory.badges.length === 0 || !(accessory.badges[0] instanceof Types.ObjectId)
       ? (accessory.badges as unknown as Parameters<typeof toPublicBadge>[0][]).map(toPublicBadge)
       : [],
     description: accessory.description,

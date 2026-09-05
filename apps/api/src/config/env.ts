@@ -110,8 +110,23 @@ const ADMIN_ALERT_EMAIL_REQUIRED_VARS = ["ADMIN_ALERT_EMAIL"] as const;
  */
 const RESEND_REQUIRED_VARS = ["RESEND_API_KEY", "MAIL_FROM"] as const;
 
+/**
+ * Shared secret proving a request reached the API through the storefront
+ * proxy rather than straight off the internet, so `resolveClientKey`
+ * (utils/client-ip.ts) knows when the forwarded client IP can be believed.
+ * Without it every rate limiter falls back to the socket address — still
+ * safe, but customers behind the proxy would all share one bucket, so
+ * production must not boot without it.
+ */
+const PROXY_REQUIRED_VARS = ["PROXY_SHARED_SECRET"] as const;
+
 /** Every variable that must be present to boot in production. */
-const PRODUCTION_REQUIRED_VARS = [...CLOUDINARY_REQUIRED_VARS, ...STRIPE_REQUIRED_VARS, ...RESEND_REQUIRED_VARS] as const;
+const PRODUCTION_REQUIRED_VARS = [
+  ...CLOUDINARY_REQUIRED_VARS,
+  ...STRIPE_REQUIRED_VARS,
+  ...RESEND_REQUIRED_VARS,
+  ...PROXY_REQUIRED_VARS,
+] as const;
 
 type NodeEnv = "development" | "production" | "test";
 
@@ -203,6 +218,48 @@ function parsePositiveInt(name: string, fallback: number): number {
  */
 const DEFAULT_STRIPE_WEBHOOK_TOLERANCE_SECONDS = 300;
 
+/**
+ * How many reverse-proxy hops sit in front of the API, for Express's
+ * `trust proxy`. Zero disables it entirely.
+ *
+ * This no longer guards rate limiting — `resolveClientKey`
+ * (utils/client-ip.ts) deliberately ignores `X-Forwarded-For` regardless of
+ * this setting — but it still decides what `req.ip` and `req.protocol` report,
+ * which is what lands in the logs. It is configurable because the correct hop
+ * count is a property of the deployment, not of `NODE_ENV`: a value that is
+ * right behind one CDN is wrong behind two.
+ */
+/**
+ * Explicit override for the `Secure` flag on every cookie this API sets
+ * (utils/cookies.ts). Tied to an env var rather than to `nodeEnv` directly
+ * for the same reason `TRUST_PROXY_HOPS` is: a deploy can set `NODE_ENV` to
+ * something other than `production` (a staging box, a misconfigured host)
+ * and cookies would silently start traveling over plain HTTP with no signal
+ * that anything changed. An explicit `false` is still how local HTTP
+ * development opts out.
+ */
+function parseBoolean(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+
+  fail(`${name} must be "true" or "false" (got "${raw}")`);
+}
+
+function parseNonNegativeInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    fail(`${name} must be a non-negative integer (got "${raw}")`);
+  }
+  return parsed;
+}
+
 function buildEnv() {
   assertPresent();
 
@@ -226,9 +283,17 @@ function buildEnv() {
   const isTelegramConfigured = TELEGRAM_REQUIRED_VARS.every(isSet);
   const adminAlertEmail = process.env["ADMIN_ALERT_EMAIL"] ?? "";
   const isAdminAlertEmailConfigured = ADMIN_ALERT_EMAIL_REQUIRED_VARS.every(isSet);
+  const proxySharedSecret = process.env["PROXY_SHARED_SECRET"] ?? "";
   const resendApiKey = process.env["RESEND_API_KEY"] ?? "";
   const mailFrom = process.env["MAIL_FROM"] ?? "";
   const isResendConfigured = RESEND_REQUIRED_VARS.every(isSet);
+  const trustProxyHops = parseNonNegativeInt("TRUST_PROXY_HOPS", nodeEnv === "production" ? 1 : 0);
+  const cookieSecure = parseBoolean("COOKIE_SECURE", nodeEnv !== "development");
+  // Same reasoning as `cookieSecure`: rate limiting used to no-op whenever
+  // `nodeEnv === "development"` specifically, so a staging box left off
+  // `production` would silently run with no throttling at all. Explicit
+  // instead, defaulting to enabled everywhere except local development.
+  const rateLimitEnabled = parseBoolean("RATE_LIMIT_ENABLED", nodeEnv !== "development");
   const stripeWebhookToleranceSeconds = parsePositiveInt(
     "STRIPE_WEBHOOK_TOLERANCE_SECONDS",
     DEFAULT_STRIPE_WEBHOOK_TOLERANCE_SECONDS,
@@ -236,6 +301,11 @@ function buildEnv() {
 
   assertMinLength("JWT_SECRET", jwtSecret, MIN_SECRET_LENGTH);
   assertMinLength("ENCRYPTION_KEY", encryptionKey, MIN_SECRET_LENGTH);
+  // Optional outside production (see PROXY_REQUIRED_VARS), but a short one is
+  // worse than none: it reads as configured while being guessable.
+  if (proxySharedSecret !== "") {
+    assertMinLength("PROXY_SHARED_SECRET", proxySharedSecret, MIN_SECRET_LENGTH);
+  }
 
   if (nodeEnv === "production") {
     if (!clientUrl.startsWith("https://")) {
@@ -315,6 +385,10 @@ function buildEnv() {
     resendApiKey,
     mailFrom,
     isResendConfigured,
+    proxySharedSecret,
+    trustProxyHops,
+    cookieSecure,
+    rateLimitEnabled,
     isProduction: nodeEnv === "production",
     isTest: nodeEnv === "test",
   });

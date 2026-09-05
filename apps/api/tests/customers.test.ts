@@ -184,6 +184,7 @@ describe("Customers — admin registry", () => {
       couponId: new Types.ObjectId(),
       userId,
       orderId: order._id,
+      slot: 0,
       code: "PRUEBA10",
       discountCents: 5_000_00,
     });

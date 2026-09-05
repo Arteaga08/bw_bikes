@@ -386,17 +386,22 @@ export async function getPublicAccessoryBySlug(slug: string): Promise<PublicAcce
 }
 
 /**
- * A color's name and hex, as `CatalogProductCard` needs it for a swatch —
- * the same `getPublicCatalogFilterOptions` read the filter sidebar uses,
- * projected down to just `.colors`. Next's request memoization dedupes the
- * identical `fetch` when both run for the same catalog within one render
- * pass, so a page using both isn't paying for it twice.
+ * A color's name and hex, as `CatalogProductCard` needs it for a swatch.
+ * `/catalog/{bikes,accessories}/colors` — its own endpoint (M-optimización),
+ * not `getPublicCatalogFilterOptions` projected down to `.colors`: the
+ * catalog listing pages already fetch filter-options for their sidebar and
+ * get this for free via Next's request memoization, but the PDP and
+ * `/comparar` show no sidebar at all and were paying for the brand/size/
+ * price/spec-group facets on every request just to throw them away.
  */
 export type PublicColorSwatch = PublicCatalogFilterOptions["colors"][number];
 
 export async function getPublicColorSwatches(catalog: CatalogKind): Promise<PublicColorSwatch[]> {
-  const options = await getPublicCatalogFilterOptions(catalog);
-  return options.colors;
+  const endpoint = CATALOG_ENDPOINT[catalog];
+  const res = await publicApiFetch<{ colors: PublicColorSwatch[] }>(`/catalog/${endpoint}/colors`, {
+    revalidateSeconds: 300,
+  });
+  return res.data.colors;
 }
 
 /**

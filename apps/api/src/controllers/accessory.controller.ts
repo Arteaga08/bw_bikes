@@ -17,6 +17,12 @@ export const getAccessoryFilterOptions = asyncHandler(async (_req: Request, res:
   sendResponse(res, 200, "Opciones de filtro obtenidas.", options);
 });
 
+/** Same reasoning as `bike.controller.ts`'s twin — just the colors, no filter sidebar's worth of other facets. */
+export const getAccessoryColorSwatches = asyncHandler(async (_req: Request, res: Response) => {
+  const colors = await accessoryService.getColorSwatches();
+  sendResponse(res, 200, "Colores obtenidos.", { colors });
+});
+
 export const getPublicAccessoryBySlug = asyncHandler(async (req: Request, res: Response) => {
   const accessory = await accessoryService.getBySlug(routeParam(req, "slug"), { publicOnly: true });
   sendResponse(res, 200, "Accesorio obtenido.", { accessory: toPublicAccessory(accessory) });

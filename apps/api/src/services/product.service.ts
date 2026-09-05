@@ -6,7 +6,7 @@ import type {
   PublicCatalogFilterOptions,
   SpecGroup,
 } from "@bw-bikes/shared";
-import type { Document, Model, Types } from "mongoose";
+import type { Document, Model, PopulateOptions, Types } from "mongoose";
 import { Types as MongooseTypes } from "mongoose";
 import type { ICategory } from "../models/index.js";
 import { Badge, Brand, ColorTemplate, InventoryItem, MAX_GALLERY_IMAGES, SpecTemplate } from "../models/index.js";
@@ -326,15 +326,25 @@ export function createProductService<TDoc extends ProductDocument>(
       ];
     }
 
+    // `list()` backs both the admin table (`toAdminBike`/`toAdminAccessory`,
+    // which reads `.populated(path)` — a hydrated-Document-only method) and
+    // the public storefront grid (`toPublicBike`/`toPublicAccessory`, which
+    // no longer needs it — see those functions' own doc comments). `.lean()`
+    // skips building a full Mongoose document for every row, which matters
+    // here: this query backs every catalog page, every home rail and every
+    // search keystroke. Scoped to `publicOnly` so the admin path keeps
+    // getting real documents.
+    const productQuery = Product.find(filter)
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .populate("category")
+      .populate("brand")
+      .populate(badgesPopulateOption(scope.publicOnly));
+    if (scope.publicOnly) productQuery.lean();
+
     const [documents, total] = await Promise.all([
-      Product.find(filter)
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .populate("category")
-        .populate("brand")
-        .populate(badgesPopulateOption(scope.publicOnly))
-        .exec(),
+      productQuery.exec() as unknown as Promise<TDoc[]>,
       Product.countDocuments(filter).exec(),
     ]);
 
@@ -364,13 +374,63 @@ export function createProductService<TDoc extends ProductDocument>(
     });
     const filter = await buildFilter(query, scope);
 
-    return Product.find(filter)
+    // Same `.lean()`/`toPublicX` reasoning as `list()` above — the only
+    // caller today (`on-sale.service.ts`) always passes `publicOnly: true`,
+    // and it's the worse offender of the two: up to `ON_SALE_FETCH_CAP`
+    // full documents per catalog, most of which get discarded after the
+    // in-memory merge.
+    const productQuery = Product.find(filter)
       .sort(sort)
       .limit(cap)
       .populate("category")
       .populate("brand")
-      .populate(badgesPopulateOption(scope.publicOnly))
-      .exec();
+      .populate(badgesPopulateOption(scope.publicOnly));
+    if (scope.publicOnly) productQuery.lean();
+
+    return productQuery.exec() as unknown as Promise<TDoc[]>;
+  }
+
+  /**
+   * Resolves a distinct-color tally (from either `getFilterOptions`'s own
+   * `$facet` or `getColorSwatches`'s standalone aggregation below) against
+   * `ColorTemplate` for hex codes — the one piece of work both call sites
+   * share, factored out so it's written once.
+   */
+  async function resolveColorSwatches(
+    distinctColors: Array<{ _id: string; count: number }>,
+  ): Promise<PublicCatalogFilterOptions["colors"]> {
+    // Fetched in bulk (bounded by `MAX_COLOR_TEMPLATES`) rather than one
+    // query per color value — cheap either way, but this keeps it to one
+    // round trip regardless of how many distinct colors the catalog has.
+    const colorDocs =
+      distinctColors.length > 0 ? await ColorTemplate.find().select("value hex secondaryHex").lean().exec() : [];
+    const colorByKey = new Map(colorDocs.map((doc) => [doc.value.trim().toLowerCase(), doc]));
+    return distinctColors.map((row) => {
+      const template = colorByKey.get(row._id.trim().toLowerCase());
+      return { value: row._id, hex: template?.hex ?? null, secondaryHex: template?.secondaryHex ?? null };
+    });
+  }
+
+  /**
+   * Just the color swatches — the same vocabulary `getFilterOptions` derives
+   * as one of its five facets, without running the other four (sizes,
+   * brands, price, spec groups) a caller that only wants color dots
+   * (`CatalogProductCard`, the PDP's cross-sell chips) never asked for.
+   * `apps/web`'s `getPublicColorSwatches` used to call the full
+   * `getFilterOptions` endpoint and discard everything but `.colors` —
+   * on a PDP, which shows no filter sidebar at all, that aggregation's other
+   * four facets were pure waste on every request (M-optimización).
+   */
+  async function getColorSwatches(): Promise<PublicCatalogFilterOptions["colors"]> {
+    const distinctColors = await Product.aggregate<{ _id: string; count: number }>([
+      { $match: PUBLIC_VISIBILITY },
+      { $unwind: "$variants" },
+      { $match: { "variants.color": { $type: "string", $ne: "" } } },
+      { $group: { _id: "$variants.color", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]).exec();
+
+    return resolveColorSwatches(distinctColors);
   }
 
   /**
@@ -466,15 +526,7 @@ export function createProductService<TDoc extends ProductDocument>(
       .filter((brand): brand is (typeof brandDocs)[number] => Boolean(brand))
       .map(toPublicBrand);
 
-    // Fetched in bulk (bounded by `MAX_COLOR_TEMPLATES`) rather than one
-    // query per color value — cheap either way, but this keeps it to one
-    // round trip regardless of how many distinct colors the catalog has.
-    const colorDocs = result.colors.length > 0 ? await ColorTemplate.find().exec() : [];
-    const colorByKey = new Map(colorDocs.map((doc) => [doc.value.trim().toLowerCase(), doc]));
-    const colors = result.colors.map((row) => {
-      const template = colorByKey.get(row._id.trim().toLowerCase());
-      return { value: row._id, hex: template?.hex ?? null, secondaryHex: template?.secondaryHex ?? null };
-    });
+    const colors = await resolveColorSwatches(result.colors);
 
     const sizes = result.sizes.map((row) => row._id);
 
@@ -501,15 +553,28 @@ export function createProductService<TDoc extends ProductDocument>(
     return { brands, sizes, colors, price, specs };
   }
 
-  async function getBySlug(slug: string, scope: { publicOnly: boolean }): Promise<TDoc> {
+  /**
+   * `extraPopulate` lets a catalog with its own extra refs (`Bike.relatedAccessories`)
+   * fold them into this same query instead of a second round-trip after the
+   * fact — `bike.service.ts`'s `getPublicBySlug` used to `await product.populate(...)`
+   * as a separate step, which is a second full Mongo round-trip for a value
+   * Mongoose can resolve in the same `.exec()` alongside category/brand/badges.
+   */
+  async function getBySlug(
+    slug: string,
+    scope: { publicOnly: boolean },
+    extraPopulate?: PopulateOptions,
+  ): Promise<TDoc> {
     const filter: Record<string, unknown> = { slug };
     if (scope.publicOnly) Object.assign(filter, PUBLIC_VISIBILITY);
 
-    const product = await Product.findOne(filter)
+    let query = Product.findOne(filter)
       .populate("category")
       .populate("brand")
-      .populate(badgesPopulateOption(scope.publicOnly))
-      .exec();
+      .populate(badgesPopulateOption(scope.publicOnly));
+    if (extraPopulate) query = query.populate(extraPopulate);
+
+    const product = await query.exec();
     if (!product) {
       throw new AppError(`${entityLabel} no encontrado.`, 404);
     }
@@ -817,6 +882,7 @@ export function createProductService<TDoc extends ProductDocument>(
     list,
     listAllMatching,
     getFilterOptions,
+    getColorSwatches,
     getById,
     getBySlug,
     archive,

@@ -38,6 +38,27 @@ export function cloudinaryCloudName(): string {
 }
 
 /**
+ * Server-only: shared secret this app stamps on every request it proxies to
+ * the API (`app/api/v1/[...path]/route.ts`), so the API can tell "arrived
+ * through our own proxy, the accompanying client-IP header is genuine" from
+ * "arrived some other way, don't trust anything it claims about its origin."
+ * Must equal `apps/api`'s `PROXY_SHARED_SECRET` exactly — see that file's
+ * `config/env.ts` for the full reasoning.
+ *
+ * Unlike `apiInternalUrl()` and `stripePublishableKey()`, a missing value
+ * here does not throw. `apps/api` already treats an absent secret as "trust
+ * nothing this request claims about its origin, key rate limits on the raw
+ * socket address instead" rather than as a fatal error (required only to
+ * *boot* in production, per its `config/env.ts`) — mirroring that here, in
+ * this app's *runtime* rather than its startup, means an environment missing
+ * this one hardening var degrades to that same safe fallback instead of
+ * turning every proxied request into a 500.
+ */
+export function proxySharedSecret(): string {
+  return process.env["PROXY_SHARED_SECRET"] ?? "";
+}
+
+/**
  * Browser-side: Stripe.js needs the publishable key in the client to
  * tokenize card details without the card ever reaching our server (PCI
  * SAQ-A). Unlike `apiInternalUrl()`, this one **must** be `NEXT_PUBLIC_*` —

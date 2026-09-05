@@ -383,20 +383,35 @@ interface RedeemInput {
   discountCents: number;
 }
 
+/** Mongo's duplicate-key error carries the index it hit in `keyPattern`. */
+function duplicateKeyOf(error: unknown): Record<string, unknown> | undefined {
+  if (!(error instanceof Error) || (error as { code?: number }).code !== DUPLICATE_KEY) return undefined;
+  return (error as { keyPattern?: Record<string, unknown> }).keyPattern;
+}
+
 /**
  * Spends one redemption, atomically.
  *
- * Two things can go wrong here and they need opposite handling. The campaign
- * running out between `evaluate` and now is a real conflict — two customers
- * raced for the last redemption and one has to lose. The *same order*
- * redeeming twice is not a conflict at all: it is `replayCheckout` or a
- * retried request arriving again, and the correct response is to do nothing
- * and report success.
+ * Three things can go wrong here and each needs its own handling. The
+ * campaign running out between `evaluate` and now is a real conflict — two
+ * customers raced for the last redemption and one has to lose. This same
+ * customer having already spent their `maxRedemptionsPerCustomer` allowance
+ * is the same kind of conflict, just scoped to one person instead of the
+ * whole campaign. The *same order* redeeming twice is not a conflict at all:
+ * it is `replayCheckout` or a retried request arriving again, and the correct
+ * response is to do nothing and report success.
  *
- * The conditional `$inc` handles the first; the ledger's unique
- * `{couponId, orderId}` index handles the second. Note the order — the counter
- * moves first, so a duplicate row means the counter was already incremented by
- * the original call and this one has to give it back.
+ * The conditional `$inc` handles the campaign-wide limit. The per-customer
+ * limit and the replay case share one mechanism: every redemption claims a
+ * `slot` (0, 1, 2, ...) under the ledger's unique `{couponId, userId, slot}`
+ * index, and this loop tries slots in order until one is free or the cap is
+ * exhausted. `evaluate`'s own `countDocuments` check is what gives customers
+ * a readable Spanish error in the common case — this loop is the backstop
+ * that makes the limit hold even when several of their checkouts race each
+ * other, which a plain count can never guarantee.
+ *
+ * Note the order relative to the counter — it moves first, so any failure to
+ * claim a slot (already-used order, or no free slot) has to give it back.
  */
 async function redeem(input: RedeemInput): Promise<void> {
   const claimed = await Coupon.findOneAndUpdate(
@@ -416,24 +431,37 @@ async function redeem(input: RedeemInput): Promise<void> {
     throw new AppError("Este cupón ya alcanzó su límite de canjes.", 409);
   }
 
-  try {
-    await CouponRedemption.create({
-      couponId: input.coupon._id,
-      userId: input.userId,
-      orderId: input.orderId,
-      code: input.coupon.code,
-      discountCents: input.discountCents,
-    });
-  } catch (error) {
-    if (error instanceof Error && (error as { code?: number }).code === DUPLICATE_KEY) {
-      // This order already redeemed. Hand the increment back and treat the
-      // call as the no-op it is.
-      await Coupon.updateOne({ _id: input.coupon._id }, { $inc: { redemptionCount: -1 } }).exec();
+  const row = {
+    couponId: input.coupon._id,
+    userId: input.userId,
+    orderId: input.orderId,
+    code: input.coupon.code,
+    discountCents: input.discountCents,
+  };
+
+  for (let slot = 0; slot < input.coupon.maxRedemptionsPerCustomer; slot++) {
+    try {
+      await CouponRedemption.create({ ...row, slot });
       return;
+    } catch (error) {
+      const keyPattern = duplicateKeyOf(error);
+      if (!keyPattern) {
+        await Coupon.updateOne({ _id: input.coupon._id }, { $inc: { redemptionCount: -1 } }).exec();
+        throw error;
+      }
+      if ("orderId" in keyPattern) {
+        // This order already redeemed. Hand the increment back and treat the
+        // call as the no-op it is.
+        await Coupon.updateOne({ _id: input.coupon._id }, { $inc: { redemptionCount: -1 } }).exec();
+        return;
+      }
+      // This slot was taken by another of this customer's own redemptions —
+      // try the next one.
     }
-    await Coupon.updateOne({ _id: input.coupon._id }, { $inc: { redemptionCount: -1 } }).exec();
-    throw error;
   }
+
+  await Coupon.updateOne({ _id: input.coupon._id }, { $inc: { redemptionCount: -1 } }).exec();
+  throw new AppError("Ya usaste este cupón el máximo de veces permitido.", 409);
 }
 
 /**

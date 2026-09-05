@@ -1,5 +1,6 @@
 import rateLimit, { MemoryStore, type Options } from "express-rate-limit";
 import { env } from "../config/env.js";
+import { resolveClientKey } from "../utils/client-ip.js";
 
 interface RateLimitConfig {
   windowMs: number;
@@ -15,17 +16,19 @@ const stores: MemoryStore[] = [];
 /**
  * Factory for per-action rate limiters — a dedicated, strict limiter per
  * sensitive action rather than one generic limiter for everything. No-op
- * only in `development`, so it never blocks local dev, but stays active in
- * `test` (M2's login-lockout tests assert on it) and, of course,
- * `production`. Admin routes are never wrapped with this: their barrier is
- * auth + role, not throttling.
+ * only when `RATE_LIMIT_ENABLED` is false (default: only in `development`,
+ * so it never blocks local dev), and stays active in `test` (M2's
+ * login-lockout tests assert on it) and, of course, `production` — see
+ * `config/env.ts` for why this is its own flag rather than a check against
+ * `NODE_ENV` directly. Admin routes are never wrapped with this: their
+ * barrier is auth + role, not throttling.
  *
  * `MemoryStore` is explicit (not the implicit default) so each limiter's
  * store can be tracked and reset between tests via `resetRateLimiters()`;
  * swap for a Redis store if the API ever runs more than one instance.
  */
 export function createRateLimiter(config: RateLimitConfig) {
-  if (env.nodeEnv === "development") {
+  if (!env.rateLimitEnabled) {
     return (_req: unknown, _res: unknown, next: () => void) => next();
   }
 
@@ -39,6 +42,11 @@ export function createRateLimiter(config: RateLimitConfig) {
     legacyHeaders: false,
     message: { status: "fail", message: config.message },
     store,
+    // Explicit, because the default keys on `req.ip` — which is derived from
+    // the attacker-controlled `X-Forwarded-For` whenever `trust proxy` is set,
+    // making every limiter here bypassable by rotating a header. See
+    // utils/client-ip.ts for the full reasoning.
+    keyGenerator: resolveClientKey,
   };
 
   return rateLimit(options);

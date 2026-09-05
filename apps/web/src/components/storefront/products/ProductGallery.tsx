@@ -1,12 +1,22 @@
 "use client";
 
 import type { ProductImage } from "@bw-bikes/shared";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { ProductGalleryDots } from "./ProductGalleryDots";
-import { ProductGalleryLightbox } from "./ProductGalleryLightbox";
+
+/**
+ * Only ever rendered once a tile is clicked (`lightboxIndex !== null`), and
+ * it already mounts straight into its open state today — there is no entry
+ * transition for a late mount to swallow, so this loads purely on demand.
+ */
+const ProductGalleryLightbox = dynamic(
+  () => import("./ProductGalleryLightbox").then((mod) => mod.ProductGalleryLightbox),
+  { ssr: false },
+);
 
 export interface ProductGalleryProps {
   images: ProductImage[];

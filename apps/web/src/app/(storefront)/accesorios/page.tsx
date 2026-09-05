@@ -8,7 +8,7 @@ import { CatalogProductSection } from "@/components/storefront/catalog/CatalogPr
 import { CatalogSortMenu } from "@/components/storefront/catalog/CatalogSortMenu";
 import { HomeBestSellingAccessories } from "@/components/storefront/products/HomeBestSellingAccessories";
 import { ApiError } from "@/lib/api/error";
-import { getPublicAccessoryCategoryTree, getPublicCatalogFilterOptions } from "@/lib/api/public-catalog";
+import { buildColorSwatchIndex, getPublicAccessoryCategoryTree, getPublicCatalogFilterOptions } from "@/lib/api/public-catalog";
 import { EMPTY_CATALOG_FILTER_OPTIONS } from "@/lib/storefront-catalog";
 import { parseFilterStateFromSearchParams, type NextSearchParams } from "@/lib/storefront-catalog-filters";
 
@@ -79,6 +79,7 @@ export default async function AccesoriosPage({ searchParams }: AccesoriosPagePro
             basePath="/accesorios"
             emptyMessage="No hay accesorios disponibles por el momento."
             noGutter
+            colorSwatchIndex={buildColorSwatchIndex(options.colors)}
           />
         </div>
       </div>

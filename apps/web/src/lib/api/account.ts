@@ -12,8 +12,15 @@ import type {
 } from "@bw-bikes/shared";
 import { apiFetch } from "./client";
 
-export async function getAccount(): Promise<AccountDTO> {
-  const { data } = await apiFetch<{ account: AccountDTO }>("/account");
+/**
+ * `options.unauthorizedRedirectPath: null` is for a storefront call site that
+ * must not send an anonymous visitor into `/ingresar` just for checking
+ * whether they're signed in — `ProductInfo`'s fit lookup (M-optimización) is
+ * the first one: it wants "no fit, this visitor is anonymous" as a normal
+ * outcome, not a redirect away from the PDP they're already looking at.
+ */
+export async function getAccount(options?: { unauthorizedRedirectPath?: string | null }): Promise<AccountDTO> {
+  const { data } = await apiFetch<{ account: AccountDTO }>("/account", undefined, options);
   return data.account;
 }
 

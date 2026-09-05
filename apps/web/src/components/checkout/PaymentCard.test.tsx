@@ -40,6 +40,10 @@ vi.mock("@stripe/react-stripe-js", () => ({
 }));
 
 const { PaymentCard } = await import("./PaymentCard");
+// Las pruebas de comportamiento montan `PaymentFields` directo: `PaymentCard`
+// ahora solo decide entre el placeholder y esos campos, y los carga con
+// `next/dynamic` (ver la prueba de esa frontera más abajo).
+const { PaymentFields } = await import("./PaymentFields");
 const { ApiError } = await import("@/lib/api/error");
 
 const PURCHASABLE_CART: PublicCart = {
@@ -130,13 +134,25 @@ describe("PaymentCard", () => {
     expect(screen.queryByTestId("payment-element")).not.toBeInTheDocument();
   });
 
-  it("mounts the card fields immediately when open, with no prior click and no order created yet", () => {
+  it("mounts the card fields when open, with no prior click and no order created yet", () => {
+    useCartMock.mockReturnValue({ cart: PURCHASABLE_CART });
+
+    render(<PaymentFields />);
+
+    expect(screen.getByTestId("payment-element")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).toBeInTheDocument();
+    expect(createOrderMock).not.toHaveBeenCalled();
+  });
+
+  it("carga los campos de pago bajo demanda cuando el paso se abre, sin crear ninguna orden", async () => {
     useCartMock.mockReturnValue({ cart: PURCHASABLE_CART });
 
     render(<PaymentCard open />);
 
-    expect(screen.getByTestId("payment-element")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox")).toBeInTheDocument();
+    // El chunk de Stripe llega después del primer render — esa espera *es* el
+    // punto de la prueba: verifica que la frontera `next/dynamic` resuelve y
+    // que abrir el paso sigue sin tocar el backend.
+    expect(await screen.findByTestId("payment-element")).toBeInTheDocument();
     expect(createOrderMock).not.toHaveBeenCalled();
   });
 
@@ -144,7 +160,7 @@ describe("PaymentCard", () => {
     useCartMock.mockReturnValue({ cart: PURCHASABLE_CART });
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
 
     expect(screen.getByRole("button", { name: /Pagar/ })).toBeDisabled();
     expect(screen.getByText("Acepta los términos para habilitar el pago.")).toBeInTheDocument();
@@ -159,7 +175,7 @@ describe("PaymentCard", () => {
   it("never calls createOrder or confirmPayment while Pagar is disabled", () => {
     useCartMock.mockReturnValue({ cart: PURCHASABLE_CART });
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
 
     expect(screen.getByRole("button", { name: /Pagar/ })).toBeDisabled();
     expect(createOrderMock).not.toHaveBeenCalled();
@@ -169,7 +185,7 @@ describe("PaymentCard", () => {
   it("shows 'Autorizar $X' when the cart preview's captureMethod is manual", () => {
     useCartMock.mockReturnValue({ cart: { ...PURCHASABLE_CART, captureMethod: "manual" } });
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
 
     expect(screen.getByRole("button", { name: /Autorizar/ })).toBeInTheDocument();
     expect(
@@ -180,7 +196,7 @@ describe("PaymentCard", () => {
   it("shows 'Pagar $X' when the cart preview's captureMethod is automatic", () => {
     useCartMock.mockReturnValue({ cart: PURCHASABLE_CART });
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
 
     expect(screen.getByRole("button", { name: /Pagar/ })).toBeInTheDocument();
   });
@@ -190,7 +206,7 @@ describe("PaymentCard", () => {
     submitMock.mockResolvedValueOnce({ error: { message: "Completa los datos de tu tarjeta." } });
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
 
@@ -204,7 +220,7 @@ describe("PaymentCard", () => {
     createOrderMock.mockResolvedValue(CHECKOUT_RESULT);
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     expect(createOrderMock).not.toHaveBeenCalled();
 
@@ -220,7 +236,7 @@ describe("PaymentCard", () => {
     createOrderMock.mockResolvedValue(CHECKOUT_RESULT);
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
 
@@ -238,7 +254,7 @@ describe("PaymentCard", () => {
     createOrderMock.mockResolvedValue(CHECKOUT_RESULT);
 
     let user = userEvent.setup();
-    const { unmount } = render(<PaymentCard open />);
+    const { unmount } = render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
     await waitFor(() => expect(createOrderMock).toHaveBeenCalledTimes(1));
@@ -246,7 +262,7 @@ describe("PaymentCard", () => {
     unmount();
 
     user = userEvent.setup();
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
     await waitFor(() => expect(createOrderMock).toHaveBeenCalledTimes(2));
@@ -258,7 +274,7 @@ describe("PaymentCard", () => {
     createOrderMock.mockResolvedValue(CHECKOUT_RESULT);
 
     let user = userEvent.setup();
-    const { unmount } = render(<PaymentCard open />);
+    const { unmount } = render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
     await waitFor(() => expect(createOrderMock).toHaveBeenCalledTimes(1));
@@ -267,7 +283,7 @@ describe("PaymentCard", () => {
 
     useCartMock.mockReturnValue({ cart: { ...PURCHASABLE_CART, updatedAt: "2026-09-01T00:05:00.000Z" } });
     user = userEvent.setup();
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
     await waitFor(() => expect(createOrderMock).toHaveBeenCalledTimes(2));
@@ -282,7 +298,7 @@ describe("PaymentCard", () => {
     });
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
 
@@ -299,7 +315,7 @@ describe("PaymentCard", () => {
     });
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
 
@@ -313,7 +329,7 @@ describe("PaymentCard", () => {
     stripeFake({ confirmError: { type: "card_error", message: "Tu tarjeta fue rechazada." } });
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
 
@@ -327,7 +343,7 @@ describe("PaymentCard", () => {
     stripeFake({ confirmError: { type: "api_error", message: "raw stripe internals, never shown" } });
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
 
@@ -340,7 +356,7 @@ describe("PaymentCard", () => {
     createOrderMock.mockRejectedValue(new ApiError("La orden BW-0001 ya fue procesada.", 409));
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
 
@@ -354,7 +370,7 @@ describe("PaymentCard", () => {
     createOrderMock.mockResolvedValueOnce(CHECKOUT_RESULT);
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
     await waitFor(() => expect(screen.getByText("Fallo del proveedor de pagos.")).toBeInTheDocument());
@@ -371,7 +387,7 @@ describe("PaymentCard", () => {
     createOrderMock.mockRejectedValue(new ApiError("Tu carrito está vacío.", 400));
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
 
@@ -384,7 +400,7 @@ describe("PaymentCard", () => {
     createOrderMock.mockRejectedValue(new ApiError("El pago con tarjeta no está disponible por ahora.", 503));
     const user = userEvent.setup();
 
-    render(<PaymentCard open />);
+    render(<PaymentFields />);
     await acceptTermsAndReady(user);
     await user.click(screen.getByRole("button", { name: /Pagar/ }));
 

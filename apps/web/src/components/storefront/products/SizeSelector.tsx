@@ -1,10 +1,22 @@
 "use client";
 
 import type { PublicSizeGuideEntry } from "@bw-bikes/shared";
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { useIdleMount } from "@/hooks/use-idle-mount";
 import { cn } from "@/lib/cn";
-import { SizeGuideModal, type SizeGuideTab } from "./SizeGuideModal";
+import type { SizeGuideTab } from "./SizeGuideModal";
+
+/**
+ * The largest client component in the storefront (the height wizard, the
+ * ride-style table and the full size chart), behind two links most shoppers
+ * never click. Idle-mounted **closed** rather than mounted on open, for the
+ * same reason `MobileMenu` defers its panel: the modal animates in from
+ * `translate-y-full`, and a subtree whose first paint is already the open
+ * state has nothing to animate from.
+ */
+const SizeGuideModal = dynamic(() => import("./SizeGuideModal").then((mod) => mod.SizeGuideModal), { ssr: false });
 
 export interface SizeOption {
   value: string;
@@ -42,10 +54,14 @@ export interface SizeSelectorProps {
 export function SizeSelector({ sizes, selected, onSelect, sizeGuide = [], initialHeightCm }: SizeSelectorProps) {
   const [guideOpen, setGuideOpen] = useState(false);
   const [guideTab, setGuideTab] = useState<SizeGuideTab>("finder");
+  // Nothing to load on an accessory PDP, or on a bike whose sizes have no
+  // height range: without a guide the links don't render either.
+  const [guideMounted, mountGuideNow] = useIdleMount(sizeGuide.length > 0);
 
   if (sizes.length === 0) return null;
 
   function openGuide(tab: SizeGuideTab): void {
+    mountGuideNow();
     setGuideTab(tab);
     setGuideOpen(true);
   }
@@ -95,16 +111,18 @@ export function SizeSelector({ sizes, selected, onSelect, sizeGuide = [], initia
         })}
       </div>
 
-      <SizeGuideModal
-        open={guideOpen}
-        tab={guideTab}
-        onTabChange={setGuideTab}
-        sizeGuide={sizeGuide}
-        sizeOptions={sizes}
-        onClose={() => setGuideOpen(false)}
-        onSelectSize={onSelect}
-        initialHeightCm={initialHeightCm}
-      />
+      {guideMounted ? (
+        <SizeGuideModal
+          open={guideOpen}
+          tab={guideTab}
+          onTabChange={setGuideTab}
+          sizeGuide={sizeGuide}
+          sizeOptions={sizes}
+          onClose={() => setGuideOpen(false)}
+          onSelectSize={onSelect}
+          initialHeightCm={initialHeightCm}
+        />
+      ) : null}
     </div>
   );
 }

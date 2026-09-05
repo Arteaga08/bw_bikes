@@ -68,10 +68,18 @@ async function assertAccessoriesExist(ids: string[]): Promise<void> {
  * construction, not filtered out downstream.
  */
 export function toPublicBike(bike: IBike): PublicBike {
-  const category = bike.populated("category")
+  // `.populated(path)` only exists on hydrated Mongoose documents — `list()`/
+  // `listAllMatching()` (`product.service.ts`) run `.lean()` for the public
+  // catalog, which returns plain objects with no document methods at all.
+  // Checking `instanceof Types.ObjectId` instead reads the same signal
+  // (populate replaces the id with the referenced object; an unpopulated
+  // ref stays an ObjectId) and works identically on lean or hydrated input,
+  // so this is safe for every caller of `toPublicBike`, not just the lean
+  // ones.
+  const category = !(bike.category instanceof Types.ObjectId)
     ? toPublicCategory(bike.category as unknown as Parameters<typeof toPublicCategory>[0])
     : undefined;
-  const brand = bike.populated("brand")
+  const brand = !(bike.brand instanceof Types.ObjectId)
     ? toPublicBrand(bike.brand as unknown as Parameters<typeof toPublicBrand>[0])
     : undefined;
 
@@ -82,7 +90,11 @@ export function toPublicBike(bike: IBike): PublicBike {
     ...(bike.modelName ? { model: bike.modelName } : {}),
     brand: brand ?? { id: String(bike.brand), name: "", slug: "", order: 0 },
     category: category ?? { id: String(bike.category), name: "", slug: "", parent: null, order: 0, usesSizes: false },
-    badges: bike.populated("badges")
+    // An empty `badges` array reads the same whether or not populate ran (an
+    // empty list maps to an empty list either way), so the structural check
+    // only has to distinguish a populated object from an ObjectId on the
+    // first entry.
+    badges: bike.badges.length === 0 || !(bike.badges[0] instanceof Types.ObjectId)
       ? (bike.badges as unknown as Parameters<typeof toPublicBadge>[0][]).map(toPublicBadge)
       : [],
     shortDescription: bike.shortDescription,
@@ -96,9 +108,10 @@ export function toPublicBike(bike: IBike): PublicBike {
     specGroups: toPublicSpecGroups(bike.specGroups),
     ...(bike.geometryImage ? { geometryImage: bike.geometryImage } : {}),
     gallery: [...bike.gallery].sort((a, b) => a.order - b.order),
-    relatedAccessories: bike.populated("relatedAccessories")
-      ? (bike.relatedAccessories as unknown as Parameters<typeof toPublicAccessory>[0][]).map(toPublicAccessory)
-      : [],
+    relatedAccessories:
+      bike.relatedAccessories.length === 0 || !(bike.relatedAccessories[0] instanceof Types.ObjectId)
+        ? (bike.relatedAccessories as unknown as Parameters<typeof toPublicAccessory>[0][]).map(toPublicAccessory)
+        : [],
     // `isNewArrival`/`isCustomerFavorite` stay out on purpose — the storefront
     // filters *by* them (`?isNewArrival=true`, `?isCustomerFavorite=true`) but
     // never paints them, so shipping them would be a leak.
@@ -336,11 +349,12 @@ async function update(id: string, input: BikeInput, actor: ActorContext): Promis
  * The PDP needs the cross-sell block resolved, which a plain `getBySlug`
  * doesn't populate — `badges` is already filtered to active-only by the base
  * `getBySlug` itself (see `product.service.ts`'s `badgesPopulateOption`).
+ * `relatedAccessories` rides along in the same query via `extraPopulate`
+ * (M-optimización) instead of a second `.populate()` round-trip after the
+ * fact — one fewer Mongo call on every bike PDP.
  */
 async function getPublicBySlug(slug: string): Promise<IBike> {
-  const bike = await base.getBySlug(slug, { publicOnly: true });
-  await bike.populate({ path: "relatedAccessories", match: { isActive: true, archivedAt: null } });
-  return bike;
+  return base.getBySlug(slug, { publicOnly: true }, { path: "relatedAccessories", match: { isActive: true, archivedAt: null } });
 }
 
 /**

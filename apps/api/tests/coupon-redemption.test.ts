@@ -317,3 +317,95 @@ describe("couponService.releaseForOrder", () => {
     expect(stored?.redemptionCount).toBe(0);
   });
 });
+
+describe("couponService.redeem — per-customer concurrency", () => {
+  it("lets only one of several simultaneous checkouts by the same customer claim their one allowed redemption", async () => {
+    // No maxRedemptionsTotal: the global counter must not be what stops this.
+    const coupon = await seedCoupon({ maxRedemptionsPerCustomer: 1 });
+    const userId = await customerId();
+
+    const attempts = await Promise.allSettled(
+      ["20", "21", "22", "23", "24"].map((suffix) =>
+        couponService.redeem({
+          coupon,
+          userId,
+          orderId: `0000000000000000000000${suffix}`,
+          discountCents: 10_000,
+        }),
+      ),
+    );
+
+    expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
+    expect(await CouponRedemption.countDocuments({ couponId: coupon._id, userId })).toBe(1);
+  });
+
+  it("lets exactly as many simultaneous redemptions through as the per-customer cap allows", async () => {
+    const coupon = await seedCoupon({ maxRedemptionsPerCustomer: 2 });
+    const userId = await customerId();
+
+    const attempts = await Promise.allSettled(
+      ["30", "31", "32", "33", "34"].map((suffix) =>
+        couponService.redeem({
+          coupon,
+          userId,
+          orderId: `0000000000000000000000${suffix}`,
+          discountCents: 10_000,
+        }),
+      ),
+    );
+
+    expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(2);
+    expect(await CouponRedemption.countDocuments({ couponId: coupon._id, userId })).toBe(2);
+  });
+
+  it("does not let one customer's redemptions block a different customer's own allowance", async () => {
+    const coupon = await seedCoupon({ maxRedemptionsPerCustomer: 1 });
+    const first = await customerId("uno@example.com");
+    const second = await customerId("dos@example.com");
+
+    const attempts = await Promise.allSettled([
+      couponService.redeem({ coupon, userId: first, orderId: "000000000000000000000040", discountCents: 10_000 }),
+      couponService.redeem({ coupon, userId: second, orderId: "000000000000000000000041", discountCents: 10_000 }),
+    ]);
+
+    expect(attempts.every((attempt) => attempt.status === "fulfilled")).toBe(true);
+    expect(await CouponRedemption.countDocuments({ couponId: coupon._id })).toBe(2);
+  });
+
+  it("frees the slot on release so the same customer can redeem again", async () => {
+    const coupon = await seedCoupon({ maxRedemptionsPerCustomer: 1 });
+    const userId = await customerId();
+    const firstOrderId = "000000000000000000000050";
+
+    await couponService.redeem({ coupon, userId, orderId: firstOrderId, discountCents: 10_000 });
+    await expect(
+      couponService.redeem({ coupon, userId, orderId: "000000000000000000000051", discountCents: 10_000 }),
+    ).rejects.toBeInstanceOf(AppError);
+
+    await couponService.releaseForOrder(firstOrderId);
+
+    await expect(
+      couponService.redeem({ coupon, userId, orderId: "000000000000000000000052", discountCents: 10_000 }),
+    ).resolves.toBeUndefined();
+    expect(await CouponRedemption.countDocuments({ couponId: coupon._id, userId })).toBe(1);
+  });
+
+  it("does not inflate the global redemption counter when an attempt loses the per-customer race", async () => {
+    const coupon = await seedCoupon({ maxRedemptionsPerCustomer: 1 });
+    const userId = await customerId();
+
+    await Promise.allSettled(
+      ["60", "61", "62"].map((suffix) =>
+        couponService.redeem({
+          coupon,
+          userId,
+          orderId: `0000000000000000000000${suffix}`,
+          discountCents: 10_000,
+        }),
+      ),
+    );
+
+    const stored = await Coupon.findById(coupon._id).exec();
+    expect(stored?.redemptionCount).toBe(1);
+  });
+});

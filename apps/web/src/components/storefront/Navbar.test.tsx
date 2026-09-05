@@ -1,5 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { usePathnameMock } = vi.hoisted(() => ({ usePathnameMock: vi.fn(() => "/") }));
 vi.mock("next/navigation", () => ({ usePathname: usePathnameMock }));
@@ -8,6 +8,13 @@ vi.mock("@/components/cart/CartProvider", () => ({
 }));
 
 const { Navbar } = await import("./Navbar");
+
+// Same reasoning as `MobileMenu.test.tsx`'s own warmup: `MobileMenuPanel`
+// is code-split, and a cold `next/dynamic` import racing every other test
+// file's own transform work is slower than a `findBy` should have to wait.
+beforeAll(async () => {
+  await import("./MobileMenuPanel");
+});
 
 function renderAt(pathname: string) {
   usePathnameMock.mockReturnValue(pathname);
@@ -23,15 +30,22 @@ beforeEach(() => {
 });
 
 describe("Navbar", () => {
-  it("renders the wordmark linking home and the three nav destinations in the desktop nav", () => {
+  it("renders the wordmark linking home and the three nav destinations in the desktop nav", async () => {
     renderAt("/bicicletas");
+
+    // `MobileMenu`'s drawer (`MobileMenuPanel`) is code-split
+    // (`next/dynamic`, M-optimización) and only mounts once its toggle is
+    // focused or clicked — focusing it here is enough to bring the panel's
+    // `dialog` into the DOM without opening the drawer, which is what the
+    // scoping below needs.
+    fireEvent.focus(screen.getByRole("button", { name: "Abrir menú" }));
 
     // Scoped away from `MobileMenu`'s own header lockup — it links home with
     // the identical accessible name ("Black and White Bikes — inicio"), so an
     // unscoped query would find two. jsdom doesn't compute `inert` for role
     // queries the way a real browser's accessibility tree would, so the
     // drawer copy isn't filtered out for free even while closed.
-    const dialog = screen.getByRole("dialog", { hidden: true });
+    const dialog = await screen.findByRole("dialog", { hidden: true }, { timeout: 3000 });
     const wordmarkLinks = screen.getAllByRole("link", { name: /black and white bikes/i });
     const desktopWordmark = wordmarkLinks.find((link) => !dialog.contains(link));
     expect(desktopWordmark).toHaveAttribute("href", "/");

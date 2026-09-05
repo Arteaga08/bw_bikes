@@ -23,6 +23,16 @@ export const getBikeFilterOptions = asyncHandler(async (_req: Request, res: Resp
 });
 
 /**
+ * Just the color swatches (`CatalogProductCard`'s dots, the PDP's cross-sell
+ * chips) — a page with no filter sidebar has no use for the other four
+ * facets `getBikeFilterOptions` also computes (M-optimización).
+ */
+export const getBikeColorSwatches = asyncHandler(async (_req: Request, res: Response) => {
+  const colors = await bikeService.getColorSwatches();
+  sendResponse(res, 200, "Colores obtenidos.", { colors });
+});
+
+/**
  * The PDP's "¿Cuál es mi talla?" / "Guía de tallas" — every active bike size
  * with a height range that resolves for the given category, category
  * overrides already applied. `categoryId` is required: the guide is
@@ -31,13 +41,16 @@ export const getBikeFilterOptions = asyncHandler(async (_req: Request, res: Resp
  */
 export const getBikeSizeGuide = asyncHandler(async (req: Request, res: Response) => {
   const categoryId = String(req.query["categoryId"]);
-  const category = await bikeCategoryService.findByIdOrFail(categoryId);
 
-  // `.lean()`: `buildSizeGuide` only reads plain fields, same reasoning as
-  // `size-template.service.ts`'s own `list()`.
-  const templates = (await BikeSizeTemplate.find({ isActive: true })
-    .lean()
-    .exec()) as unknown as ISizeTemplate[];
+  // Independent reads — the category lookup only feeds `buildSizeGuide`
+  // below, not the template query's own filter — so there's no reason for
+  // one to wait on the other.
+  const [category, templates] = await Promise.all([
+    bikeCategoryService.findByIdOrFail(categoryId),
+    // `.lean()`: `buildSizeGuide` only reads plain fields, same reasoning as
+    // `size-template.service.ts`'s own `list()`.
+    BikeSizeTemplate.find({ isActive: true }).lean().exec() as unknown as Promise<ISizeTemplate[]>,
+  ]);
 
   const sizeGuide = buildSizeGuide(templates, category.id, category.parent);
   sendResponse(res, 200, "Guía de tallas obtenida.", { sizeGuide });

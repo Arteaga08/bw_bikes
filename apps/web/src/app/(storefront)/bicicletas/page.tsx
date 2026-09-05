@@ -8,7 +8,7 @@ import { CatalogProductSection } from "@/components/storefront/catalog/CatalogPr
 import { CatalogSortMenu } from "@/components/storefront/catalog/CatalogSortMenu";
 import { HomeNewProducts } from "@/components/storefront/products/HomeNewProducts";
 import { ApiError } from "@/lib/api/error";
-import { getPublicBikeCategoryTree, getPublicCatalogFilterOptions } from "@/lib/api/public-catalog";
+import { buildColorSwatchIndex, getPublicBikeCategoryTree, getPublicCatalogFilterOptions } from "@/lib/api/public-catalog";
 import { EMPTY_CATALOG_FILTER_OPTIONS } from "@/lib/storefront-catalog";
 import { parseFilterStateFromSearchParams, type NextSearchParams } from "@/lib/storefront-catalog-filters";
 
@@ -79,6 +79,7 @@ export default async function BicicletasPage({ searchParams }: BicicletasPagePro
             basePath="/bicicletas"
             emptyMessage="No hay bicicletas disponibles por el momento."
             noGutter
+            colorSwatchIndex={buildColorSwatchIndex(options.colors)}
           />
         </div>
       </div>
